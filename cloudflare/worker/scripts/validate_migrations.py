@@ -38,6 +38,8 @@ except sqlite3.IntegrityError as error:
 
 # Five public replies are allowed, while the sixth is rejected atomically.
 insert_plane("public-parent", "pilot-b", audience="PUBLIC")
+insert_plane("public-parent-2", "pilot-b", audience="PUBLIC")
+insert_plane("public-parent-3", "pilot-b", audience="PUBLIC")
 for index in range(5):
     DB.execute(
         """INSERT INTO public_replies(
@@ -59,12 +61,19 @@ except sqlite3.IntegrityError as error:
 # A pilot's combined hourly plane + reply allowance is shared.
 seed_user("pilot-c")
 insert_plane("combined-plane-1", "pilot-c")
-for index in range(9):
+for index in range(5):
     DB.execute(
         """INSERT INTO public_replies(
             id, airplane_id, sender_uid, message_text, moderation_state
-        ) VALUES (?, 'public-parent', 'pilot-c', 'A reply', 'SAFE')""",
+        ) VALUES (?, 'public-parent-2', 'pilot-c', 'A reply', 'SAFE')""",
         (f"combined-reply-{index}",),
+    )
+for index in range(4):
+    DB.execute(
+        """INSERT INTO public_replies(
+            id, airplane_id, sender_uid, message_text, moderation_state
+        ) VALUES (?, 'public-parent-3', 'pilot-c', 'A reply', 'SAFE')""",
+        (f"combined-reply-{index + 5}",),
     )
 
 try:
