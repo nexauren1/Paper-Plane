@@ -730,13 +730,17 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (method === "GET" && path === "/v1/open-sky") {
+    const country = text(url.searchParams.get("country"), 2).toUpperCase() || null;
+    const language = url.searchParams.get("language") === "en" ? "en" : url.searchParams.get("language") === "pt" ? "pt" : null;
     const rows = await env.DB.prepare(
       `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at, p.likes_count,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
        FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
        WHERE a.audience = 'PUBLIC' AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED'
+         AND (? IS NULL OR a.sender_country_code = ?)
+         AND (? IS NULL OR a.message_language = ?)
        ORDER BY a.created_at DESC LIMIT 50`,
-    ).all();
+    ).bind(country, country, language, language).all();
     return json({ items: rows.results ?? [] });
   }
 
@@ -794,9 +798,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const target = body.language === "en" ? "en" : "pt";
     const plane = await env.DB.prepare(
-      "SELECT message_text, sender_uid, recipient_uid, moderation_state FROM airplanes WHERE id = ?",
-    ).bind(translationMatch[1]).first<{ message_text: string; sender_uid: string; recipient_uid: string | null; moderation_state: string }>();
-    if (!plane || (plane.sender_uid !== uid && plane.recipient_uid !== uid) || plane.moderation_state !== "SAFE") return json({ error: "NOT_FOUND" }, 404);
+      "SELECT message_text, sender_uid, recipient_uid, audience, moderation_state FROM airplanes WHERE id = ?",
+    ).bind(translationMatch[1]).first<{ message_text: string; sender_uid: string; recipient_uid: string | null; audience: string; moderation_state: string }>();
+    if (!plane || (plane.sender_uid !== uid && plane.recipient_uid !== uid && plane.audience !== "PUBLIC") || plane.moderation_state !== "SAFE") return json({ error: "NOT_FOUND" }, 404);
     const translated = await translateMessage(translationMatch[1], target, plane.message_text, env);
     if (!translated) return json({ error: "TRANSLATION_UNAVAILABLE" }, 503);
     return json({ text: translated, language: target });
