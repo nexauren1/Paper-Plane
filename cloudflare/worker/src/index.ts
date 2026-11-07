@@ -265,6 +265,15 @@ async function createAirplane(
     if (blocked) return json({ error: "RECIPIENT_UNAVAILABLE" }, 403);
   }
 
+  const hourlyActivity = await env.DB.prepare(
+    `SELECT
+       (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) +
+       (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS count`,
+  ).bind(uid, uid).first<{ count: number }>();
+  if (Number(hourlyActivity?.count ?? 0) >= 10) {
+    return json({ error: "RATE_LIMIT_EXCEEDED", message: "You have reached the hourly sending limit." }, 429);
+  }
+
   const contentHash = await sha256(message.toLocaleLowerCase());
   const duplicate = await env.DB.prepare(
     "SELECT COUNT(*) AS count FROM airplanes WHERE sender_uid = ? AND content_hash = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')",
@@ -273,13 +282,22 @@ async function createAirplane(
     return json({ error: "DUPLICATE_MESSAGE", message: "This text was already sent recently." }, 429);
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  if (!forcedRecipient) {
+    const existingDaily = await env.DB.prepare(
+      "SELECT original_planes FROM daily_limits WHERE uid = ? AND limit_date = ?",
+    ).bind(uid, today).first<{ original_planes: number }>();
+    if (Number(existingDaily?.original_planes ?? 0) >= 1) {
+      return json({ error: "DAILY_LIMIT_REACHED", message: "One original plane can be launched per day." }, 429);
+    }
+  }
+
   const moderation = await moderate(env, message);
   if (moderation.state === "UNSAFE") {
     return json({ error: "MESSAGE_NOT_ALLOWED", categories: moderation.categories }, 422);
   }
 
   if (!forcedRecipient) {
-    const today = new Date().toISOString().slice(0, 10);
     const daily = await env.DB.prepare(
       "INSERT INTO daily_limits(uid, limit_date, original_planes) VALUES (?, ?, 1) ON CONFLICT(uid, limit_date) DO UPDATE SET original_planes = original_planes + 1 WHERE original_planes < 1 RETURNING original_planes",
     ).bind(uid, today).first<{ original_planes: number }>();
@@ -293,15 +311,23 @@ async function createAirplane(
   else if (forcedRecipient) status = "FLYING";
   else status = "QUEUED";
 
-  await env.DB.prepare(
-    "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-  ).bind(
-    id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
-    user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
-    moderation.state, JSON.stringify(moderation.categories), contentHash,
-    audience === "PUBLIC" ? isoNow() : null,
-    audience === "PUBLIC" ? null : null,
-  ).run();
+  try {
+    await env.DB.prepare(
+      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).bind(
+      id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
+      user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
+      moderation.state, JSON.stringify(moderation.categories), contentHash,
+      audience === "PUBLIC" ? isoNow() : null,
+      null,
+    ).run();
+  } catch (error) {
+    const reason = String(error);
+    if (reason.includes("PAPER_PLANE_RATE_LIMIT")) {
+      return json({ error: "RATE_LIMIT_EXCEEDED", message: "You have reached the hourly sending limit." }, 429);
+    }
+    throw error;
+  }
 
   if (moderation.state === "SAFE") ctx.waitUntil(classifyInBackground(env, id, message));
   if (status === "DELIVERED") {
@@ -580,7 +606,13 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) return json({ error: "INVALID_JSON" }, 400);
-    return createAirplane(uid, body, env, ctx, original.sender_uid, privateReplyMatch[1]);
+    const replyResponse = await createAirplane(uid, body, env, ctx, original.sender_uid, privateReplyMatch[1]);
+    if (replyResponse.status === 201) {
+      await env.DB.prepare(
+        "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
+      ).bind(privateReplyMatch[1]).run();
+    }
+    return replyResponse;
   }
 
   const reportMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/report$/);
@@ -594,6 +626,17 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const created = await env.DB.prepare("SELECT id FROM reports WHERE id = ?").bind(id).first();
     if (!created) return json({ error: "NOT_FOUND" }, 404);
     return json({ ok: true, reportId: id }, 201);
+  }
+
+  const blockSenderMatch = path.match(/^\\/v1\\/airplanes\\/([^/]+)\\/block-sender$/);
+  if (method === "POST" && blockSenderMatch) {
+    const plane = await env.DB.prepare(
+      "SELECT sender_uid FROM airplanes WHERE id = ? AND (recipient_uid = ? OR audience = 'PUBLIC')",
+    ).bind(blockSenderMatch[1], uid).first<{ sender_uid: string }>();
+    if (!plane || plane.sender_uid === uid) return json({ error: "NOT_FOUND" }, 404);
+    await env.DB.prepare("INSERT OR IGNORE INTO blocks(blocker_uid, blocked_uid) VALUES (?, ?)")
+      .bind(uid, plane.sender_uid).run();
+    return json({ ok: true });
   }
 
   if (method === "POST" && path === "/v1/users/block") {
@@ -655,13 +698,26 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!message) return json({ error: "MESSAGE_LENGTH" }, 400);
     const parent = await env.DB.prepare("SELECT id FROM public_sky WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first();
     if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    const hourlyActivity = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) +
+         (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS count`,
+    ).bind(uid, uid).first<{ count: number }>();
+    if (Number(hourlyActivity?.count ?? 0) >= 10) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
     const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM public_replies WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first<{ count: number }>();
     if (Number(count?.count ?? 0) >= 5) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
     const moderation = await moderate(env, message);
     if (moderation.state !== "SAFE") return json({ error: moderation.state === "UNSAFE" ? "MESSAGE_NOT_ALLOWED" : "HELD_FOR_REVIEW" }, 422);
     const id = uuid();
-    await env.DB.prepare("INSERT INTO public_replies(id, airplane_id, sender_uid, message_text, moderation_state) VALUES (?, ?, ?, ?, 'SAFE')")
-      .bind(id, publicRepliesMatch[1], uid, message).run();
+    try {
+      await env.DB.prepare("INSERT INTO public_replies(id, airplane_id, sender_uid, message_text, moderation_state) VALUES (?, ?, ?, ?, 'SAFE')")
+        .bind(id, publicRepliesMatch[1], uid, message).run();
+    } catch (error) {
+      const reason = String(error);
+      if (reason.includes("PAPER_PLANE_RATE_LIMIT")) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
+      if (reason.includes("PUBLIC_REPLY_LIMIT_REACHED")) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
+      throw error;
+    }
     return json({ id, status: "PUBLISHED" }, 201);
   }
 
