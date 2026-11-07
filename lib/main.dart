@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
+import 'services/paper_plane_notifications.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -1861,9 +1862,38 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool notifications = true;
+  bool notifications = false;
   bool darkMode = true;
   String language = 'Português';
+
+  Future<void> _setNotifications(bool enabled) async {
+    if (!enabled) {
+      setState(() => notifications = false);
+      return;
+    }
+    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Configura Firebase e Cloudflare antes de ativar notificações.')),
+      );
+      return;
+    }
+    try {
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneNotifications.enableAndRegister();
+      if (mounted) setState(() => notifications = true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Notificações ativadas neste dispositivo.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) setState(() => notifications = false);
+      if (mounted) {
+        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível ativar notificações.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1889,7 +1919,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               activeColor: ppGold,
               title: const Text('Notificações'),
               value: notifications,
-              onChanged: (value) => setState(() => notifications = value),
+              onChanged: _setNotifications,
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
