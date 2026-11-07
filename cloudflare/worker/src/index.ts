@@ -405,7 +405,7 @@ async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
   const projectId = env.FIREBASE_PROJECT_ID;
   for (const device of devices.results ?? []) {
     try {
-      await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+      const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
         method: "POST",
         headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
         body: JSON.stringify({
@@ -417,6 +417,16 @@ async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
           },
         }),
       });
+      if (response.status === 404) {
+        const failure = await response.json().catch(() => ({})) as {
+          error?: { details?: Array<{ errorCode?: string }> };
+        };
+        const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
+        if (errorCode === "UNREGISTERED") {
+          await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?")
+            .bind(uid, device.fcm_token).run();
+        }
+      }
     } catch {
       // Push is best-effort; delivery is recorded in D1 independently.
     }
