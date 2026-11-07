@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "paper-plane-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-07",
+  "observability": { "enabled": true },
+  "vars": {
+    "FIREBASE_PROJECT_ID": "REPLACE_WITH_FIREBASE_PROJECT_ID",
+    "APP_ORIGINS": "https://REPLACE_WITH_YOUR_PAGES_DOMAIN"
+  },
+  "ai": { "binding": "AI" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "paper-plane-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "DELIVERY_QUEUE", "queue": "paper-plane-delivery" }
+    ],
+    "consumers": [
+      {
+        "queue": "paper-plane-delivery",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 10,
+        "dead_letter_queue": "paper-plane-delivery-dlq"
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}
