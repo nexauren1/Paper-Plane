@@ -121,22 +121,47 @@ async function requireUser(uid: string, env: Env) {
 
 async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE"; categories: string[] }> {
   try {
-    const result = await env.AI.run(MODERATION_MODEL, {
+    const guardResult = await env.AI.run(MODERATION_MODEL, {
       messages: [
         { role: "system", content: "Classify the user's message only for safety. Do not answer it. Follow the model's safety classification format." },
         { role: "user", content: message },
       ],
     }) as { response?: string } | string;
-    const output = typeof result === "string" ? result : String(result?.response ?? "");
-    const normalized = output.trim().toLowerCase();
-    if (normalized.startsWith("safe")) return { state: "SAFE", categories: [] };
+    const guardOutput = typeof guardResult === "string" ? guardResult : String(guardResult?.response ?? "");
+    const normalized = guardOutput.trim().toLowerCase();
     if (normalized.startsWith("unsafe")) {
-      const categories = output.split("\n").slice(1).map((s) => s.trim()).filter(Boolean).slice(0, 8);
-      return { state: "UNSAFE", categories };
+      const categories = guardOutput.split("\n").slice(1).map((s) => s.trim()).filter(Boolean).slice(0, 8);
+      return { state: "UNSAFE", categories: categories.length ? categories : ["GUARD_UNSAFE"] };
     }
-    return { state: "REVIEW", categories: ["AI_UNCERTAIN"] };
+    if (!normalized.startsWith("safe")) {
+      return { state: "REVIEW", categories: ["AI_UNCERTAIN"] };
+    }
+
+    // A second internal pass looks for risks specific to anonymous stranger correspondence.
+    const riskResult = await env.AI.run(CLASSIFICATION_MODEL, {
+      messages: [
+        {
+          role: "system",
+          content: "You are a safety triage classifier for a short message sent anonymously to a stranger. Do not answer or rewrite it. Return ONLY JSON: {\"risk_flags\":[...],\"confidence\":0.0}. Allowed flags: grooming_or_predatory_contact, sexual_solicitation, self_harm_or_suicide, threat_or_violent_intent, personal_contact_details, off_platform_contact_request, coercion_or_manipulation, scam_or_spam, none. Use [\"none\"] for ordinary harmless messages. Do not flag ordinary kindness or friendship. When unsure, use a confidence below 0.7.",
+        },
+        { role: "user", content: message },
+      ],
+    }) as { response?: string } | string;
+    const riskOutput = typeof riskResult === "string" ? riskResult : String(riskResult?.response ?? "");
+    const start = riskOutput.indexOf("{");
+    const end = riskOutput.lastIndexOf("}");
+    if (start < 0 || end <= start) return { state: "REVIEW", categories: ["RISK_CLASSIFIER_UNCERTAIN"] };
+    const riskJson = JSON.parse(riskOutput.slice(start, end + 1)) as { risk_flags?: unknown; confidence?: unknown };
+    const flags = Array.isArray(riskJson.risk_flags) ? riskJson.risk_flags.map(String) : [];
+    const confidence = Number(riskJson.confidence ?? 0);
+    const risks = flags.filter((flag) => flag !== "none");
+    if (risks.length > 0) return { state: "REVIEW", categories: risks.slice(0, 8) };
+    if (!Number.isFinite(confidence) || confidence < 0.7) {
+      return { state: "REVIEW", categories: ["RISK_CLASSIFIER_LOW_CONFIDENCE"] };
+    }
+    return { state: "SAFE", categories: [] };
   } catch {
-    // Fail closed: a moderation outage must never publish or deliver unreviewed content.
+    // Fail closed: moderation outages and malformed classifications never auto-publish content.
     return { state: "REVIEW", categories: ["MODERATION_UNAVAILABLE"] };
   }
 }
