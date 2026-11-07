@@ -54,8 +54,8 @@ const FIREBASE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"),
 );
 const MODERATION_MODEL = "@cf/meta/llama-guard-3-8b";
-const CLASSIFICATION_MODEL = "@cf/meta/llama-3.2-1b-instruct";
-const TRANSLATION_MODEL = "@cf/meta/llama-3.2-3b-instruct";
+const CLASSIFICATION_MODEL = "@cf/zai-org/glm-4.7-flash";
+const TRANSLATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 
 const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(data), {
@@ -71,6 +71,20 @@ const sha256 = async (value: string) => {
   const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
 };
+
+function modelText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (!result || typeof result !== "object") return "";
+  const value = result as {
+    response?: unknown;
+    choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
+  };
+  if (typeof value.response === "string") return value.response;
+  const choice = value.choices?.[0];
+  if (typeof choice?.message?.content === "string") return choice.message.content;
+  if (typeof choice?.text === "string") return choice.text;
+  return "";
+}
 
 function corsHeaders(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get("Origin") ?? "";
@@ -128,7 +142,7 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
         { role: "user", content: message },
       ],
     }) as { response?: string } | string;
-    const guardOutput = typeof guardResult === "string" ? guardResult : String(guardResult?.response ?? "");
+    const guardOutput = modelText(guardResult);
     const normalized = guardOutput.trim().toLowerCase();
     if (normalized.startsWith("unsafe")) {
       const categories = guardOutput.split("\n").slice(1).map((s) => s.trim()).filter(Boolean).slice(0, 8);
@@ -148,7 +162,7 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
         { role: "user", content: message },
       ],
     }) as { response?: string } | string;
-    const riskOutput = typeof riskResult === "string" ? riskResult : String(riskResult?.response ?? "");
+    const riskOutput = modelText(riskResult);
     const start = riskOutput.indexOf("{");
     const end = riskOutput.lastIndexOf("}");
     if (start < 0 || end <= start) return { state: "REVIEW", categories: ["RISK_CLASSIFIER_UNCERTAIN"] };
@@ -178,7 +192,7 @@ async function classifyInBackground(env: Env, airplaneId: string, message: strin
         { role: "user", content: message },
       ],
     }) as { response?: string } | string;
-    const output = typeof result === "string" ? result : String(result?.response ?? "");
+    const output = modelText(result);
     const start = output.indexOf("{");
     const end = output.lastIndexOf("}");
     if (start < 0 || end <= start) return;
@@ -413,7 +427,7 @@ async function translateMessage(airplaneId: string, targetLanguage: "pt" | "en",
         { role: "user", content: message },
       ],
     }) as { response?: string } | string;
-    const translated = text(typeof result === "string" ? result : result?.response, 2000);
+    const translated = text(modelText(result), 2000);
     if (!translated) return null;
     await env.DB.prepare(
       "INSERT OR REPLACE INTO translations(airplane_id, target_language, translated_text) VALUES (?, ?, ?)",
