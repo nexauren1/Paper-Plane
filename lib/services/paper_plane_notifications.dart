@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'firebase_runtime.dart';
@@ -5,6 +7,8 @@ import 'paper_plane_api.dart';
 
 class PaperPlaneNotifications {
   PaperPlaneNotifications._();
+
+  static StreamSubscription<String>? _tokenSubscription;
 
   /// Call only after the pilot has opted into notifications in Settings.
   static Future<void> enableAndRegister() async {
@@ -30,8 +34,26 @@ class PaperPlaneNotifications {
     }
 
     await PaperPlaneApi.instance.registerDevice(token);
-    messaging.onTokenRefresh.listen((newToken) {
+    await _tokenSubscription?.cancel();
+    _tokenSubscription = messaging.onTokenRefresh.listen((newToken) {
       PaperPlaneApi.instance.registerDevice(newToken);
     });
+  }
+
+  /// Disabling notifications removes the server-side device registration first,
+  /// then deletes the local FCM token. This prevents future pushes to this device.
+  static Future<void> disableAndUnregister() async {
+    if (!FirebaseRuntime.isInitialized) return;
+
+    final messaging = FirebaseMessaging.instance;
+    final token = await messaging.getToken();
+    await _tokenSubscription?.cancel();
+    _tokenSubscription = null;
+
+    if (token != null && token.isNotEmpty && PaperPlaneApi.isConfigured) {
+      await PaperPlaneApi.instance.unregisterDevice(token);
+    }
+
+    await messaging.deleteToken();
   }
 }
