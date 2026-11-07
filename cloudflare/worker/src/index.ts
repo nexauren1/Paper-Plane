@@ -628,7 +628,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ ok: true, reportId: id }, 201);
   }
 
-  const blockSenderMatch = path.match(/^\\/v1\\/airplanes\\/([^/]+)\\/block-sender$/);
+  const blockSenderMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/block-sender$/);
   if (method === "POST" && blockSenderMatch) {
     const plane = await env.DB.prepare(
       "SELECT sender_uid FROM airplanes WHERE id = ? AND (recipient_uid = ? OR audience = 'PUBLIC')",
