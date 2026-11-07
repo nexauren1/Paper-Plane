@@ -130,5 +130,40 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> registerDevice(String token, {String platform = 'android'}) =>
       _request('/v1/devices/register', method: 'POST', body: {'token': token, 'platform': platform});
 
+  Future<Map<String, dynamic>> reportPlane(
+    String airplaneId, {
+    required String reason,
+    String? details,
+  }) =>
+      _request(
+        '/v1/airplanes/$airplaneId/report',
+        method: 'POST',
+        body: {'reason': reason, if (details != null) 'details': details},
+      );
+
+  Future<Map<String, dynamic>> blockPilot(String uid) =>
+      _request('/v1/users/block', method: 'POST', body: {'uid': uid});
+
+  Future<Map<String, dynamic>> likeOpenSkyMessage(String airplaneId) =>
+      _request('/v1/open-sky/$airplaneId/like', method: 'POST');
+
+  Future<Map<String, dynamic>> getPublicReplies(String airplaneId) =>
+      _request('/v1/open-sky/$airplaneId/replies');
+
+  Future<Map<String, dynamic>> addPublicReply(String airplaneId, String message) =>
+      _request('/v1/open-sky/$airplaneId/replies', method: 'POST', body: {'message': message});
+
+  Future<Map<String, dynamic>> replyToPlane(
+    String airplaneId, {
+    required String message,
+    required String language,
+    required bool allowReply,
+  }) =>
+      _request(
+        '/v1/airplanes/$airplaneId/reply',
+        method: 'POST',
+        body: {'message': message, 'language': language, 'allowReply': allowReply},
+      );
+
   void close() => _client.close();
 }
