@@ -323,7 +323,11 @@ class GlassPanel extends StatelessWidget {
           if (highlight) BoxShadow(color: ppGold.withOpacity(0.11), blurRadius: 18, spreadRadius: 1),
         ],
       ),
-      child: child,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(radius),
+        child: child,
+      ),
     );
   }
 }
