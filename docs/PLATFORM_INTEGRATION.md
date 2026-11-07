@@ -36,9 +36,9 @@ This branch prepares the production architecture without committing private cred
 
 ### Hidden AI
 - Llama Guard 3 8B checks message safety.
-- Llama 3.2 1B performs a second risk-triage pass for grooming/predatory contact, sexual solicitation, self-harm, threats, personal contact details, off-platform contact requests, coercion, and spam. Risk or uncertainty sends a message to manual review.
-- The same small model classifies language, mood, and theme for internal metadata.
-- Llama 3.2 3B translates a letter only when an authenticated participant requests a translation.
+- GLM-4.7-Flash performs a second risk-triage pass for grooming/predatory contact, sexual solicitation, self-harm, threats, personal contact details, off-platform contact requests, coercion, and spam. Risk or uncertainty sends a message to manual review.
+- GLM-4.7-Flash also classifies language, mood, and theme for internal metadata.
+- GLM-4.7-Flash translates a letter only when an authenticated participant requests a translation.
 - The models never compose a letter on behalf of a pilot.
 - AI is a screening aid, not a safety guarantee. It can miss harmful content or flag harmless content. Human review, reporting, blocking, rate limits, and clear community rules remain necessary.
 
