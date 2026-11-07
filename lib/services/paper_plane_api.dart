@@ -95,7 +95,14 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> getSentPlanes() => _request('/v1/airplanes/sent');
 
-  Future<Map<String, dynamic>> getOpenSky() => _request('/v1/open-sky');
+  Future<Map<String, dynamic>> getOpenSky({String? country, String? language}) {
+    final query = <String, String>{
+      if (country != null && country.isNotEmpty) 'country': country.toUpperCase(),
+      if (language == 'pt' || language == 'en') 'language': language!,
+    };
+    final suffix = query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
+    return _request('/v1/open-sky$suffix');
+  }
 
   Future<Map<String, dynamic>> sendPlane({
     required String message,
