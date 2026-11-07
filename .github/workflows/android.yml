@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - flutter-app-foundation
+      - platform-integration
   pull_request:
     branches:
       - main
