@@ -1868,7 +1868,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _setNotifications(bool enabled) async {
     if (!enabled) {
-      setState(() => notifications = false);
+      try {
+        final serverUpdated = await PaperPlaneNotifications.disableAndUnregister();
+        if (!mounted) return;
+        setState(() => notifications = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              serverUpdated
+                  ? 'Notificações desativadas neste dispositivo.'
+                  : 'Notificações desativadas localmente. O servidor ainda precisa de sincronizar esta alteração.',
+            ),
+          ),
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Não foi possível concluir a desativação das notificações.')),
+          );
+        }
+      }
       return;
     }
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
