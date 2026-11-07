@@ -1,0 +1,42 @@
+name: Android build
+
+on:
+  push:
+    branches:
+      - main
+      - flutter-app-foundation
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android project files if missing
+        run: flutter create --platforms=android --project-name paper_plane --org com.nexauren .
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run widget tests
+        run: flutter test
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-plane-android-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
