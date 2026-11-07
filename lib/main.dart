@@ -196,6 +196,102 @@ class PlaneMark extends StatelessWidget {
       );
 }
 
+
+class AnimatedPlane extends StatefulWidget {
+  const AnimatedPlane({super.key, this.width = 112, this.color = ppGoldBright});
+  final double width;
+  final Color color;
+
+  @override
+  State<AnimatedPlane> createState() => _AnimatedPlaneState();
+}
+
+class _AnimatedPlaneState extends State<AnimatedPlane> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2300),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final phase = _controller.value * math.pi * 2;
+        return SizedBox(
+          width: widget.width,
+          height: widget.width * 0.78,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: PlaneTrailPainter(color: widget.color, phase: _controller.value),
+                ),
+              ),
+              Transform.translate(
+                offset: Offset(math.sin(phase) * 3.5, -math.cos(phase * 0.8) * 5.5),
+                child: Transform.rotate(
+                  angle: math.sin(phase) * 0.025,
+                  child: PlaneMark(width: widget.width * 0.82, color: widget.color),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PlaneTrailPainter extends CustomPainter {
+  const PlaneTrailPainter({required this.color, required this.phase});
+  final Color color;
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width * 0.08, size.height * 0.87)
+      ..cubicTo(
+        size.width * 0.28,
+        size.height * 0.78,
+        size.width * 0.28,
+        size.height * 0.40,
+        size.width * 0.58,
+        size.height * 0.28,
+      );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withOpacity(0.34)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+    for (var i = 0; i < 19; i++) {
+      final t = i / 19;
+      final x = size.width * (0.09 + t * 0.49);
+      final y = size.height * (0.86 - 0.58 * t + 0.08 * math.sin(t * math.pi * 2 + phase));
+      final radius = 0.7 + (1 - t) * 1.1;
+      canvas.drawCircle(
+        Offset(x, y),
+        radius,
+        Paint()..color = color.withOpacity((1 - t) * 0.55),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant PlaneTrailPainter oldDelegate) => oldDelegate.phase != phase || oldDelegate.color != color;
+}
+
 class GlassPanel extends StatelessWidget {
   const GlassPanel({
     super.key,
@@ -403,7 +499,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   child: Column(
                     children: [
                       const Spacer(flex: 2),
-                      const PlaneMark(width: 245, color: Colors.white),
+                      const AnimatedPlane(width: 245, color: Colors.white),
                       const SizedBox(height: 36),
                       const Text(
                         'PAPER PLANE',
@@ -519,7 +615,7 @@ class HomePage extends StatelessWidget {
                 child: Column(
                   children: [
                     const SizedBox(height: 4),
-                    const PlaneMark(width: 168),
+                    const AnimatedPlane(width: 168),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -806,7 +902,7 @@ class _LaunchDialogState extends State<LaunchDialog> with SingleTickerProviderSt
             animation: _controller,
             builder: (_, __) => Transform.translate(
               offset: Offset(_controller.value * 12, -_controller.value * 8),
-              child: const PlaneMark(width: 115),
+              child: const AnimatedPlane(width: 115),
             ),
           ),
           const SizedBox(height: 22),
