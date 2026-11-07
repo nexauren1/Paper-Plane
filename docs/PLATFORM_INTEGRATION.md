@@ -31,7 +31,7 @@ This branch prepares the production architecture without committing private cred
 - Unread delivered letters expire after 24 hours. Once opened, the retention window changes to 48 hours.
 - A reply must be allowed by the original sender.
 - Open Sky supports up to five public replies.
-- Reports and administrative review records are stored in D1.
+- Reports and administrative review records are stored in D1. Admin-only endpoints can list held AI-review messages and open reports, dismiss/action reports, approve/reject held planes, or suspend an account. Admin access uses the Worker secret ADMIN_UIDS.
 - Moderation review endpoints are restricted to Firebase UIDs listed in the Worker secret ADMIN_UIDS.
 
 ### Hidden AI
@@ -90,6 +90,17 @@ For ADMIN_UIDS, enter a comma-separated list of trusted Firebase UIDs that are a
 
 The Worker AI binding is declared in wrangler.jsonc. Confirm Workers AI is enabled for the Cloudflare account. The Queue names must exist before deploy. The scheduled trigger revisits queued planes every five minutes and expires letters according to their stored expiry time.
 
+## GitHub deployment option
+
+A manual-only deployment workflow is included at .github/workflows/deploy-worker.yml. Before using it, add these repository Actions secrets:
+
+- CLOUDFLARE_API_TOKEN — a scoped token that can deploy Workers and apply D1 migrations.
+- CLOUDFLARE_ACCOUNT_ID — the Cloudflare account ID.
+
+The D1 database and Queue resources must already exist, and wrangler.jsonc must contain the real D1 database ID and Firebase Project ID. The Worker secrets FCM_SERVICE_ACCOUNT_JSON and ADMIN_UIDS are configured in Cloudflare, not GitHub. Then run the "Deploy Paper Plane Worker" workflow manually from the platform-integration branch.
+
+The automatic Cloudflare CI checks also validate both SQL migrations in an in-memory SQLite database and typecheck the Worker code. They do not deploy anything.
+
 ## Flutter build
 
 From the repository root:
@@ -114,9 +125,9 @@ Pages remains the public website. Use a Worker custom domain such as api.yourdom
 
 - Fill in the real Firebase Project ID, app IDs, API key, and Worker custom domain locally.
 - Create the D1 database and Queue resources in the correct Cloudflare account.
-- Select and integrate a trusted age-assurance provider and signed callback.
-- Build the human moderation dashboard/workflow and define response coverage and escalation procedures.
+- Select and integrate a trusted age-assurance provider and signed callback. This is currently a hard release blocker: all new users are UNVERIFIED and cannot send or receive random mail until this is complete.
+- Build the human moderation dashboard/workflow on top of the admin endpoints and define response coverage and escalation procedures.
 - Verify local laws, privacy notice, data-retention and deletion process, and child-safety requirements for each launch region.
-- Connect live API data to every visual screen; some screens still show illustrative content.
+- Connect live API data to every visual screen; the composer, auth, notification registration, and API clients are prepared, but inbox, Open Sky, profile, collection, and some other visual screens still show illustrative content.
 - Test FCM delivery on a real Android device and configure notification channels.
 - Add integration tests using Firebase Auth and Cloudflare staging resources before production.
