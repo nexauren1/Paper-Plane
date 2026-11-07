@@ -77,6 +77,7 @@ class PaperPlaneApi {
         'MESSAGE_NOT_ALLOWED' => 'A mensagem não passou a verificação de segurança.',
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
+        'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
         _ => payload['message']?.toString() ?? 'O pedido não pôde ser concluído.',
       };
       throw PaperPlaneApiException(code, message, statusCode: response.statusCode);
@@ -143,6 +144,9 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> blockPilot(String uid) =>
       _request('/v1/users/block', method: 'POST', body: {'uid': uid});
+
+  Future<Map<String, dynamic>> blockSenderOfPlane(String airplaneId) =>
+      _request('/v1/airplanes/$airplaneId/block-sender', method: 'POST');
 
   Future<Map<String, dynamic>> likeOpenSkyMessage(String airplaneId) =>
       _request('/v1/open-sky/$airplaneId/like', method: 'POST');
