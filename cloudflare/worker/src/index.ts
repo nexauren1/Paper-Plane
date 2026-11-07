@@ -401,7 +401,7 @@ async function exchangeFcmAccessToken(env: Env): Promise<string | null> {
 async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
   const accessToken = await exchangeFcmAccessToken(env);
   if (!accessToken) return;
-  const devices = await env.DB.prepare("SELECT fcm_token FROM devices WHERE uid = ?").bind(uid).all<{ fcm_token: string }>();
+  const devices = await env.DB.prepare("SELECT d.fcm_token FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'").bind(uid).all<{ fcm_token: string }>();
   const projectId = env.FIREBASE_PROJECT_ID;
   for (const device of devices.results ?? []) {
     try {
@@ -693,16 +693,30 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ ok: true });
   }
 
+  if (method === "POST" && path === "/v1/devices/unregister") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const token = text(body?.token, 4096);
+    if (!token) return json({ error: "INVALID_DEVICE_TOKEN" }, 400);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?").bind(uid, token),
+      env.DB.prepare("UPDATE users SET push_enabled = 0, updated_at = ? WHERE uid = ?").bind(isoNow(), uid),
+    ]);
+    return json({ ok: true, notificationsEnabled: false });
+  }
+
   if (method === "POST" && path === "/v1/devices/register") {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const token = text(body?.token, 4096);
     const platform = body?.platform === "ios" || body?.platform === "web" ? body.platform : "android";
     if (token.length < 40) return json({ error: "INVALID_DEVICE_TOKEN" }, 400);
     const id = uuid();
-    await env.DB.prepare(
-      "INSERT INTO devices(id, uid, fcm_token, platform) VALUES (?, ?, ?, ?) ON CONFLICT(fcm_token) DO UPDATE SET uid = excluded.uid, platform = excluded.platform, updated_at = ?",
-    ).bind(id, uid, token, platform, isoNow()).run();
-    return json({ ok: true }, 201);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO devices(id, uid, fcm_token, platform) VALUES (?, ?, ?, ?) ON CONFLICT(fcm_token) DO UPDATE SET uid = excluded.uid, platform = excluded.platform, updated_at = ?",
+      ).bind(id, uid, token, platform, isoNow()),
+      env.DB.prepare("UPDATE users SET push_enabled = 1, updated_at = ? WHERE uid = ?").bind(isoNow(), uid),
+    ]);
+    return json({ ok: true, notificationsEnabled: true }, 201);
   }
 
   if (method === "GET" && path === "/v1/open-sky") {
