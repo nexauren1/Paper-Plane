@@ -563,8 +563,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const airplaneId = adminReviewMatch[1];
     const plane = await env.DB.prepare(
-      "SELECT id, sender_uid, recipient_uid, audience, status FROM airplanes WHERE id = ? AND status = 'HELD_REVIEW'",
-    ).bind(airplaneId).first<{ id: string; sender_uid: string; recipient_uid: string | null; audience: string; status: string }>();
+      "SELECT id, sender_uid, recipient_uid, reply_to_id, audience, status FROM airplanes WHERE id = ? AND status = 'HELD_REVIEW'",
+    ).bind(airplaneId).first<{ id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; audience: string; status: string }>();
     if (!plane) return json({ error: "NOT_FOUND" }, 404);
     if (body.action === "reject") {
       await env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE id = ?")
@@ -605,6 +605,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (nextStatus === "DELIVERED") {
       await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
     } else if (nextStatus === "FLYING") {
+      if (plane.reply_to_id) {
+        await env.DB.prepare(
+          "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
+        ).bind(plane.reply_to_id).run();
+      }
       await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId }, { delaySeconds: 30 });
     } else {
       await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
