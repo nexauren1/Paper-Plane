@@ -962,6 +962,8 @@ class FlightScreen extends StatelessWidget {
           const SizedBox(height: 17),
           const Text('Demonstração visual do percurso', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
           const SizedBox(height: 14),
+          GoldButton(label: 'Ver chegada da carta', icon: Icons.mark_email_read_outlined, onPressed: () => ppPush(context, const ArrivalScreen())),
+          const SizedBox(height: 11),
           SoftButton(label: 'Voltar ao início', icon: Icons.home_outlined, onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
         ],
       ),
@@ -1031,6 +1033,95 @@ class FlightMapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+
+class ArrivalScreen extends StatelessWidget {
+  const ArrivalScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Carta chegou!',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+        children: [
+          const SizedBox(height: 8),
+          const Text('O teu avião pousou agora', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          const Text('Uma mensagem chegou ao seu destino.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 16),
+          GlassPanel(
+            highlight: true,
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              height: 190,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned.fill(child: CustomPaint(painter: FlightMapPainter())),
+                  const Icon(Icons.location_on_rounded, color: ppGoldBright, size: 24),
+                  const Positioned(
+                    bottom: 9,
+                    left: 8,
+                    child: Text('Moçambique', style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                  ),
+                  const Positioned(
+                    top: 8,
+                    right: 7,
+                    child: Text('Brasil', style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                  ),
+                  const Align(alignment: Alignment.bottomRight, child: PlaneMark(width: 48)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 13),
+          Row(children: const [
+            Expanded(child: _CollectionStat(value: '9 840 km', label: 'Distância percorrida')),
+            SizedBox(width: 10),
+            Expanded(child: _CollectionStat(value: '12h 34min', label: 'Tempo de voo')),
+          ]),
+          const SizedBox(height: 15),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9F0FA),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: ppBlueLight.withOpacity(0.12), blurRadius: 15)],
+            ),
+            child: Column(children: const [
+              Icon(Icons.mail_rounded, color: Color(0xFF45618D), size: 44),
+              SizedBox(height: 8),
+              Text('Conteúdo da carta', style: TextStyle(color: Color(0xFF52647F), fontWeight: FontWeight.w800)),
+              SizedBox(height: 12),
+              Text('De: Maputo, Moçambique', style: TextStyle(color: Color(0xFF59677B))),
+              Text('Para: Destino internacional', style: TextStyle(color: Color(0xFF59677B))),
+              SizedBox(height: 6),
+              Text('Chegada registada nesta demonstração', style: TextStyle(color: Color(0xFF8792A2), fontSize: 11)),
+            ]),
+          ),
+          const SizedBox(height: 18),
+          GoldButton(
+            label: 'Abrir carta',
+            icon: Icons.mark_email_read_outlined,
+            onPressed: () => ppPush(
+              context,
+              const LetterScreen(
+                from: 'Alguém no Brasil',
+                flag: '🇧🇷',
+                message: 'Que esta mensagem te encontre num bom momento. Mesmo longe, podemos partilhar gentileza.',
+              ),
+            ),
+          ),
+          const SizedBox(height: 11),
+          SoftButton(label: 'Voltar à caixa', icon: Icons.inbox_outlined, onPressed: () => Navigator.pop(context)),
+          const SizedBox(height: 13),
+          const Text('Percurso ilustrativo. A entrega real será controlada pelo servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
+      ),
+    );
+  }
 }
 
 class InboxPage extends StatelessWidget {
@@ -1317,6 +1408,7 @@ class ProfilePage extends StatelessWidget {
         _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Controla a tua privacidade', onTap: () => ppPush(context, const SafetyScreen())),
         _ProfileLink(icon: Icons.card_giftcard, title: 'Convidar amigos', subtitle: 'Partilha o Paper Plane', onTap: () => ppPush(context, const InviteScreen())),
         _ProfileLink(icon: Icons.collections_bookmark_outlined, title: 'A minha coleção', subtitle: 'Selos, países e conquistas', onTap: () => ppPush(context, const CollectionScreen())),
+        _ProfileLink(icon: Icons.local_fire_department_outlined, title: 'Chama do Deserto', subtitle: 'Pré-visualização · depende de consentimento mútuo', onTap: () => ppPush(context, const ChamaScreen())),
         _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Perguntas e contacto', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
       ],
     );
@@ -1363,6 +1455,137 @@ class _ProfileLink extends StatelessWidget {
       ),
     ),
   );
+}
+
+
+class ChamaScreen extends StatelessWidget {
+  const ChamaScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Chama do Deserto',
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(17, 0, 17, 12),
+            child: GlassPanel(
+              highlight: true,
+              child: Row(children: [
+                const CircleAvatar(
+                  radius: 27,
+                  backgroundColor: Color(0xFF344C77),
+                  child: Icon(Icons.person_rounded, color: ppGoldBright, size: 31),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Piloto associado', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  Text('Ligação privada de demonstração', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                ])),
+                const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFA15A), size: 29),
+              ]),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 17),
+            child: GlassPanel(
+              color: const Color(0xFF263D66),
+              child: const Row(children: [
+                Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFAA65), size: 30),
+                SizedBox(width: 10),
+                Expanded(child: Text('Uma chama precisa de respeito, cuidado e consentimento dos dois pilotos.', style: TextStyle(fontWeight: FontWeight.w700))),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              children: const [
+                _FlameBubble(text: 'Olá! Como está o teu dia? Espero que o deserto esteja mais calmo hoje ✨', time: 'ontem · 22:12', mine: false),
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Text('A conversa só continua com a escolha livre dos dois.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                  ),
+                ),
+                _FlameBubble(text: 'Consegui ver as estrelas aqui esta noite. Foi muito bonito!', time: 'hoje · 09:34', mine: true),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(15, 8, 15, 17),
+            child: GlassPanel(
+              padding: const EdgeInsets.all(12),
+              child: Column(children: [
+                const Text('Pré-visualização — mensagens privadas ainda desativadas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
+                const SizedBox(height: 10),
+                Row(children: [
+                  const Expanded(
+                    child: TextField(
+                      enabled: false,
+                      decoration: InputDecoration(
+                        hintText: 'Enviar mensagem em papel...',
+                        filled: true,
+                        fillColor: Color(0x3310182A),
+                        border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.all(Radius.circular(18))),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(onPressed: null, icon: const Icon(Icons.send_rounded, color: ppGold)),
+                ]),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 7,
+                  children: [
+                    TextButton.icon(onPressed: () => showReportDialog(context), icon: const Icon(Icons.flag_outlined), label: const Text('Denunciar')),
+                    TextButton.icon(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O bloqueio será ligado à conta.'))), icon: const Icon(Icons.shield_outlined), label: const Text('Bloquear')),
+                    TextButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded), label: const Text('Sair')),
+                  ],
+                ),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlameBubble extends StatelessWidget {
+  const _FlameBubble({required this.text, required this.time, required this.mine});
+  final String text;
+  final String time;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 300),
+        margin: const EdgeInsets.symmetric(vertical: 7),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: mine ? const Color(0xFF385C9A) : const Color(0xFF1A2B49),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(mine ? 18 : 4),
+            bottomRight: Radius.circular(mine ? 4 : 18),
+          ),
+          border: Border.all(color: Colors.white.withOpacity(0.10)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(text, style: const TextStyle(fontSize: 15, height: 1.4)),
+          const SizedBox(height: 6),
+          Text(time, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+        ]),
+      ),
+    );
+  }
 }
 
 class InviteScreen extends StatelessWidget {
