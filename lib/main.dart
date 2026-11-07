@@ -1,5 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'services/firebase_runtime.dart';
+import 'services/paper_plane_api.dart';
+import 'services/paper_plane_auth.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -11,8 +14,9 @@ const Color ppPaper = Color(0xFFF4F0E7);
 const Color ppInk = Color(0xFF242735);
 const Color ppPanel = Color(0xCC172844);
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await FirebaseRuntime.initialize();
   runApp(const PaperPlaneApp());
 }
 
@@ -730,15 +734,54 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Escreve uma mensagem antes de lançar o avião.')));
       return;
     }
+
     showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const LaunchDialog(),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 1500));
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    ppPush(context, const FlightScreen());
+
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 650));
+
+      if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Modo de demonstração: configura Firebase e o endereço da API para enviar aviões reais.')),
+        );
+        ppPush(context, const FlightScreen());
+        return;
+      }
+
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      final result = await PaperPlaneApi.instance.sendPlane(
+        message: _message.text.trim(),
+        language: 'pt',
+        mood: _mood,
+        visibility: _visibility,
+        destinationCountry: switch (_destination) {
+          'Japão' => 'JP',
+          'Portugal' => 'PT',
+          'Brasil' => 'BR',
+          _ => null,
+        },
+        allowReply: _allowReply,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final airplane = result['airplane'] as Map<String, dynamic>? ?? const {};
+      final status = airplane['status']?.toString() ?? 'QUEUED';
+      ppPush(context, FlightScreen(status: status, isDemo: false));
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final message = error is PaperPlaneApiException
+          ? error.message
+          : 'Não foi possível lançar o avião. Tenta novamente.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   @override
@@ -922,48 +965,79 @@ class _LaunchDialogState extends State<LaunchDialog> with SingleTickerProviderSt
 }
 
 class FlightScreen extends StatelessWidget {
-  const FlightScreen({super.key});
+  const FlightScreen({super.key, this.status = 'QUEUED', this.isDemo = true});
+
+  final String status;
+  final bool isDemo;
+
+  String get _statusLabel => switch (status) {
+    'QUEUED' => 'À espera de um destinatário elegível',
+    'FLYING' => 'A encaminhar a mensagem',
+    'DELIVERED' => 'Mensagem publicada / entregue',
+    'HELD_REVIEW' => 'Retido para revisão de segurança',
+    'READ' => 'Mensagem aberta',
+    _ => 'Estado: $status',
+  };
 
   @override
   Widget build(BuildContext context) {
     return ScreenFrame(
-      title: 'O teu avião está a voar',
+      title: isDemo ? 'O teu avião está a voar' : 'Estado do avião',
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
         children: [
           const SizedBox(height: 5),
-          const Text('A caminho do Japão', style: TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700)),
+          Text(
+            isDemo ? 'A caminho do Japão' : _statusLabel,
+            style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
           GlassPanel(
             padding: const EdgeInsets.all(10),
             highlight: true,
-            child: SizedBox(height: 250, child: CustomPaint(painter: FlightMapPainter(), child: const Center(child: PlaneMark(width: 62)))),
+            child: SizedBox(height: 250, child: CustomPaint(painter: FlightMapPainter(), child: const Center(child: AnimatedPlane(width: 68)))),
           ),
           const SizedBox(height: 14),
           GlassPanel(
-            child: Row(children: [
-              Expanded(child: _flightMetric('DISTÂNCIA PERCORRIDA', '2 340 km', Icons.route)),
-              Container(width: 1, height: 65, color: Colors.white24),
-              Expanded(child: _flightMetric('PROGRESSO', '62%', Icons.trending_up)),
-            ]),
+            child: isDemo
+                ? Row(children: [
+                    Expanded(child: _flightMetric('DISTÂNCIA PERCORRIDA', '2 340 km', Icons.route)),
+                    Container(width: 1, height: 65, color: Colors.white24),
+                    Expanded(child: _flightMetric('PROGRESSO', '62%', Icons.trending_up)),
+                  ])
+                : Row(children: [
+                    Expanded(child: _flightMetric('ESTADO DO SERVIDOR', status, Icons.cloud_done_outlined)),
+                    Container(width: 1, height: 65, color: Colors.white24),
+                    Expanded(child: _flightMetric('ENTREGA', status == 'QUEUED' ? 'Na fila' : 'Em processo', Icons.mark_email_unread_outlined)),
+                  ]),
           ),
-          const SectionTitle('Países atravessados'),
-          const GlassPanel(
-            child: Column(children: [
-              _CountryFlightRow(flag: '🇲🇿', country: 'Moçambique', status: 'Partida'),
-              Divider(color: Colors.white12),
-              _CountryFlightRow(flag: '🇮🇳', country: 'Índia', status: 'Passado'),
-              Divider(color: Colors.white12),
-              _CountryFlightRow(flag: '🇹🇭', country: 'Tailândia', status: 'Passado'),
-              Divider(color: Colors.white12),
-              _CountryFlightRow(flag: '🇯🇵', country: 'Japão', status: 'Destino'),
-            ]),
-          ),
-          const SizedBox(height: 17),
-          const Text('Demonstração visual do percurso', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+          if (isDemo) ...[
+            const SectionTitle('Países atravessados'),
+            const GlassPanel(
+              child: Column(children: [
+                _CountryFlightRow(flag: '🇲🇿', country: 'Moçambique', status: 'Partida'),
+                Divider(color: Colors.white12),
+                _CountryFlightRow(flag: '🇮🇳', country: 'Índia', status: 'Passado'),
+                Divider(color: Colors.white12),
+                _CountryFlightRow(flag: '🇹🇭', country: 'Tailândia', status: 'Passado'),
+                Divider(color: Colors.white12),
+                _CountryFlightRow(flag: '🇯🇵', country: 'Japão', status: 'Destino'),
+              ]),
+            ),
+            const SizedBox(height: 17),
+            const Text('Demonstração visual do percurso', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+            const SizedBox(height: 14),
+            GoldButton(label: 'Ver chegada da carta', icon: Icons.mark_email_read_outlined, onPressed: () => ppPush(context, const ArrivalScreen())),
+          ] else ...[
+            const SizedBox(height: 14),
+            const GlassPanel(
+              child: Text(
+                'O mapa representa a viagem simbólica do avião. O Paper Plane não usa GPS nem inventa quilómetros ou horas de chegada. A entrega só será confirmada quando o servidor encontrar um destinatário elegível.',
+                style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
-          GoldButton(label: 'Ver chegada da carta', icon: Icons.mark_email_read_outlined, onPressed: () => ppPush(context, const ArrivalScreen())),
-          const SizedBox(height: 11),
           SoftButton(label: 'Voltar ao início', icon: Icons.home_outlined, onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
         ],
       ),
