@@ -338,7 +338,10 @@ async function createAirplane(
     await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId: id }, { delaySeconds: 30 });
   }
 
-  return json({ airplane: { id, status, moderation: moderation.state }, message: status === "HELD_REVIEW" ? "Held for safety review." : "Plane accepted." }, 201);
+  return json(
+    { airplane: { id, status, moderation: moderation.state }, message: status === "HELD_REVIEW" ? "Held for safety review." : "Plane accepted." },
+    status === "HELD_REVIEW" ? 202 : 201,
+  );
 }
 
 async function matchAirplane(airplaneId: string, env: Env) {
@@ -543,10 +546,15 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (path === "/v1/admin/review" && method === "GET") {
     if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
-    const rows = await env.DB.prepare(
-      "SELECT id, sender_uid, message_text, audience, moderation_categories, created_at FROM airplanes WHERE status = 'HELD_REVIEW' ORDER BY created_at ASC LIMIT 100",
-    ).all();
-    return json({ items: rows.results ?? [] });
+    const [planes, replies] = await Promise.all([
+      env.DB.prepare(
+        "SELECT id, sender_uid, recipient_uid, message_text, audience, moderation_categories, created_at FROM airplanes WHERE status = 'HELD_REVIEW' ORDER BY created_at ASC LIMIT 100",
+      ).all(),
+      env.DB.prepare(
+        "SELECT id, airplane_id, sender_uid, message_text, created_at FROM public_replies WHERE moderation_state = 'REVIEW' ORDER BY created_at ASC LIMIT 100",
+      ).all(),
+    ]);
+    return json({ items: planes.results ?? [], replies: replies.results ?? [] });
   }
 
   const adminReviewMatch = path.match(/^\/v1\/admin\/review\/([^/]+)$/);
@@ -555,8 +563,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const airplaneId = adminReviewMatch[1];
     const plane = await env.DB.prepare(
-      "SELECT id, sender_uid, audience, status FROM airplanes WHERE id = ? AND status = 'HELD_REVIEW'",
-    ).bind(airplaneId).first<{ id: string; sender_uid: string; audience: string; status: string }>();
+      "SELECT id, sender_uid, recipient_uid, audience, status FROM airplanes WHERE id = ? AND status = 'HELD_REVIEW'",
+    ).bind(airplaneId).first<{ id: string; sender_uid: string; recipient_uid: string | null; audience: string; status: string }>();
     if (!plane) return json({ error: "NOT_FOUND" }, 404);
     if (body.action === "reject") {
       await env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE id = ?")
@@ -568,16 +576,63 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!sender || sender.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(sender.age_band)) {
       return json({ error: "AGE_VERIFICATION_REQUIRED" }, 403);
     }
-    const nextStatus = plane.audience === "PUBLIC" ? "DELIVERED" : "QUEUED";
+
+    let nextStatus: "DELIVERED" | "FLYING" | "QUEUED";
+    if (plane.audience === "PUBLIC") {
+      nextStatus = "DELIVERED";
+    } else if (plane.audience === "DIRECT") {
+      if (!plane.recipient_uid) return json({ error: "RECIPIENT_UNAVAILABLE" }, 409);
+      const recipient = await requireUser(plane.recipient_uid, env);
+      if (
+        !recipient ||
+        recipient.status !== "ACTIVE" ||
+        recipient.age_verified !== 1 ||
+        recipient.age_band !== sender.age_band
+      ) return json({ error: "RECIPIENT_UNAVAILABLE" }, 409);
+      const blocked = await env.DB.prepare(
+        "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+      ).bind(plane.sender_uid, plane.recipient_uid, plane.recipient_uid, plane.sender_uid).first();
+      if (blocked) return json({ error: "RECIPIENT_UNAVAILABLE" }, 409);
+      nextStatus = "FLYING";
+    } else {
+      nextStatus = "QUEUED";
+    }
+
     await env.DB.prepare(
       "UPDATE airplanes SET moderation_state = 'SAFE', status = ?, delivered_at = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_at END WHERE id = ? AND status = 'HELD_REVIEW'",
     ).bind(nextStatus, nextStatus, isoNow(), airplaneId).run();
+
     if (nextStatus === "DELIVERED") {
       await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
+    } else if (nextStatus === "FLYING") {
+      await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId }, { delaySeconds: 30 });
     } else {
       await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
     }
     return json({ ok: true, status: nextStatus });
+  }
+
+  const adminReplyReviewMatch = path.match(/^\\/v1\\/admin\\/replies\\/([^/]+)$/);
+  if (adminReplyReviewMatch && method === "POST") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.action !== "approve" && body.action !== "reject") return json({ error: "INVALID_ACTION" }, 400);
+    const reply = await env.DB.prepare(
+      "SELECT id, sender_uid FROM public_replies WHERE id = ? AND moderation_state = 'REVIEW'",
+    ).bind(adminReplyReviewMatch[1]).first<{ id: string; sender_uid: string }>();
+    if (!reply) return json({ error: "NOT_FOUND" }, 404);
+    if (body.action === "reject") {
+      await env.DB.prepare("UPDATE public_replies SET moderation_state = 'UNSAFE' WHERE id = ?")
+        .bind(reply.id).run();
+      return json({ ok: true, moderation: "UNSAFE" });
+    }
+    const replySender = await requireUser(reply.sender_uid, env);
+    if (!replySender || replySender.status !== "ACTIVE" || replySender.age_verified !== 1) {
+      return json({ error: "AGE_VERIFICATION_REQUIRED" }, 403);
+    }
+    await env.DB.prepare("UPDATE public_replies SET moderation_state = 'SAFE' WHERE id = ?")
+      .bind(reply.id).run();
+    return json({ ok: true, moderation: "SAFE" });
   }
 
   if (method === "POST" && path === "/v1/users/bootstrap") {
@@ -779,18 +834,21 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM public_replies WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first<{ count: number }>();
     if (Number(count?.count ?? 0) >= 5) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
     const moderation = await moderate(env, message);
-    if (moderation.state !== "SAFE") return json({ error: moderation.state === "UNSAFE" ? "MESSAGE_NOT_ALLOWED" : "HELD_FOR_REVIEW" }, 422);
+    if (moderation.state === "UNSAFE") return json({ error: "MESSAGE_NOT_ALLOWED" }, 422);
     const id = uuid();
+    const moderationState = moderation.state === "SAFE" ? "SAFE" : "REVIEW";
     try {
-      await env.DB.prepare("INSERT INTO public_replies(id, airplane_id, sender_uid, message_text, moderation_state) VALUES (?, ?, ?, ?, 'SAFE')")
-        .bind(id, publicRepliesMatch[1], uid, message).run();
+      await env.DB.prepare("INSERT INTO public_replies(id, airplane_id, sender_uid, message_text, moderation_state) VALUES (?, ?, ?, ?, ?)")
+        .bind(id, publicRepliesMatch[1], uid, message, moderationState).run();
     } catch (error) {
       const reason = String(error);
       if (reason.includes("PAPER_PLANE_RATE_LIMIT")) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
       if (reason.includes("PUBLIC_REPLY_LIMIT_REACHED")) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
       throw error;
     }
-    return json({ id, status: "PUBLISHED" }, 201);
+    return moderationState === "SAFE"
+      ? json({ id, status: "PUBLISHED" }, 201)
+      : json({ id, status: "HELD_REVIEW" }, 202);
   }
 
   const translationMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/translation$/);
