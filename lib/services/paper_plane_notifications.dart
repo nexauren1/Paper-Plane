@@ -42,18 +42,25 @@ class PaperPlaneNotifications {
 
   /// Disabling notifications removes the server-side device registration first,
   /// then deletes the local FCM token. This prevents future pushes to this device.
-  static Future<void> disableAndUnregister() async {
-    if (!FirebaseRuntime.isInitialized) return;
+  static Future<bool> disableAndUnregister() async {
+    if (!FirebaseRuntime.isInitialized) return true;
 
     final messaging = FirebaseMessaging.instance;
     final token = await messaging.getToken();
     await _tokenSubscription?.cancel();
     _tokenSubscription = null;
 
+    var serverUpdated = true;
     if (token != null && token.isNotEmpty && PaperPlaneApi.isConfigured) {
-      await PaperPlaneApi.instance.unregisterDevice(token);
+      try {
+        await PaperPlaneApi.instance.unregisterDevice(token);
+      } catch (_) {
+        // Still delete the local token so this device stops receiving pushes.
+        serverUpdated = false;
+      }
     }
 
     await messaging.deleteToken();
+    return serverUpdated;
   }
 }
