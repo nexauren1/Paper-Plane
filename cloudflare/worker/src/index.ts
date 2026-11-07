@@ -487,6 +487,50 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   const isAdmin = admins.includes(uid);
 
+  if (path === "/v1/admin/reports" && method === "GET") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const rows = await env.DB.prepare(
+      `SELECT r.id, r.reporter_uid, r.airplane_id, r.reported_uid, r.reason, r.details, r.status, r.created_at,
+              a.message_text, a.audience, a.moderation_state
+       FROM reports r
+       LEFT JOIN airplanes a ON a.id = r.airplane_id
+       WHERE r.status IN ('OPEN','IN_REVIEW')
+       ORDER BY r.created_at ASC LIMIT 200`,
+    ).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  const adminReportMatch = path.match(/^\\/v1\\/admin\\/reports\\/([^/]+)$/);
+  if (adminReportMatch && method === "POST") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const action = body.action;
+    const report = await env.DB.prepare(
+      "SELECT id, reported_uid FROM reports WHERE id = ? AND status IN ('OPEN','IN_REVIEW')",
+    ).bind(adminReportMatch[1]).first<{ id: string; reported_uid: string | null }>();
+    if (!report) return json({ error: "NOT_FOUND" }, 404);
+
+    if (action === "dismiss" || action === "actioned") {
+      await env.DB.prepare("UPDATE reports SET status = ? WHERE id = ?")
+        .bind(action === "dismiss" ? "DISMISSED" : "ACTIONED", report.id).run();
+      return json({ ok: true, status: action === "dismiss" ? "DISMISSED" : "ACTIONED" });
+    }
+
+    if (action === "suspend_user") {
+      if (!report.reported_uid) return json({ error: "REPORTED_USER_UNAVAILABLE" }, 409);
+      await env.DB.batch([
+        env.DB.prepare("UPDATE users SET status = 'SUSPENDED', accept_random_mail = 0, updated_at = ? WHERE uid = ?")
+          .bind(isoNow(), report.reported_uid),
+        env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE sender_uid = ? AND status IN ('QUEUED','FLYING','HELD_REVIEW')")
+          .bind(report.reported_uid),
+        env.DB.prepare("UPDATE reports SET status = 'ACTIONED' WHERE id = ?").bind(report.id),
+      ]);
+      return json({ ok: true, status: "SUSPENDED" });
+    }
+
+    return json({ error: "INVALID_ACTION" }, 400);
+  }
+
   if (path === "/v1/admin/review" && method === "GET") {
     if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
     const rows = await env.DB.prepare(
