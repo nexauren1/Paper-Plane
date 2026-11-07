@@ -47,6 +47,7 @@ interface Env {
   FIREBASE_PROJECT_ID: string;
   APP_ORIGINS: string;
   FCM_SERVICE_ACCOUNT_JSON?: string;
+  ADMIN_UIDS?: string;
 }
 
 const FIREBASE_JWKS = createRemoteJWKSet(
@@ -434,6 +435,48 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   const uid = await authenticate(request, env);
   if (!uid) return json({ error: "UNAUTHORIZED", message: "A valid Firebase ID token is required." }, 401);
+
+  const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  const isAdmin = admins.includes(uid);
+
+  if (path === "/v1/admin/review" && method === "GET") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const rows = await env.DB.prepare(
+      "SELECT id, sender_uid, message_text, audience, moderation_categories, created_at FROM airplanes WHERE status = 'HELD_REVIEW' ORDER BY created_at ASC LIMIT 100",
+    ).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  const adminReviewMatch = path.match(/^\\/v1\\/admin\\/review\\/([^/]+)$/);
+  if (adminReviewMatch && method === "POST") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const airplaneId = adminReviewMatch[1];
+    const plane = await env.DB.prepare(
+      "SELECT id, sender_uid, audience, status FROM airplanes WHERE id = ? AND status = 'HELD_REVIEW'",
+    ).bind(airplaneId).first<{ id: string; sender_uid: string; audience: string; status: string }>();
+    if (!plane) return json({ error: "NOT_FOUND" }, 404);
+    if (body.action === "reject") {
+      await env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE id = ?")
+        .bind(airplaneId).run();
+      return json({ ok: true, status: "REJECTED" });
+    }
+    if (body.action !== "approve") return json({ error: "INVALID_ACTION" }, 400);
+    const sender = await requireUser(plane.sender_uid, env);
+    if (!sender || sender.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(sender.age_band)) {
+      return json({ error: "AGE_VERIFICATION_REQUIRED" }, 403);
+    }
+    const nextStatus = plane.audience === "PUBLIC" ? "DELIVERED" : "QUEUED";
+    await env.DB.prepare(
+      "UPDATE airplanes SET moderation_state = 'SAFE', status = ?, delivered_at = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_at END WHERE id = ? AND status = 'HELD_REVIEW'",
+    ).bind(nextStatus, nextStatus, isoNow(), airplaneId).run();
+    if (nextStatus === "DELIVERED") {
+      await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
+    } else {
+      await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
+    }
+    return json({ ok: true, status: nextStatus });
+  }
 
   if (method === "POST" && path === "/v1/users/bootstrap") {
     const user = await bootstrap(uid, env);
