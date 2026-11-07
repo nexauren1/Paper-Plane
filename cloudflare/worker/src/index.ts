@@ -253,7 +253,7 @@ async function createAirplane(
 
   const contentHash = await sha256(message.toLocaleLowerCase());
   const duplicate = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM airplanes WHERE sender_uid = ? AND content_hash = ? AND created_at >= datetime('now','-1 hour')",
+    "SELECT COUNT(*) AS count FROM airplanes WHERE sender_uid = ? AND content_hash = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')",
   ).bind(uid, contentHash).first<{ count: number }>();
   if (!forcedRecipient && Number(duplicate?.count ?? 0) > 0) {
     return json({ error: "DUPLICATE_MESSAGE", message: "This text was already sent recently." }, 429);
@@ -436,6 +436,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const uid = await authenticate(request, env);
   if (!uid) return json({ error: "UNAUTHORIZED", message: "A valid Firebase ID token is required." }, 401);
 
+  const pilotOnRoute = await requireUser(uid, env);
+  if (path !== "/v1/users/bootstrap" && !pilotOnRoute) {
+    return json({ error: "PILOT_NOT_INITIALIZED", message: "Create the pilot profile first." }, 409);
+  }
+  if (pilotOnRoute && pilotOnRoute.status !== "ACTIVE") {
+    return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+  }
+
   const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   const isAdmin = admins.includes(uid);
 
@@ -567,8 +575,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const reason = text(body.reason, 60) || "OTHER";
     const id = uuid();
     await env.DB.prepare(
-      "INSERT INTO reports(id, reporter_uid, airplane_id, reason, details) SELECT ?, ?, a.id, ?, ? FROM airplanes a WHERE a.id = ? AND (a.recipient_uid = ? OR a.audience = 'PUBLIC')",
-    ).bind(id, uid, reason, text(body.details, 500) || null, reportMatch[1], uid).run();
+      "INSERT INTO reports(id, reporter_uid, airplane_id, reported_uid, reason, details) SELECT ?, ?, a.id, a.sender_uid, ?, ? FROM airplanes a WHERE a.id = ? AND a.sender_uid <> ? AND (a.recipient_uid = ? OR a.audience = 'PUBLIC')",
+    ).bind(id, uid, reason, text(body.details, 500) || null, reportMatch[1], uid, uid).run();
     const created = await env.DB.prepare("SELECT id FROM reports WHERE id = ?").bind(id).first();
     if (!created) return json({ error: "NOT_FOUND" }, 404);
     return json({ ok: true, reportId: id }, 201);
@@ -578,6 +586,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const blockedUid = text(body?.uid, 128);
     if (!blockedUid || blockedUid === uid) return json({ error: "INVALID_USER" }, 400);
+    const target = await requireUser(blockedUid, env);
+    if (!target) return json({ error: "USER_NOT_FOUND" }, 404);
     await env.DB.prepare("INSERT OR IGNORE INTO blocks(blocker_uid, blocked_uid) VALUES (?, ?)").bind(uid, blockedUid).run();
     return json({ ok: true });
   }
