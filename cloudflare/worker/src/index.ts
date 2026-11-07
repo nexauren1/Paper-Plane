@@ -455,7 +455,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ items: rows.results ?? [] });
   }
 
-  const adminReviewMatch = path.match(/^\\/v1\\/admin\\/review\\/([^/]+)$/);
+  const adminReviewMatch = path.match(/^\/v1\/admin\/review\/([^/]+)$/);
   if (adminReviewMatch && method === "POST") {
     if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
