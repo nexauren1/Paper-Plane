@@ -2927,8 +2927,7 @@ class ChamaScreen extends StatelessWidget {
                 Wrap(
                   spacing: 7,
                   children: [
-                    TextButton.icon(onPressed: () => showReportDialog(context), icon: const Icon(Icons.flag_outlined), label: const Text('Denunciar')),
-                    TextButton.icon(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O bloqueio será ligado à conta.'))), icon: const Icon(Icons.shield_outlined), label: const Text('Bloquear')),
+                    TextButton.icon(onPressed: () => ppPush(context, const SupportScreen()), icon: const Icon(Icons.support_agent_rounded), label: const Text('Comunicar problema')),
                     TextButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded), label: const Text('Sair')),
                   ],
                 ),
