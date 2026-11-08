@@ -10,7 +10,14 @@ const Color _workshopGoldBright = Color(0xFFFFE7A8);
 const Color _workshopPaper = Color(0xFFF3EFE5);
 
 class FirstFlightWorkshopScreen extends StatefulWidget {
-  const FirstFlightWorkshopScreen({super.key});
+  const FirstFlightWorkshopScreen({
+    super.key,
+    this.initialMessage = '',
+    this.initialPlaneModel = 'DART',
+  });
+
+  final String initialMessage;
+  final String initialPlaneModel;
 
   @override
   State<FirstFlightWorkshopScreen> createState() => _FirstFlightWorkshopScreenState();
@@ -27,6 +34,16 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
   bool _busy = false;
   bool _waitingForAge = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _message.text = widget.initialMessage;
+    const availableModels = ['DART', 'GLIDER', 'SWALLOW'];
+    if (availableModels.contains(widget.initialPlaneModel.toUpperCase())) {
+      _model = widget.initialPlaneModel.toUpperCase();
+    }
+  }
 
   @override
   void dispose() {
