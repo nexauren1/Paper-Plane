@@ -20,8 +20,7 @@ required = [
 ]
 missing = [name for name in required if not os.environ.get(name)]
 if missing:
-    print("::warning::Permanent Android signing is not active yet. Add all four Android signing secrets to GitHub Actions.")
-    raise SystemExit(0)
+    raise SystemExit("Missing permanent Android signing secrets: " + ", ".join(missing))
 
 raw_base64 = os.environ["ANDROID_KEYSTORE_BASE64"]
 compact_base64 = "".join(raw_base64.split())
