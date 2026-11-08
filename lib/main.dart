@@ -1746,69 +1746,179 @@ class _LetterScreenState extends State<LetterScreen> {
   }
 }
 
-class OpenSkyPage extends StatelessWidget {
+
+class OpenSkyPage extends StatefulWidget {
   const OpenSkyPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final messages = [
-      ('🇧🇷', 'Brasil', 'A quem precisa de ouvir isto hoje: não estás sozinho.'),
-      ('🇵🇹', 'Portugal', 'Hoje é um novo começo. Que encontres algo bonito.'),
-      ('🇯🇵', 'Japão', 'Que a tua noite seja tranquila e cheia de paz.'),
-      ('🇮🇳', 'Índia', 'Continua. O céu é grande e cheio de esperança.'),
-    ];
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-      children: [
-        const Text('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        const Text('Mensagens públicas de todo o mundo', style: TextStyle(color: Colors.white70)),
-        const SizedBox(height: 17),
-        GlassPanel(
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-          child: const Row(children: [
-            Icon(Icons.tune_rounded, color: ppGold),
-            SizedBox(width: 10),
-            Text('Filtrar por país · idioma', style: TextStyle(fontWeight: FontWeight.w600)),
-            Spacer(),
-            Icon(Icons.expand_more, color: ppGold),
+  State<OpenSkyPage> createState() => _OpenSkyPageState();
+}
+
+class _OpenSkyPageState extends State<OpenSkyPage> {
+  List<Map<String, dynamic>> _messages = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      final result = await PaperPlaneApi.instance.getOpenSky();
+      final messages = (result['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      if (!mounted) return;
+      setState(() { _messages = messages; _loading = false; });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error is PaperPlaneApiException ? error.message : 'Não foi possível contactar o Open Sky.';
+      });
+    }
+  }
+
+  Future<void> _like(String id) async {
+    try {
+      await PaperPlaneApi.instance.likeOpenSkyMessage(id);
+      await _refresh();
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o coração.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _showReplies(String id) async {
+    try {
+      final result = await PaperPlaneApi.instance.getPublicReplies(id);
+      final items = (result['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      if (!mounted) return;
+      final controller = TextEditingController();
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF142541),
+        showDragHandle: true,
+        builder: (sheetContext) => Padding(
+          padding: EdgeInsets.fromLTRB(18, 8, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('Respostas públicas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 12),
+            if (items.isEmpty)
+              const Text('Ainda não há respostas.', style: TextStyle(color: Colors.white70))
+            else
+              for (final item in items)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 9),
+                  child: Text(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white70)),
+                ),
+            const Divider(color: Colors.white24),
+            TextField(
+              controller: controller,
+              maxLength: 200,
+              maxLines: 3,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(hintText: 'Escreve uma resposta…'),
+            ),
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              onPressed: () async {
+                final text = controller.text.trim();
+                if (text.isEmpty) return;
+                try {
+                  await PaperPlaneApi.instance.addPublicReply(id, text);
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Resposta enviada para publicação.')));
+                    _refresh();
+                  }
+                } catch (error) {
+                  if (sheetContext.mounted) {
+                    final message = error is PaperPlaneApiException ? error.message : 'Não foi possível responder.';
+                    ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(message)));
+                  }
+                }
+              },
+              icon: const Icon(Icons.send_rounded),
+              label: const Text('Enviar resposta'),
+            ),
           ]),
         ),
-        const SizedBox(height: 12),
-        Wrap(spacing: 8, children: const [
-          _CountryChip(label: '🇧🇷 Brasil'),
-          _CountryChip(label: '🇵🇹 Portugal'),
-          _CountryChip(label: '🇯🇵 Japão'),
-          _CountryChip(label: '🇮🇳 Índia'),
-        ]),
-        for (final message in messages) ...[
-          const SizedBox(height: 12),
-          GlassPanel(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Text(message.$1, style: const TextStyle(fontSize: 25)),
-                const SizedBox(width: 10),
-                Expanded(child: Text(message.$2, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17))),
-                const Text('agora', style: TextStyle(color: Colors.white54, fontSize: 11)),
+      );
+      controller.dispose();
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível carregar as respostas.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      color: ppGold,
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        children: [
+          const Text('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Mensagens públicas que chegaram ao céu', style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ppGold)))
+          else if (_error != null)
+            GlassPanel(
+              child: Column(children: [
+                const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 34),
+                const SizedBox(height: 8),
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
               ]),
-              const SizedBox(height: 12),
-              Text(message.$3, style: const TextStyle(fontSize: 15, height: 1.45)),
-              const SizedBox(height: 13),
-              Row(children: [
-                const Icon(Icons.favorite_border, size: 18, color: ppGold),
-                const SizedBox(width: 5),
-                const Text('24', style: TextStyle(color: Colors.white70)),
-                const Spacer(),
-                TextButton.icon(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Partilha pública será ligada ao backend.'))),
-                  icon: const Icon(Icons.send_outlined, size: 16),
-                  label: const Text('Partilhar'),
-                ),
-              ]),
-            ]),
-          ),
+            )
+          else if (_messages.isEmpty)
+            const GlassPanel(child: Text('O céu público ainda está vazio. Quando uma mensagem pública for aprovada e publicada, aparecerá aqui.', style: TextStyle(color: Colors.white70, height: 1.45)))
+          else
+            for (final message in _messages) ...[
+              const SizedBox(height: 11),
+              GlassPanel(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text(_countryFlag(message['sender_country_code']?.toString()), style: const TextStyle(fontSize: 25)),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(_countryName(message['sender_country_code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
+                    Text(message['created_at']?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                  ]),
+                  const SizedBox(height: 12),
+                  Text(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.45)),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    TextButton.icon(
+                      onPressed: () => _like(message['id'].toString()),
+                      icon: const Icon(Icons.favorite_border, color: ppGold, size: 18),
+                      label: Text((message['likes_count'] ?? 0).toString()),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => _showReplies(message['id'].toString()),
+                      icon: const Icon(Icons.chat_bubble_outline, size: 17),
+                      label: Text('Responder (' + (message['replies_count'] ?? 0).toString() + ')'),
+                    ),
+                  ]),
+                ]),
+              ),
+            ],
         ],
-      ],
+      ),
     );
   }
 }
