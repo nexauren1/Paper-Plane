@@ -1165,6 +1165,21 @@ String _countryName(String? code) {
     'ZA': 'África do Sul', 'IN': 'Índia', 'TH': 'Tailândia', 'US': 'Estados Unidos',
     'GB': 'Reino Unido', 'FR': 'França', 'DE': 'Alemanha', 'AO': 'Angola',
     'KE': 'Quénia', 'NG': 'Nigéria', 'CA': 'Canadá', 'AU': 'Austrália',
+    'TZ': 'Tanzânia', 'ZW': 'Zimbabué', 'ZM': 'Zâmbia', 'MW': 'Maláui',
+    'BW': 'Botsuana', 'NA': 'Namíbia', 'LS': 'Lesoto', 'SZ': 'Essuatíni',
+    'EG': 'Egito', 'MA': 'Marrocos', 'DZ': 'Argélia', 'TN': 'Tunísia',
+    'ET': 'Etiópia', 'UG': 'Uganda', 'RW': 'Ruanda', 'CD': 'RD Congo',
+    'CG': 'Congo', 'CM': 'Camarões', 'GH': 'Gana', 'CI': 'Costa do Marfim',
+    'SN': 'Senegal', 'CV': 'Cabo Verde', 'ES': 'Espanha', 'IT': 'Itália',
+    'NL': 'Países Baixos', 'BE': 'Bélgica', 'CH': 'Suíça', 'AT': 'Áustria',
+    'SE': 'Suécia', 'NO': 'Noruega', 'FI': 'Finlândia', 'PL': 'Polónia',
+    'GR': 'Grécia', 'TR': 'Turquia', 'RU': 'Rússia', 'CN': 'China',
+    'KR': 'Coreia do Sul', 'ID': 'Indonésia', 'MY': 'Malásia', 'SG': 'Singapura',
+    'VN': 'Vietname', 'PH': 'Filipinas', 'PK': 'Paquistão', 'BD': 'Bangladesh',
+    'NP': 'Nepal', 'SA': 'Arábia Saudita', 'AE': 'Emirados Árabes Unidos',
+    'MX': 'México', 'AR': 'Argentina', 'CL': 'Chile', 'CO': 'Colômbia',
+    'PE': 'Peru', 'VE': 'Venezuela', 'EC': 'Equador', 'UY': 'Uruguai',
+    'NZ': 'Nova Zelândia', 'IE': 'Irlanda', 'IS': 'Islândia',
   };
   if (code == null || code.isEmpty) return 'Outro lugar do mundo';
   return names[code.toUpperCase()] ?? code.toUpperCase();
@@ -1291,178 +1306,504 @@ class _SkyFlightPainter extends CustomPainter {
 }
 
 class GlobeFlightPainter extends CustomPainter {
-  const GlobeFlightPainter({this.route, this.progress = 0});
+  const GlobeFlightPainter({
+    this.route,
+    this.progress = 0,
+    this.rotation = 0,
+    this.pulse = 0,
+  });
+
   final Map<String, dynamic>? route;
   final double progress;
+  final double rotation;
+  final double pulse;
 
-  Offset? _project(double lat, double lng, double centerLat, double centerLng, Offset center, double radius) {
-    const r = math.pi / 180;
-    final p = lat * r;
-    final l = lng * r;
-    final cp = centerLat * r;
-    final cl = centerLng * r;
-    final delta = l - cl;
-    final x = math.cos(p) * math.sin(delta);
-    final y = math.sin(p) * math.cos(cp) - math.cos(p) * math.cos(delta) * math.sin(cp);
-    final z = math.sin(p) * math.sin(cp) + math.cos(p) * math.cos(delta) * math.cos(cp);
-    if (z < -0.025) return null;
+  // Simplified Natural-Earth-style silhouettes, stored as longitude/latitude.
+  // The globe is an illustrative world map, not a GPS map or country-boundary database.
+  static const List<List<Offset>> _continents = [
+    [
+      Offset(-168, 70), Offset(-150, 72), Offset(-137, 61), Offset(-130, 53),
+      Offset(-124, 48), Offset(-124, 40), Offset(-117, 32), Offset(-107, 27),
+      Offset(-98, 20), Offset(-90, 16), Offset(-83, 9), Offset(-78, 18),
+      Offset(-66, 45), Offset(-55, 52), Offset(-62, 61), Offset(-84, 70),
+      Offset(-113, 74), Offset(-142, 72),
+    ],
+    [
+      Offset(-81, 12), Offset(-71, 10), Offset(-62, 7), Offset(-51, -1),
+      Offset(-45, -13), Offset(-49, -24), Offset(-58, -36), Offset(-67, -55),
+      Offset(-74, -49), Offset(-78, -28), Offset(-80, -7),
+    ],
+    [
+      Offset(-18, 35), Offset(-5, 37), Offset(10, 36), Offset(26, 32),
+      Offset(34, 22), Offset(43, 11), Offset(50, -12), Offset(40, -34),
+      Offset(20, -35), Offset(8, -28), Offset(-1, -12), Offset(-11, 4),
+      Offset(-17, 20),
+    ],
+    [
+      Offset(-10, 36), Offset(-4, 44), Offset(8, 48), Offset(15, 56),
+      Offset(28, 61), Offset(42, 56), Offset(55, 62), Offset(72, 70),
+      Offset(96, 75), Offset(121, 70), Offset(143, 58), Offset(150, 48),
+      Offset(137, 39), Offset(124, 32), Offset(116, 22), Offset(104, 8),
+      Offset(91, 7), Offset(80, 18), Offset(68, 24), Offset(56, 25),
+      Offset(45, 40), Offset(31, 37), Offset(20, 42), Offset(8, 37),
+    ],
+    [
+      Offset(68, 26), Offset(79, 29), Offset(89, 24), Offset(91, 17),
+      Offset(84, 7), Offset(78, 8), Offset(73, 17),
+    ],
+    [
+      Offset(112, -11), Offset(128, -10), Offset(145, -17), Offset(154, -28),
+      Offset(146, -39), Offset(132, -44), Offset(116, -35), Offset(112, -22),
+    ],
+    [
+      Offset(-52, 82), Offset(-30, 82), Offset(-20, 75), Offset(-40, 60),
+      Offset(-54, 60), Offset(-64, 70),
+    ],
+    [
+      Offset(45, -13), Offset(50, -15), Offset(49, -25), Offset(43, -25),
+      Offset(40, -18),
+    ],
+    [
+      Offset(95, 6), Offset(108, 8), Offset(119, 3), Offset(124, -5),
+      Offset(116, -9), Offset(105, -7),
+    ],
+  ];
+
+  Offset? _project(
+    double lat,
+    double lng,
+    double centerLat,
+    double centerLng,
+    Offset center,
+    double radius,
+  ) {
+    const radians = math.pi / 180;
+    final latitude = lat * radians;
+    final longitude = lng * radians;
+    final centerLatitude = centerLat * radians;
+    final centerLongitude = centerLng * radians;
+    final delta = longitude - centerLongitude;
+    final x = math.cos(latitude) * math.sin(delta);
+    final y = math.sin(latitude) * math.cos(centerLatitude) -
+        math.cos(latitude) * math.cos(delta) * math.sin(centerLatitude);
+    final z = math.sin(latitude) * math.sin(centerLatitude) +
+        math.cos(latitude) * math.cos(delta) * math.cos(centerLatitude);
+    if (z < -0.02) return null;
     return Offset(center.dx + x * radius, center.dy - y * radius);
   }
 
   List<double> _midpoint(Map<String, dynamic> origin, Map<String, dynamic> destination) {
-    const r = math.pi / 180;
+    const radians = math.pi / 180;
     List<double> vector(Map<String, dynamic> point) {
-      final lat = (point['lat'] as num).toDouble() * r;
-      final lng = (point['lng'] as num).toDouble() * r;
+      final lat = (point['lat'] as num).toDouble() * radians;
+      final lng = (point['lng'] as num).toDouble() * radians;
       return [math.cos(lat) * math.cos(lng), math.cos(lat) * math.sin(lng), math.sin(lat)];
     }
-    final a = vector(origin), b = vector(destination);
-    final x = a[0] + b[0], y = a[1] + b[1], z = a[2] + b[2];
+    final a = vector(origin);
+    final b = vector(destination);
+    final x = a[0] + b[0];
+    final y = a[1] + b[1];
+    final z = a[2] + b[2];
     return [
-      math.atan2(z, math.sqrt(x * x + y * y)) / r,
-      math.atan2(y, x) / r,
+      math.atan2(z, math.sqrt(x * x + y * y)) / radians,
+      math.atan2(y, x) / radians,
     ];
+  }
+
+  void _drawLand(
+    Canvas canvas,
+    List<Offset> polygon,
+    double centerLat,
+    double centerLng,
+    Offset center,
+    double radius,
+  ) {
+    final projected = <Offset>[];
+    for (final point in polygon) {
+      final value = _project(point.dy, point.dx, centerLat, centerLng, center, radius);
+      if (value == null) return;
+      projected.add(value);
+    }
+    if (projected.length < 3) return;
+    final path = Path()..moveTo(projected.first.dx, projected.first.dy);
+    for (final point in projected.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    path.close();
+    canvas.drawPath(
+      path,
+      Paint()..color = const Color(0xFF24516A).withOpacity(0.78),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFF7CA9B8).withOpacity(0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.85,
+    );
+  }
+
+  void _drawLocation(
+    Canvas canvas,
+    String? code,
+    Map<String, dynamic>? point,
+    double centerLat,
+    double centerLng,
+    Offset center,
+    double radius,
+    Color markerColor,
+    bool destination,
+  ) {
+    if (point == null || point['lat'] is! num || point['lng'] is! num) return;
+    final marker = _project(
+      (point['lat'] as num).toDouble(),
+      (point['lng'] as num).toDouble(),
+      centerLat,
+      centerLng,
+      center,
+      radius,
+    );
+    if (marker == null) return;
+
+    if (destination) {
+      final wave = 7 + pulse * 9;
+      canvas.drawCircle(
+        marker,
+        wave,
+        Paint()
+          ..color = markerColor.withOpacity(0.28 * (1 - pulse * 0.45))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8,
+      );
+      canvas.drawCircle(
+        marker,
+        13 + pulse * 4,
+        Paint()
+          ..color = markerColor.withOpacity(0.12)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+    } else {
+      canvas.drawCircle(
+        marker,
+        9,
+        Paint()
+          ..color = markerColor.withOpacity(0.16)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+    }
+
+    canvas.drawCircle(marker, 4.2, Paint()..color = markerColor);
+    canvas.drawCircle(
+      marker,
+      4.2,
+      Paint()
+        ..color = Colors.white.withOpacity(0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    if (code != null && code.isNotEmpty) {
+      final label = _countryFlag(code) + ' ' + _countryName(code);
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(
+            color: Color(0xFFF5F0E4),
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: 112);
+      final left = (marker.dx + 7).clamp(4.0, math.max(4.0, center.dx * 2 - textPainter.width - 14)).toDouble();
+      final top = (marker.dy - 17).clamp(3.0, math.max(3.0, center.dy * 2 - 22)).toDouble();
+      final labelRect = Rect.fromLTWH(
+        left,
+        top,
+        textPainter.width + 10,
+        textPainter.height + 6,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(labelRect, const Radius.circular(7)),
+        Paint()..color = const Color(0xE6102038),
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(labelRect, const Radius.circular(7)),
+        Paint()
+          ..color = markerColor.withOpacity(0.6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+      textPainter.paint(canvas, Offset(left + 5, top + 3));
+    }
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width * 0.44, size.height * 0.43).toDouble();
+    final radius = math.min(size.width * 0.46, size.height * 0.43).toDouble();
     final origin = route?['origin'];
     final destination = route?['destination'];
-    final midpoint = origin is Map && destination is Map
-        ? _midpoint(Map<String, dynamic>.from(origin), Map<String, dynamic>.from(destination))
+    final originMap = origin is Map ? Map<String, dynamic>.from(origin) : null;
+    final destinationMap = destination is Map ? Map<String, dynamic>.from(destination) : null;
+    final midpoint = originMap != null && destinationMap != null
+        ? _midpoint(originMap, destinationMap)
         : <double>[0, 0];
-    final centerLat = midpoint[0], centerLng = midpoint[1];
+    final centerLat = midpoint[0];
+    final centerLng = midpoint[1] + rotation;
     final sphereRect = Rect.fromCircle(center: center, radius: radius);
+
+    canvas.drawCircle(
+      center,
+      radius + 8,
+      Paint()
+        ..color = const Color(0xFF5F9BB8).withOpacity(0.07)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+    );
     canvas.drawCircle(
       center,
       radius,
       Paint()
         ..shader = const RadialGradient(
-          center: Alignment(-0.35, -0.42),
-          radius: 1.1,
-          colors: [Color(0xFF1B3B65), Color(0xFF0B1C35), Color(0xFF030914)],
-          stops: [0, 0.56, 1],
+          center: Alignment(-0.34, -0.42),
+          radius: 1.05,
+          colors: [
+            Color(0xFF1B5277),
+            Color(0xFF0D2947),
+            Color(0xFF04101F),
+          ],
+          stops: [0, 0.58, 1],
         ).createShader(sphereRect),
     );
-    canvas.drawCircle(center, radius, Paint()
-      ..color = ppGold.withOpacity(0.55)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2);
+
     canvas.save();
     canvas.clipPath(Path()..addOval(sphereRect));
 
     final gridPaint = Paint()
-      ..color = const Color(0xFF6D8CB8).withOpacity(0.23)
+      ..color = const Color(0xFF8CB2C6).withOpacity(0.18)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8;
+      ..strokeWidth = 0.7;
     for (var factor = -0.75; factor <= 0.75; factor += 0.25) {
       final y = center.dy + radius * factor;
       final rx = radius * math.sqrt(1 - factor * factor);
-      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx, y), width: rx * 2, height: radius * 0.12), gridPaint);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(center.dx, y),
+          width: rx * 2,
+          height: radius * 0.12,
+        ),
+        gridPaint,
+      );
     }
-    canvas.drawOval(Rect.fromCenter(center: center, width: radius * 0.72, height: radius * 2), gridPaint);
-    canvas.drawOval(Rect.fromCenter(center: center, width: radius * 1.45, height: radius * 2), gridPaint);
+    canvas.drawOval(
+      Rect.fromCenter(center: center, width: radius * 0.72, height: radius * 2),
+      gridPaint,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: center, width: radius * 1.45, height: radius * 2),
+      gridPaint,
+    );
+
+    for (final continent in _continents) {
+      _drawLand(canvas, continent, centerLat, centerLng, center, radius * 0.99);
+    }
 
     final raw = route?['points'];
     final points = raw is List
         ? raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
         : <Map<String, dynamic>>[];
-    if (points.isNotEmpty) {
-      final path = Path();
-      Offset? previous;
-      for (final point in points) {
-        final projected = _project(
-          (point['lat'] as num).toDouble(),
-          (point['lng'] as num).toDouble(),
-          centerLat, centerLng, center, radius * 0.985,
-        );
-        if (projected == null) {
-          previous = null;
-          continue;
-        }
-        if (previous == null) {
-          path.moveTo(projected.dx, projected.dy);
-        } else {
-          path.lineTo(projected.dx, projected.dy);
-        }
-        previous = projected;
+    final routePath = Path();
+    var pathStarted = false;
+    for (final point in points) {
+      if (point['lat'] is! num || point['lng'] is! num) continue;
+      final projected = _project(
+        (point['lat'] as num).toDouble(),
+        (point['lng'] as num).toDouble(),
+        centerLat,
+        centerLng,
+        center,
+        radius * 0.99,
+      );
+      if (projected == null) {
+        pathStarted = false;
+        continue;
       }
-      canvas.drawPath(path, Paint()
-        ..color = ppGold.withOpacity(0.18)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 10
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
-      canvas.drawPath(path, Paint()
-        ..color = ppGoldBright
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
-        ..strokeCap = StrokeCap.round);
+      if (!pathStarted) {
+        routePath.moveTo(projected.dx, projected.dy);
+        pathStarted = true;
+      } else {
+        routePath.lineTo(projected.dx, projected.dy);
+      }
+    }
 
-      final scaled = progress.clamp(0.0, 1.0).toDouble() * (points.length - 1);
+    for (final metric in routePath.computeMetrics()) {
+      canvas.drawPath(
+        metric.extractPath(0, metric.length),
+        Paint()
+          ..color = ppGold.withOpacity(0.20)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 9
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+      );
+      canvas.drawPath(
+        metric.extractPath(0, metric.length),
+        Paint()
+          ..color = const Color(0xFF9ABBD0).withOpacity(0.62)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1
+          ..strokeCap = StrokeCap.round,
+      );
+      final completedLength = metric.length * progress.clamp(0.0, 1.0);
+      if (completedLength > 0) {
+        final completed = metric.extractPath(0, completedLength);
+        canvas.drawPath(
+          completed,
+          Paint()
+            ..color = ppGold.withOpacity(0.38)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 8
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+        );
+        canvas.drawPath(
+          completed,
+          Paint()
+            ..color = ppGoldBright
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.2
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
+
+    Offset? currentMarker;
+    if (points.length > 1) {
+      final scaled = progress.clamp(0.0, 1.0) * (points.length - 1);
       final index = math.min(points.length - 2, scaled.floor());
-      if (points.length > 1) {
-        final fraction = scaled - index;
-        final first = points[index], second = points[index + 1];
+      final fraction = scaled - index;
+      final first = points[index];
+      final second = points[index + 1];
+      if (first['lat'] is num && first['lng'] is num &&
+          second['lat'] is num && second['lng'] is num) {
         final lat1 = (first['lat'] as num).toDouble();
         final lng1 = (first['lng'] as num).toDouble();
         final lat2 = (second['lat'] as num).toDouble();
         final lng2 = (second['lng'] as num).toDouble();
-        final marker = _project(
+        currentMarker = _project(
           lat1 + (lat2 - lat1) * fraction,
           lng1 + (lng2 - lng1) * fraction,
-          centerLat, centerLng, center, radius * 0.985,
+          centerLat,
+          centerLng,
+          center,
+          radius * 0.99,
         );
-        if (marker != null) {
-          final previous = _project(lat1, lng1, centerLat, centerLng, center, radius * 0.985);
-          final next = _project(lat2, lng2, centerLat, centerLng, center, radius * 0.985);
-          final heading = previous != null && next != null
-              ? math.atan2(next.dy - previous.dy, next.dx - previous.dx)
+        final before = _project(lat1, lng1, centerLat, centerLng, center, radius * 0.99);
+        final after = _project(lat2, lng2, centerLat, centerLng, center, radius * 0.99);
+        if (currentMarker != null) {
+          final heading = before != null && after != null
+              ? math.atan2(after.dy - before.dy, after.dx - before.dx)
               : 0.0;
-          canvas.drawCircle(marker, 18, Paint()
-            ..color = ppGold.withOpacity(0.17)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+          canvas.drawCircle(
+            currentMarker,
+            17,
+            Paint()
+              ..color = ppGold.withOpacity(0.22)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+          );
           canvas.save();
-          canvas.translate(marker.dx, marker.dy);
+          canvas.translate(currentMarker.dx, currentMarker.dy);
           canvas.rotate(heading + math.pi / 2);
-          final paperPlane = Path()
-            ..moveTo(0, -14)
+          final plane = Path()
+            ..moveTo(0, -13)
             ..lineTo(7, 10)
             ..lineTo(0, 6)
             ..lineTo(-7, 10)
             ..close();
-          canvas.drawPath(paperPlane, Paint()
-            ..color = ppGold.withOpacity(0.35)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
-          canvas.drawPath(paperPlane, Paint()..color = ppPaper);
-          canvas.drawPath(paperPlane, Paint()
-            ..color = ppGoldBright
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.2
-            ..strokeJoin = StrokeJoin.round);
+          canvas.drawPath(
+            plane,
+            Paint()
+              ..color = ppGold.withOpacity(0.32)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+          );
+          canvas.drawPath(plane, Paint()..color = ppPaper);
+          canvas.drawPath(
+            plane,
+            Paint()
+              ..color = ppGoldBright
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.2
+              ..strokeJoin = StrokeJoin.round,
+          );
           canvas.restore();
         }
       }
-      if (origin is Map) {
-        final p = _project((origin['lat'] as num).toDouble(), (origin['lng'] as num).toDouble(), centerLat, centerLng, center, radius * 0.985);
-        if (p != null) canvas.drawCircle(p, 4, Paint()..color = const Color(0xFF8DE0AF));
-      }
-      if (destination is Map) {
-        final p = _project((destination['lat'] as num).toDouble(), (destination['lng'] as num).toDouble(), centerLat, centerLng, center, radius * 0.985);
-        if (p != null) canvas.drawCircle(p, 4, Paint()..color = ppGoldBright);
-      }
-    } else {
-      canvas.drawCircle(center, radius * 0.28, Paint()
-        ..color = ppGold.withOpacity(0.08)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22));
     }
+
+    if (originMap != null) {
+      _drawLocation(
+        canvas,
+        route?['originCountry']?.toString(),
+        originMap,
+        centerLat,
+        centerLng,
+        center,
+        radius * 0.99,
+        const Color(0xFF79DBBA),
+        false,
+      );
+    }
+    if (destinationMap != null) {
+      _drawLocation(
+        canvas,
+        route?['destinationCountry']?.toString(),
+        destinationMap,
+        centerLat,
+        centerLng,
+        center,
+        radius * 0.99,
+        const Color(0xFFFF5C72),
+        true,
+      );
+    }
+
+    if (currentMarker == null && points.isEmpty) {
+      canvas.drawCircle(
+        center,
+        radius * 0.28,
+        Paint()
+          ..color = ppGold.withOpacity(0.08)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+      );
+    }
+
     canvas.restore();
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = const Color(0xFF9BC5D8).withOpacity(0.38)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius + 3),
+      -math.pi * 0.84,
+      math.pi * 0.42,
+      false,
+      Paint()
+        ..color = ppGold.withOpacity(0.55)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
   }
 
   @override
   bool shouldRepaint(covariant GlobeFlightPainter oldDelegate) =>
-      oldDelegate.route != route || oldDelegate.progress != progress;
+      oldDelegate.route != route ||
+      oldDelegate.progress != progress ||
+      oldDelegate.rotation != rotation ||
+      oldDelegate.pulse != pulse;
 }
 
 class FlightScreen extends StatefulWidget {
@@ -1479,14 +1820,17 @@ class _FlightScreenState extends State<FlightScreen> {
   bool _loading = true;
   Timer? _poller;
   Timer? _ticker;
+  double _globePhase = 0;
 
   @override
   void initState() {
     super.initState();
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && _flight != null) setState(() {});
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (mounted && _flight != null) {
+        setState(() => _globePhase = (_globePhase + 0.04) % (math.pi * 2));
+      }
     });
   }
 
@@ -1566,9 +1910,14 @@ class _FlightScreenState extends State<FlightScreen> {
             padding: const EdgeInsets.all(10),
             highlight: true,
             child: SizedBox(
-              height: 290,
+              height: 340,
               child: CustomPaint(
-                painter: GlobeFlightPainter(route: route, progress: _progress),
+                painter: GlobeFlightPainter(
+                  route: route,
+                  progress: _progress,
+                  rotation: math.sin(_globePhase) * 5.0,
+                  pulse: (math.sin(_globePhase * 1.4) + 1) / 2,
+                ),
                 child: Center(
                   child: route == null
                       ? Icon(Icons.public_rounded, size: 44, color: ppGold.withOpacity(0.65))
@@ -1577,6 +1926,39 @@ class _FlightScreenState extends State<FlightScreen> {
               ),
             ),
           ),
+          if (route != null) ...[
+            const SizedBox(height: 10),
+            GlassPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(children: [
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('PARTIDA', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                  const SizedBox(height: 4),
+                  Text(
+                    _countryFlag(route['originCountry']?.toString()) + ' ' + _countryName(route['originCountry']?.toString()),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                ])),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Icon(Icons.flight_rounded, color: ppGoldBright, size: 22),
+                ),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  const Text('DESTINO LOCALIZADO', style: TextStyle(color: Color(0xFFFF8393), fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
+                  const SizedBox(height: 4),
+                  Text(
+                    _countryFlag(route['destinationCountry']?.toString()) + ' ' + _countryName(route['destinationCountry']?.toString()),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                ])),
+              ]),
+            ),
+          ],
           const SizedBox(height: 12),
           if (_loading)
             const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: ppGold)))
@@ -1650,7 +2032,7 @@ class _FlightScreenState extends State<FlightScreen> {
           if (['DELIVERED', 'READ', 'RESPONDED'].contains(status))
             const GlassPanel(child: Text('Entrega registada no servidor. O estado da carta será atualizado quando o destinatário a abrir ou responder.', style: TextStyle(color: Colors.white70))),
           const SizedBox(height: 14),
-          const Text('O globo mostra uma rota digital calculada entre centros geográficos aproximados dos países. Não é localização GPS nem rastreamento de aeronaves físicas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45)),
+          const Text('O globo mostra uma rota digital estimada entre os centros geográficos dos países. O avião acompanha o progresso guardado pelo servidor; não usa GPS nem representa a posição de uma aeronave física.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45)),
           const SizedBox(height: 14),
           SoftButton(label: 'Voltar ao início', icon: Icons.home_outlined, onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
         ],
@@ -3350,7 +3732,7 @@ class SafetyScreen extends StatelessWidget {
               Text('Proteção antes da entrega', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
               SizedBox(height: 7),
               Text(
-                'A correspondência com desconhecidos só é permitida entre contas cuja faixa etária tenha sido confirmada por um processo confiável. O ano de nascimento do perfil nunca substitui essa confirmação.',
+                'A correspondência aleatória usa a faixa etária declarada no perfil para separar grupos. É uma declaração do próprio utilizador, não uma verificação de identidade nem uma prova de idade.',
                 style: TextStyle(color: Colors.white70, height: 1.5),
               ),
             ]),
