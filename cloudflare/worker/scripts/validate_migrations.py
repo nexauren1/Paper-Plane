@@ -82,4 +82,34 @@ try:
 except sqlite3.IntegrityError as error:
     assert "PAPER_PLANE_RATE_LIMIT" in str(error), str(error)
 
-print("D1 migration checks passed: hourly rate limit and five-reply limit.")
+
+# Pilot handle uniqueness is case-insensitive, and profile data is persisted.
+DB.execute(
+    "UPDATE users SET pilot_handle = ?, birth_year = ?, country_code = ?, profile_completed = 1 WHERE uid = ?",
+    ("chuva_ocidental-07", 2008, "MZ", "pilot-a"),
+)
+try:
+    DB.execute("UPDATE users SET pilot_handle = ? WHERE uid = ?", ("CHUVA_OCIDENTAL-07", "pilot-b"))
+    raise AssertionError("Case-insensitive pilot handle uniqueness was not enforced")
+except sqlite3.IntegrityError:
+    pass
+
+# Route and journey metadata are server-persisted fields.
+airplane_columns = {
+    row[1] for row in DB.execute("PRAGMA table_info(airplanes)").fetchall()
+}
+required_flight_columns = {
+    "flight_distance_km",
+    "flight_duration_seconds",
+    "flight_started_at",
+    "estimated_arrival_at",
+    "route_json",
+}
+assert required_flight_columns.issubset(airplane_columns), "Missing persisted flight columns"
+
+heart_table = DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'airplane_hearts'"
+).fetchone()
+assert heart_table is not None, "Missing airplane_hearts table"
+
+print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata and hearts.")

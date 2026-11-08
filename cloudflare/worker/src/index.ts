@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, importPKCS8, SignJWT } from "jose";
+import { COUNTRY_CENTROIDS } from "./country_centroids";
 
 interface D1Result<T = Record<string, unknown>> {
   results?: T[];
@@ -126,9 +127,10 @@ async function authenticate(request: Request, env: Env): Promise<string | null> 
 
 async function requireUser(uid: string, env: Env) {
   return env.DB.prepare(
-    "SELECT uid, pilot_code, pilot_name, language, country_code, country_visible, status, age_band, age_verified, accept_random_mail FROM users WHERE uid = ?",
+    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, profile_completed, language, country_code, country_visible, status, age_band, age_verified, accept_random_mail FROM users WHERE uid = ?",
   ).bind(uid).first<{
-    uid: string; pilot_code: string; pilot_name: string; language: string;
+    uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null;
+    birth_year: number | null; profile_completed: number; language: string;
     country_code: string | null; country_visible: number; status: string;
     age_band: string; age_verified: number; accept_random_mail: number;
   }>();
@@ -210,10 +212,116 @@ async function classifyInBackground(env: Env, airplaneId: string, message: strin
   }
 }
 
+
+function normalizePilotHandle(value: unknown): string {
+  return text(value, 32).replace(/^@/, "").toLowerCase();
+}
+function isValidPilotHandle(value: string): boolean {
+  return value.length >= 4 && value.length <= 28 &&
+    /^[a-z0-9]+(?:_[a-z0-9]+)*(?:-[0-9]{2})?$/.test(value);
+}
+function buildFlightPlan(originCode: string | null, destinationCode: string | null) {
+  if (!originCode || !destinationCode) return null;
+  const origin = COUNTRY_CENTROIDS[originCode.toUpperCase()];
+  const destination = COUNTRY_CENTROIDS[destinationCode.toUpperCase()];
+  if (!origin || !destination) return null;
+  const rad = (v: number) => v * Math.PI / 180;
+  const deg = (v: number) => v * 180 / Math.PI;
+  const lat1 = rad(origin.lat), lat2 = rad(destination.lat);
+  const dLat = lat2 - lat1, dLng = rad(destination.lng - origin.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const distanceKm = Math.round(6371.0088 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)));
+  const vector = (lat: number, lng: number) => {
+    const p = rad(lat), l = rad(lng);
+    return [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)];
+  };
+  const a = vector(origin.lat, origin.lng), b = vector(destination.lat, destination.lng);
+  const dot = Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
+  const omega = Math.acos(dot), sinOmega = Math.sin(omega);
+  const points: Array<{ lat: number; lng: number }> = [];
+  for (let step = 0; step <= 40; step++) {
+    const t = step / 40;
+    const left = sinOmega < 1e-8 ? 1 - t : Math.sin((1 - t) * omega) / sinOmega;
+    const right = sinOmega < 1e-8 ? t : Math.sin(t * omega) / sinOmega;
+    const x = left * a[0] + right * b[0];
+    const y = left * a[1] + right * b[1];
+    const z = left * a[2] + right * b[2];
+    points.push({
+      lat: Number(deg(Math.atan2(z, Math.sqrt(x * x + y * y))).toFixed(5)),
+      lng: Number(deg(Math.atan2(y, x)).toFixed(5)),
+    });
+  }
+  // Symbolic app journey, not GPS or physical-aircraft telemetry.
+  const durationSeconds = Math.max(5 * 60 * 60, Math.ceil(distanceKm / 900 * 60 * 60));
+  const startedAt = isoNow();
+  return {
+    distanceKm,
+    durationSeconds,
+    startedAt,
+    arrivalAt: new Date(Date.now() + durationSeconds * 1000).toISOString(),
+    routeJson: JSON.stringify({
+      originCountry: originCode.toUpperCase(),
+      destinationCountry: destinationCode.toUpperCase(),
+      origin: { lat: origin.lat, lng: origin.lng },
+      destination: { lat: destination.lat, lng: destination.lng },
+      points,
+    }),
+  };
+}
+async function chooseEligiblePilot(
+  env: Env,
+  candidates: Array<{ uid: string; country_code: string; language: string }>,
+  preferences: { destinationCountry: string | null; messageLanguage: string },
+) {
+  if (candidates.length <= 1) return candidates[0] ?? null;
+  try {
+    const result = await env.AI.run(CLASSIFICATION_MODEL, {
+      messages: [
+        {
+          role: "system",
+          content: "Choose one candidate for a symbolic paper-plane journey. All candidates passed server-side age-band, consent, account, blocking and safety checks. Prefer the requested destination country if present; otherwise consider language compatibility and geographic diversity. Return ONLY JSON: { \"candidate_index\": integer }. Never invent an index or a person.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            destinationCountry: preferences.destinationCountry,
+            messageLanguage: preferences.messageLanguage,
+            candidates: candidates.map((candidate, index) => ({
+              candidate_index: index,
+              country: candidate.country_code,
+              language: candidate.language,
+            })),
+          }),
+        },
+      ],
+    });
+    const output = modelText(result);
+    const start = output.indexOf("{"), end = output.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      const parsed = JSON.parse(output.slice(start, end + 1)) as { candidate_index?: unknown };
+      const index = Number(parsed.candidate_index);
+      if (Number.isInteger(index) && index >= 0 && index < candidates.length) return candidates[index];
+    }
+  } catch {
+    // Database fairness order is the safe fallback when Workers AI is unavailable.
+  }
+  return candidates[0];
+}
+function flightProgress(startedAt: string | null, arrivalAt: string | null, status: string) {
+  if (["DELIVERED", "READ", "RESPONDED"].includes(status)) return 1;
+  if (!startedAt || !arrivalAt) return 0;
+  const start = Date.parse(startedAt), arrival = Date.parse(arrivalAt);
+  if (!Number.isFinite(start) || !Number.isFinite(arrival) || arrival <= start) return 0;
+  return Math.max(0, Math.min(0.999, (Date.now() - start) / (arrival - start)));
+}
+
 async function ensureAgeReady(uid: string, env: Env) {
   const user = await requireUser(uid, env);
   if (!user) return { user: null, response: json({ error: "PILOT_NOT_INITIALIZED", message: "Create the pilot profile first." }, 409) };
   if (user.status !== "ACTIVE") return { user, response: json({ error: "ACCOUNT_UNAVAILABLE" }, 403) };
+  if (user.profile_completed !== 1 || !user.country_code) {
+    return { user, response: json({ error: "PROFILE_SETUP_REQUIRED", message: "Complete your pilot profile and choose a country before sending." }, 409) };
+  }
   if (user.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(user.age_band)) {
     return {
       user,
@@ -231,7 +339,7 @@ async function bootstrap(uid: string, env: Env) {
   if (existing) return existing;
   const pilotCode = `PP-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, age_band, age_verified) VALUES (?, ?, 'Piloto', 'UNVERIFIED', 0)",
+    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, age_band, age_verified, profile_completed) VALUES (?, ?, 'Piloto', 'UNVERIFIED', 0, 0)",
   ).bind(uid, pilotCode).run();
   return requireUser(uid, env);
 }
@@ -254,11 +362,15 @@ async function createAirplane(
   if (response) return response;
   if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
 
+  let directFlight: ReturnType<typeof buildFlightPlan> = null;
   if (forcedRecipient) {
-    const target = await requireUser(forcedRecipient, env);
-    if (!target || target.status !== "ACTIVE" || target.age_verified !== 1 || target.age_band !== user.age_band) {
+    const targetUser = await requireUser(forcedRecipient, env);
+    if (!targetUser || targetUser.status !== "ACTIVE" || targetUser.age_verified !== 1 ||
+        targetUser.age_band !== user.age_band || targetUser.profile_completed !== 1) {
       return json({ error: "RECIPIENT_UNAVAILABLE" }, 403);
     }
+    directFlight = buildFlightPlan(user.country_code, targetUser.country_code);
+    if (!directFlight) return json({ error: "ROUTE_UNAVAILABLE" }, 409);
     const blocked = await env.DB.prepare(
       "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
     ).bind(uid, forcedRecipient, forcedRecipient, uid).first();
@@ -330,12 +442,15 @@ async function createAirplane(
   }
 
   if (moderation.state === "SAFE") ctx.waitUntil(classifyInBackground(env, id, message));
+  if (directFlight && status === "FLYING") {
+    await env.DB.prepare(
+      "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
+    ).bind(directFlight.distanceKm, directFlight.durationSeconds, directFlight.startedAt, directFlight.arrivalAt, directFlight.routeJson, id).run();
+  }
   if (status === "DELIVERED") {
     await env.DB.prepare("INSERT INTO public_sky (airplane_id) VALUES (?)").bind(id).run();
   } else if (status === "QUEUED") {
     await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
-  } else if (status === "FLYING") {
-    await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId: id }, { delaySeconds: 30 });
   }
 
   return json(
@@ -346,32 +461,46 @@ async function createAirplane(
 
 async function matchAirplane(airplaneId: string, env: Env) {
   const plane = await env.DB.prepare(
-    "SELECT id, sender_uid, destination_country FROM airplanes WHERE id = ? AND audience = 'RANDOM' AND status = 'QUEUED' AND moderation_state = 'SAFE'",
-  ).bind(airplaneId).first<{ id: string; sender_uid: string; destination_country: string | null }>();
+    "SELECT id, sender_uid, destination_country, message_language FROM airplanes WHERE id = ? AND audience = 'RANDOM' AND status = 'QUEUED' AND moderation_state = 'SAFE'",
+  ).bind(airplaneId).first<{ id: string; sender_uid: string; destination_country: string | null; message_language: string }>();
   if (!plane) return;
 
   const sender = await requireUser(plane.sender_uid, env);
-  if (!sender || sender.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(sender.age_band)) return;
+  if (!sender || sender.profile_completed !== 1 || !sender.country_code ||
+      sender.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(sender.age_band)) return;
 
-  const recipient = await env.DB.prepare(
-    `SELECT u.uid FROM users u
-     WHERE u.status = 'ACTIVE' AND u.age_verified = 1 AND u.age_band = ?
+  const candidateRows = await env.DB.prepare(
+    `SELECT u.uid, u.country_code, u.language
+     FROM users u
+     WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
+       AND u.age_verified = 1 AND u.age_band = ?
        AND u.accept_random_mail = 1 AND u.uid <> ?
        AND (? IS NULL OR u.country_code = ?)
        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid) OR (b.blocker_uid = u.uid AND b.blocked_uid = ?))
        AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.reporter_uid = u.uid AND r.reported_uid = ? AND r.status = 'OPEN')
      ORDER BY COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC, RANDOM()
-     LIMIT 1`,
+     LIMIT 40`,
   ).bind(sender.age_band, sender.uid, plane.destination_country, plane.destination_country, sender.uid, sender.uid, sender.uid)
-    .first<{ uid: string }>();
-  if (!recipient) return;
+    .all<{ uid: string; country_code: string; language: string }>();
+  const candidates = candidateRows.results ?? [];
+  if (candidates.length === 0) return;
 
+  // Workers AI chooses only inside this server-filtered eligible set.
+  // No account identifier or message content is sent to the model.
+  const recipient = await chooseEligiblePilot(env, candidates, {
+    destinationCountry: plane.destination_country,
+    messageLanguage: plane.message_language,
+  });
+  if (!recipient) return;
+  const route = buildFlightPlan(sender.country_code, recipient.country_code);
+  if (!route) return;
+
+  const matchedAt = isoNow();
   const result = await env.DB.prepare(
-    "UPDATE airplanes SET recipient_uid = ?, status = 'FLYING', matched_at = ? WHERE id = ? AND status = 'QUEUED' AND recipient_uid IS NULL",
-  ).bind(recipient.uid, isoNow(), airplaneId).run();
+    "UPDATE airplanes SET recipient_uid = ?, status = 'FLYING', matched_at = ?, flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'QUEUED' AND recipient_uid IS NULL",
+  ).bind(recipient.uid, matchedAt, route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
   if ((result.meta?.changes ?? 0) === 1) {
-    await env.DB.prepare("UPDATE users SET last_received_at = ? WHERE uid = ?").bind(isoNow(), recipient.uid).run();
-    await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId }, { delaySeconds: 30 });
+    await env.DB.prepare("UPDATE users SET last_received_at = ? WHERE uid = ?").bind(matchedAt, recipient.uid).run();
   }
 }
 
@@ -616,12 +745,18 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (nextStatus === "DELIVERED") {
       await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
     } else if (nextStatus === "FLYING") {
+      const sender = await requireUser(plane.sender_uid, env);
+      const recipient = plane.recipient_uid ? await requireUser(plane.recipient_uid, env) : null;
+      const route = buildFlightPlan(sender?.country_code ?? null, recipient?.country_code ?? null);
+      if (!route || !recipient) return json({ error: "ROUTE_UNAVAILABLE" }, 409);
+      await env.DB.prepare(
+        "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
+      ).bind(route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
       if (plane.reply_to_id) {
         await env.DB.prepare(
           "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
         ).bind(plane.reply_to_id).run();
       }
-      await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId }, { delaySeconds: 30 });
     } else {
       await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
     }
@@ -668,6 +803,52 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ pilot: user, stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 } });
   }
 
+  if (method === "GET" && path === "/v1/meta/countries") {
+    return json({
+      items: Object.entries(COUNTRY_CENTROIDS)
+        .map(([code, country]) => ({ code, name: country.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }
+
+  if (method === "GET" && path === "/v1/users/handle-availability") {
+    const handle = normalizePilotHandle(url.searchParams.get("handle"));
+    if (!isValidPilotHandle(handle)) return json({ valid: false, available: false, error: "INVALID_PILOT_HANDLE" });
+    const existing = await env.DB.prepare(
+      "SELECT uid FROM users WHERE lower(pilot_handle) = ? AND uid <> ? LIMIT 1",
+    ).bind(handle, uid).first<{ uid: string }>();
+    return json({ valid: true, available: !existing });
+  }
+
+  if (method === "POST" && path === "/v1/profile") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const pilotName = text(body.pilotName, 40);
+    const handle = normalizePilotHandle(body.pilotHandle);
+    const birthYear = Number(body.birthYear);
+    const countryCode = text(body.countryCode, 2).toUpperCase();
+    const language = body.language === "en" ? "en" : "pt";
+    if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
+    if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
+    const currentYear = new Date().getUTCFullYear();
+    if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > currentYear) {
+      return json({ error: "INVALID_BIRTH_YEAR" }, 400);
+    }
+    if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
+    try {
+      await env.DB.prepare(
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, birthYear, countryCode, language, isoNow(), uid).run();
+    } catch (error) {
+      if (String(error).toLowerCase().includes("unique")) {
+        return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
+      }
+      throw error;
+    }
+    const pilot = await requireUser(uid, env);
+    return json({ pilot, canSend: pilot?.age_verified === 1 });
+  }
+
   if (method === "POST" && path === "/v1/airplanes") {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) return json({ error: "INVALID_JSON" }, 400);
@@ -707,9 +888,69 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/airplanes/sent") {
     const rows = await env.DB.prepare(
-      "SELECT id, audience, status, destination_country, created_at, delivered_at, read_at FROM airplanes WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 100",
+      "SELECT id, audience, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at FROM airplanes WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 100",
     ).bind(uid).all();
     return json({ items: rows.results ?? [] });
+  }
+
+  const flightMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/flight$/);
+  if (method === "GET" && flightMatch) {
+    const plane = await env.DB.prepare(
+      "SELECT id, sender_uid, recipient_uid, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
+    ).bind(flightMatch[1], uid, uid).first<{
+      id: string; sender_uid: string; recipient_uid: string | null; status: string;
+      destination_country: string | null; created_at: string; matched_at: string | null;
+      delivered_at: string | null; read_at: string | null; flight_distance_km: number | null;
+      flight_duration_seconds: number | null; flight_started_at: string | null;
+      estimated_arrival_at: string | null; route_json: string | null;
+    }>();
+    if (!plane) return json({ error: "NOT_FOUND" }, 404);
+    let route: { points?: Array<{ lat: number; lng: number }>; [key: string]: unknown } | null = null;
+    try { route = plane.route_json ? JSON.parse(plane.route_json) : null; } catch { route = null; }
+    const progress = flightProgress(plane.flight_started_at, plane.estimated_arrival_at, plane.status);
+    let currentPosition: { lat: number; lng: number } | null = null;
+    const points = route?.points ?? [];
+    if (points.length > 0) {
+      const scaled = progress * (points.length - 1);
+      const index = Math.min(points.length - 2, Math.floor(scaled));
+      const fraction = scaled - index;
+      const first = points[index] ?? points[0];
+      const second = points[Math.min(points.length - 1, index + 1)] ?? first;
+      currentPosition = {
+        lat: first.lat + (second.lat - first.lat) * fraction,
+        lng: first.lng + (second.lng - first.lng) * fraction,
+      };
+    }
+    return json({
+      flight: {
+        id: plane.id, status: plane.status,
+        searching: plane.status === "QUEUED",
+        distanceKm: plane.flight_distance_km,
+        durationSeconds: plane.flight_duration_seconds,
+        startedAt: plane.flight_started_at,
+        estimatedArrivalAt: plane.estimated_arrival_at,
+        deliveredAt: plane.delivered_at,
+        readAt: plane.read_at,
+        progress,
+        currentPosition,
+        route,
+      },
+    });
+  }
+
+  const heartMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/heart$/);
+  if (method === "POST" && heartMatch) {
+    const result = await env.DB.prepare(
+      "INSERT OR IGNORE INTO airplane_hearts(airplane_id, uid) SELECT id, ? FROM airplanes WHERE id = ? AND recipient_uid = ? AND status IN ('DELIVERED','READ','RESPONDED')",
+    ).bind(uid, heartMatch[1], uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) {
+      const existing = await env.DB.prepare(
+        "SELECT 1 AS found FROM airplane_hearts WHERE airplane_id = ? AND uid = ?",
+      ).bind(heartMatch[1], uid).first();
+      if (!existing) return json({ error: "NOT_FOUND_OR_NOT_RECEIVED" }, 404);
+      return json({ ok: true, hearted: true, alreadySent: true });
+    }
+    return json({ ok: true, hearted: true });
   }
 
   const releaseMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/release$/);
@@ -901,7 +1142,7 @@ export default {
     for (const message of batch.messages) {
       try {
         if (message.body.type === "MATCH_AIRPLANE") await matchAirplane(message.body.airplaneId, env);
-        if (message.body.type === "DELIVER_AIRPLANE") await deliverAirplane(message.body.airplaneId, env);
+        // Delivery is finalized by cron after the stored arrival timestamp.
         message.ack();
       } catch {
         message.retry({ delaySeconds: 60 });
@@ -910,12 +1151,20 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Revisit queued planes every five minutes; unmatched planes remain queued, never falsely marked delivered.
+    // Keep searching until an eligible pilot is found. There is no fake delivery timer.
     const queued = await env.DB.prepare(
-      "SELECT id FROM airplanes WHERE status = 'QUEUED' AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 20",
+      "SELECT id FROM airplanes WHERE status = 'QUEUED' AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 40",
     ).all<{ id: string }>();
     for (const plane of queued.results ?? []) {
       await matchAirplane(plane.id, env);
+    }
+
+    // Finish a flight only after its persisted arrival time.
+    const arrived = await env.DB.prepare(
+      "SELECT id FROM airplanes WHERE status = 'FLYING' AND recipient_uid IS NOT NULL AND estimated_arrival_at IS NOT NULL AND estimated_arrival_at <= ? ORDER BY estimated_arrival_at ASC LIMIT 40",
+    ).bind(isoNow()).all<{ id: string }>();
+    for (const plane of arrived.results ?? []) {
+      await deliverAirplane(plane.id, env);
     }
 
     // Expire unread mail after 24 hours and opened mail 48 hours after it was opened.
