@@ -763,7 +763,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
   // Retry only exact greetings previously held by an uncertain/failed moderation pass.
   // A fresh primary safety-guard SAFE result is required before anything is released.
   const rows = await env.DB.prepare(
-    `SELECT a.id, a.sender_uid, a.recipient_uid, a.audience, a.message_text,
+    `SELECT a.id, a.sender_uid, a.recipient_uid, a.reply_to_id, a.audience, a.message_text,
             s.country_code AS sender_country, r.country_code AS recipient_country
      FROM airplanes a
      JOIN users s ON s.uid = a.sender_uid
@@ -776,8 +776,10 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
     JSON.stringify(["RISK_CLASSIFIER_LOW_CONFIDENCE"]),
     JSON.stringify(["AI_UNCERTAIN"]),
     JSON.stringify(["MODERATION_UNAVAILABLE"]),
+    JSON.stringify(["PRIMARY_GUARD_UNAVAILABLE"]),
+    JSON.stringify(["PRIMARY_GUARD_UNCERTAIN"]),
   ).all<{
-    id: string; sender_uid: string; recipient_uid: string | null; audience: string;
+    id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; audience: string;
     message_text: string; sender_country: string | null; recipient_country: string | null;
   }>();
 
@@ -810,7 +812,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
       }
     } else if (plane.recipient_uid) {
       if (!plane.sender_country || !plane.recipient_country) continue;
-      const flight = buildFlightPlan(plane.sender_country, plane.recipient_country);
+      const flight = buildFlightPlan(plane.sender_country, plane.recipient_country, Boolean(plane.reply_to_id));
       if (!flight) continue;
       const result = await env.DB.prepare(
         "UPDATE airplanes SET status = 'FLYING', moderation_state = 'SAFE', moderation_categories = '[]', matched_at = ?, flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'HELD_REVIEW'",
@@ -830,6 +832,18 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
       }
     }
 
+    if (changed && plane.recipient_uid) {
+      if (plane.reply_to_id) {
+        const conversationId = await ensureChamaForReply(plane.id, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
+        if (conversationId) await notifyChatMessage(plane.recipient_uid, conversationId, env);
+      }
+      try {
+        const flight = await env.DB.prepare("SELECT flight_duration_seconds FROM airplanes WHERE id = ?").bind(plane.id).first<{ flight_duration_seconds: number | null }>();
+        await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId: plane.id }, { delaySeconds: Math.max(1, Number(flight?.flight_duration_seconds ?? 4)) });
+      } catch {
+        // Scheduled arrival sweep remains the delivery fallback.
+      }
+    }
     if (changed) {
       await env.DB.prepare(
         "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'KNOWN_SAFE_GREETING_AUTO_RELEASED', ?, ?)",
@@ -1594,9 +1608,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const flightMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/flight$/);
   if (method === "GET" && flightMatch) {
     const loadFlightPlane = () => env.DB.prepare(
-      "SELECT id, sender_uid, recipient_uid, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
+      "SELECT id, sender_uid, recipient_uid, reply_to_id, status, moderation_state, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
     ).bind(flightMatch[1], uid, uid).first<{
-      id: string; sender_uid: string; recipient_uid: string | null; status: string;
+      id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; status: string; moderation_state: string;
       destination_country: string | null; created_at: string; matched_at: string | null;
       delivered_at: string | null; read_at: string | null; flight_distance_km: number | null;
       flight_duration_seconds: number | null; flight_started_at: string | null;
@@ -1611,7 +1625,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       plane.flight_distance_km != null &&
       plane.flight_started_at &&
       plane.flight_duration_seconds != null &&
-      plane.flight_duration_seconds > 300
+      plane.flight_duration_seconds > 12
     ) {
       const progressBeforeUpdate = flightProgress(
         plane.flight_started_at,
@@ -1631,7 +1645,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
     // The sender's live tracker also nudges matching. Queue + cron remain the
     // background retry paths, but an open flight screen no longer waits for cron.
-    if (plane.status === "QUEUED" && plane.sender_uid === uid) {
+    if (plane.status === "QUEUED" && plane.moderation_state === "SAFE" && plane.sender_uid === uid) {
       await matchAirplane(plane.id, env);
       plane = await loadFlightPlane();
       if (!plane) return json({ error: "NOT_FOUND" }, 404);
@@ -1687,6 +1701,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
     let route: { points?: Array<{ lat: number; lng: number }>; [key: string]: unknown } | null = null;
     try { route = plane.route_json ? JSON.parse(plane.route_json) : null; } catch { route = null; }
+    let conversationId: string | null = null;
+    if (plane.reply_to_id && plane.recipient_uid) {
+      const userA = plane.sender_uid < plane.recipient_uid ? plane.sender_uid : plane.recipient_uid;
+      const userB = plane.sender_uid < plane.recipient_uid ? plane.recipient_uid : plane.sender_uid;
+      const conversation = await env.DB.prepare("SELECT id FROM conversations WHERE user_a = ? AND user_b = ? LIMIT 1")
+        .bind(userA, userB).first<{ id: string }>();
+      conversationId = conversation?.id ?? null;
+    }
     const progress = flightProgress(plane.flight_started_at, plane.estimated_arrival_at, plane.status);
     let currentPosition: { lat: number; lng: number } | null = null;
     const points = route?.points ?? [];
@@ -1704,7 +1726,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({
       flight: {
         id: plane.id, status: plane.status, matchedAt: plane.matched_at,
-        searching: plane.status === "QUEUED",
+        searching: plane.status === "QUEUED" && plane.moderation_state === "SAFE",
+        moderationState: plane.moderation_state,
+        conversationId,
         matchingInfo,
         distanceKm: plane.flight_distance_km,
         durationSeconds: plane.flight_duration_seconds,
