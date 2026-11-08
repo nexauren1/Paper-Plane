@@ -2504,6 +2504,13 @@ class _ProfilePageState extends State<ProfilePage> {
                 Expanded(child: _ProfileNumber(number: received.toString(), label: 'Aviões recebidos')),
               ]),
             ),
+            const SectionTitle('Explorar o teu percurso'),
+            _ProfileLink(
+              icon: Icons.public_rounded,
+              title: 'Atlas do Céu',
+              subtitle: 'Países ligados às tuas cartas e modelos utilizados',
+              onTap: () => ppPush(context, const SkyAtlasScreen()),
+            ),
             const SectionTitle('Conta e preferências'),
             _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, AccountScreen(onAuthenticated: (_) => Navigator.of(context).pop()))),
             _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
@@ -2516,6 +2523,183 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+}
+
+
+class SkyAtlasScreen extends StatefulWidget {
+  const SkyAtlasScreen({super.key});
+
+  @override
+  State<SkyAtlasScreen> createState() => _SkyAtlasScreenState();
+}
+
+class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
+  Map<String, dynamic> _stats = {};
+  List<Map<String, dynamic>> _countries = [];
+  Map<String, dynamic> _models = {};
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.requireSignedInPilot();
+      final result = await PaperPlaneApi.instance.getSkyAtlas();
+      final countries = (result['countries'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _stats = result['stats'] as Map<String, dynamic>? ?? {};
+        _models = (_stats['models'] as Map?)?.cast<String, dynamic>() ?? {};
+        _countries = countries;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error is PaperPlaneApiException
+            ? error.message
+            : 'Não foi possível carregar o Atlas pela internet.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDistance = int.tryParse(_stats['totalDistanceKm']?.toString() ?? '') ?? 0;
+    final totalFlights = int.tryParse(_stats['totalFlights']?.toString() ?? '') ?? 0;
+    final completed = int.tryParse(_stats['completedFlights']?.toString() ?? '') ?? 0;
+    final active = int.tryParse(_stats['activeFlights']?.toString() ?? '') ?? 0;
+    final countryCount = int.tryParse(_stats['countriesCount']?.toString() ?? '') ?? _countries.length;
+
+    return ScreenFrame(
+      title: 'Atlas do Céu',
+      action: IconButton(
+        onPressed: _refresh,
+        tooltip: 'Atualizar atlas',
+        icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
+      ),
+      child: RefreshIndicator(
+        color: ppGold,
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+          children: [
+            const Text(
+              'O mundo que as tuas cartas estão a ligar.',
+              style: TextStyle(color: Colors.white70, height: 1.45),
+            ),
+            const SizedBox(height: 15),
+            if (_loading)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(42),
+                child: CircularProgressIndicator(color: ppGold),
+              ))
+            else if (_error != null)
+              GlassPanel(
+                child: Column(children: [
+                  const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 32),
+                  const SizedBox(height: 8),
+                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Tentar novamente'),
+                  ),
+                ]),
+              )
+            else ...[
+              GlassPanel(
+                highlight: true,
+                child: Column(children: [
+                  const Icon(Icons.public_rounded, color: ppGoldBright, size: 52),
+                  const SizedBox(height: 8),
+                  Text(countryCount.toString(), style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: ppGoldBright)),
+                  const Text('PAÍSES LIGADOS ÀS TUAS CARTAS', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 10, letterSpacing: 1.3)),
+                  const SizedBox(height: 17),
+                  Row(children: [
+                    Expanded(child: _atlasStat('Quilómetros', totalDistance.toString(), Icons.route_rounded)),
+                    Container(width: 1, height: 50, color: Colors.white24),
+                    Expanded(child: _atlasStat('Voos concluídos', completed.toString(), Icons.mark_email_read_outlined)),
+                    Container(width: 1, height: 50, color: Colors.white24),
+                    Expanded(child: _atlasStat('Em curso', active.toString(), Icons.flight_takeoff_rounded)),
+                  ]),
+                ]),
+              ),
+              const SectionTitle('Países ligados'),
+              if (_countries.isEmpty)
+                const GlassPanel(
+                  child: Column(children: [
+                    Icon(Icons.explore_outlined, color: ppGoldBright, size: 34),
+                    SizedBox(height: 9),
+                    Text('O teu atlas está à espera da primeira rota.', style: TextStyle(fontWeight: FontWeight.w800)),
+                    SizedBox(height: 5),
+                    Text('Quando uma carta encontrar um destinatário e tiver uma rota registada, os países ligados aparecerão aqui.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+                  ]),
+                )
+              else
+                for (final country in _countries) ...[
+                  const SizedBox(height: 8),
+                  GlassPanel(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(children: [
+                      Text(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(country['name']?.toString() ?? _countryName(country['code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800))),
+                      const Icon(Icons.verified_rounded, color: ppGoldBright, size: 19),
+                    ]),
+                  ),
+                ],
+              const SectionTitle('Aviões do teu hangar'),
+              GlassPanel(
+                child: Row(children: [
+                  Expanded(child: _modelStat('Dardo', (_models['DART'] ?? 0).toString(), Icons.bolt_rounded)),
+                  Expanded(child: _modelStat('Planador', (_models['GLIDER'] ?? 0).toString(), Icons.air_rounded)),
+                  Expanded(child: _modelStat('Andorinha', (_models['SWALLOW'] ?? 0).toString(), Icons.flutter_dash_rounded)),
+                ]),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                totalFlights == 0
+                    ? 'Os dados serão acrescentados quando o servidor registar os teus voos.'
+                    : '$totalFlights aviões registados na tua conta.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _atlasStat(String label, String value, IconData icon) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 5),
+    child: Column(children: [
+      Icon(icon, color: ppGoldBright, size: 19),
+      const SizedBox(height: 5),
+      Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: ppGoldBright)),
+      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+    ]),
+  );
+
+  Widget _modelStat(String title, String value, IconData icon) => Column(children: [
+    Icon(icon, color: ppGoldBright, size: 25),
+    const SizedBox(height: 5),
+    Text(value, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+    Text(title, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+  ]);
 }
 
 class _ProfileNumber extends StatelessWidget {
