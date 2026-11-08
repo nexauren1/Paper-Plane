@@ -2292,8 +2292,19 @@ class IncomingPlaneScreen extends StatefulWidget {
   State<IncomingPlaneScreen> createState() => _IncomingPlaneScreenState();
 }
 
-class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
+class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
+    with SingleTickerProviderStateMixin {
   bool _busy = false;
+  late final AnimationController _scene = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 4),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _scene.dispose();
+    super.dispose();
+  }
 
   Future<void> _open() async {
     setState(() => _busy = true);
@@ -2356,8 +2367,17 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
         padding: const EdgeInsets.fromLTRB(22, 12, 22, 26),
         child: Column(children: [
           const Spacer(),
-          const Icon(Icons.mark_email_unread_rounded, color: ppGoldBright, size: 125),
-          const SizedBox(height: 25),
+          AnimatedBuilder(
+            animation: _scene,
+            builder: (_, __) => SizedBox(
+              height: 300,
+              width: double.infinity,
+              child: CustomPaint(
+                painter: _IncomingPlanePainter(progress: _scene.value),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           const Text('Recebeste um novo avião', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
           Text('De: Alguém em ' + _countryName(widget.countryCode) + ' ' + _countryFlag(widget.countryCode), style: const TextStyle(color: ppGoldBright, fontSize: 16)),
@@ -2382,6 +2402,231 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
   }
 }
 
+
+class _IncomingPlanePainter extends CustomPainter {
+  const _IncomingPlanePainter({required this.progress});
+
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(bounds, const Radius.circular(24)),
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(0, -0.15),
+          radius: 0.95,
+          colors: [Color(0xFF153C68), Color(0xFF091A31), Color(0xFF040B17)],
+        ).createShader(bounds),
+    );
+
+    final random = math.Random(37);
+    for (var i = 0; i < 62; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      final twinkle = 0.22 + 0.55 * (0.5 + 0.5 * math.sin(progress * math.pi * 2 + i));
+      canvas.drawCircle(
+        Offset(x, y),
+        0.45 + random.nextDouble() * 1.15,
+        Paint()..color = (i % 8 == 0 ? ppGoldBright : Colors.white).withOpacity(twinkle),
+      );
+    }
+
+    // Golden arrival stream and drifting confetti.
+    final trail = Path()
+      ..moveTo(size.width * 0.18, size.height * 0.39)
+      ..cubicTo(
+        size.width * 0.34,
+        size.height * 0.04,
+        size.width * 0.58,
+        size.height * 0.34,
+        size.width * 0.56,
+        size.height * 0.48,
+      );
+    canvas.drawPath(
+      trail,
+      Paint()
+        ..color = ppGold.withOpacity(0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+    );
+    canvas.drawPath(
+      trail,
+      Paint()
+        ..color = ppGoldBright.withOpacity(0.78)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round,
+    );
+
+    for (var i = 0; i < 24; i++) {
+      final x = (i * 0.61803398875 % 1) * size.width;
+      final y = ((i * 0.371 + progress * 0.52) % 1) * size.height;
+      final rotation = progress * math.pi * 2 + i;
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(rotation);
+      final confetti = Rect.fromCenter(
+        center: Offset.zero,
+        width: 2.2 + (i % 3),
+        height: 6 + (i % 4) * 2,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(confetti, const Radius.circular(1)),
+        Paint()..color = (i.isEven ? ppGoldBright : const Color(0xFF9CCBFF)).withOpacity(0.36),
+      );
+      canvas.restore();
+    }
+
+    // Sealed envelope, with a softly lit paper surface.
+    final envelope = Rect.fromCenter(
+      center: Offset(size.width * 0.5, size.height * 0.70),
+      width: size.width * 0.72,
+      height: size.height * 0.37,
+    );
+    final shadowRect = envelope.inflate(5);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(shadowRect, const Radius.circular(16)),
+      Paint()
+        ..color = ppGold.withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(envelope, const Radius.circular(13)),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFDF6), Color(0xFFE6E0D3), Color(0xFFCFC7B7)],
+        ).createShader(envelope),
+    );
+
+    final leftFold = Path()
+      ..moveTo(envelope.left, envelope.top + 2)
+      ..lineTo(envelope.center.dx, envelope.center.dy + 12)
+      ..lineTo(envelope.left, envelope.bottom - 2)
+      ..close();
+    final rightFold = Path()
+      ..moveTo(envelope.right, envelope.top + 2)
+      ..lineTo(envelope.center.dx, envelope.center.dy + 12)
+      ..lineTo(envelope.right, envelope.bottom - 2)
+      ..close();
+    final lowerFold = Path()
+      ..moveTo(envelope.left + 2, envelope.bottom - 2)
+      ..lineTo(envelope.center.dx, envelope.center.dy - 2)
+      ..lineTo(envelope.right - 2, envelope.bottom - 2)
+      ..close();
+    final flap = Path()
+      ..moveTo(envelope.left + 2, envelope.top + 3)
+      ..lineTo(envelope.center.dx, envelope.center.dy + 19)
+      ..lineTo(envelope.right - 2, envelope.top + 3)
+      ..close();
+
+    canvas.drawPath(leftFold, Paint()..color = const Color(0xFFD7D0C2).withOpacity(0.78));
+    canvas.drawPath(rightFold, Paint()..color = const Color(0xFFEAE5D9).withOpacity(0.9));
+    canvas.drawPath(lowerFold, Paint()..color = const Color(0xFFF6F1E6).withOpacity(0.9));
+    canvas.drawPath(
+      flap,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFFEF8), Color(0xFFE7E0D1)],
+        ).createShader(envelope),
+    );
+    canvas.drawPath(
+      flap,
+      Paint()
+        ..color = const Color(0xFFB8AD98).withOpacity(0.58)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    final seal = Offset(envelope.center.dx, envelope.center.dy + 16);
+    canvas.drawCircle(
+      seal,
+      19,
+      Paint()
+        ..color = ppGold.withOpacity(0.28)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+    );
+    canvas.drawCircle(
+      seal,
+      14,
+      Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0xFFFFE9A5), Color(0xFFB87926), Color(0xFF70451D)],
+        ).createShader(Rect.fromCircle(center: seal, radius: 14)),
+    );
+    canvas.drawCircle(
+      seal,
+      14,
+      Paint()
+        ..color = const Color(0xFFFFE7A8).withOpacity(0.85)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    canvas.drawCircle(seal.translate(-4, -4), 3, Paint()..color = Colors.white.withOpacity(0.35));
+
+    // The paper plane gently hovers above the envelope.
+    final bob = math.sin(progress * math.pi * 2) * 5;
+    final planeCenter = Offset(size.width * 0.57, size.height * 0.32 + bob);
+    canvas.drawCircle(
+      planeCenter,
+      33,
+      Paint()
+        ..color = ppGold.withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 19),
+    );
+    canvas.save();
+    canvas.translate(planeCenter.dx, planeCenter.dy);
+    canvas.rotate(-0.16 + math.sin(progress * math.pi * 2) * 0.025);
+    final plane = Path()
+      ..moveTo(0, -36)
+      ..lineTo(42, 18)
+      ..lineTo(4, 8)
+      ..lineTo(-13, 31)
+      ..lineTo(-8, 3)
+      ..lineTo(-31, 14)
+      ..close();
+    final fold = Path()
+      ..moveTo(-8, 3)
+      ..lineTo(0, -36)
+      ..lineTo(4, 8)
+      ..close();
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..color = ppGold.withOpacity(0.3)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+    );
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFEF8), Color(0xFFD8D1C5)],
+        ).createShader(const Rect.fromLTWH(-32, -36, 75, 70)),
+    );
+    canvas.drawPath(fold, Paint()..color = const Color(0xFFB6AD9D).withOpacity(0.8));
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..color = ppGoldBright
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _IncomingPlanePainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
 
 class ArrivalExperienceScreen extends StatefulWidget {
   const ArrivalExperienceScreen({super.key, required this.airplane});
