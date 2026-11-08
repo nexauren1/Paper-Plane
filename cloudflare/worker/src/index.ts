@@ -386,10 +386,14 @@ async function createYotiAgeSession(
       retry_limit: 2,
       level: "PASSIVE",
       authenticity: "AUTO",
+      synchronous_checks: true,
     },
     ttl: 1800,
     reference_id: referenceId,
-    synchronous_checks: true,
+    callback: {
+      auto: true,
+      url: "https://paper-plane.nexaurenstore.workers.dev/v1/age-verification/return",
+    },
   };
 
   const response = await fetch("https://age.yoti.com/api/v1/sessions", {
@@ -839,6 +843,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   const path = url.pathname.replace(/\/+$/, "") || "/";
+
+  if (method === "GET" && path === "/v1/age-verification/return") {
+    return new Response(
+      `<!doctype html><html lang="pt"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Paper Plane · Verificação concluída</title>
+      <body style="margin:0;background:#071225;color:#f4f0e7;font:16px system-ui;display:grid;min-height:100vh;place-items:center">
+      <main style="max-width:420px;padding:32px;text-align:center">
+      <div style="font-size:52px">✈️</div><h1 style="color:#ffe7a8">Etapa concluída</h1>
+      <p style="line-height:1.6;color:#c6d2e5">Regressa ao Paper Plane. A aplicação vai consultar o resultado diretamente no servidor.</p>
+      <p style="font-size:13px;color:#94a3b8">Não feches a sessão da tua conta. Podes voltar ao aplicativo agora.</p>
+      </main></body></html>`,
+      { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+    );
+  }
 
   if (method === "GET" && path === "/v1/health") {
     try {
