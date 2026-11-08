@@ -16,20 +16,23 @@ The first release concentrates on the full message journey instead of optional e
 - Real inbox, opening and reading letters, private airplane replies, hearts and public replies.
 - AI-assisted content screening with a human-review queue for uncertain cases.
 - Report categories, sender blocking and age-band separation for stranger matching.
-- Android push notifications, an in-app foreground notification banner and a shortcut to the exact incoming airplane.
+- Android push notifications, an in-app foreground notification banner and shortcuts to the exact incoming airplane or Chama.
+- A worldwide friends list with pilot-handle search, friend requests and shareable invite links.
+- Chama private chat, activated only after a private airplane reply is delivered to the original sender.
+- An offline multiple-choice Quiz with Geography, Nature and Culture categories.
 - Categorized support requests with a private ticket history.
 
-The animated flight globe is included in the flight tracker. It uses estimated routes between country reference points, not GPS or live physical aircraft data. The private chat/“Chama” screen is still a preview, not a live chat. Events, paid golden planes and the separate Admin APK remain later-phase work.
+The animated flight globe is included in the flight tracker. It uses estimated routes between country reference points, not GPS or live physical aircraft data. Chama is a private one-to-one chat that appears only after a reply airplane is delivered; adding a friend alone does not start a conversation. Friend search and random matching remain within the same self-declared age group. The Quiz runs locally and does not need an account or network after the app has loaded. Events, paid golden planes and the separate Admin APK remain later-phase work.
 
 ## Architecture
 
 - **Flutter/Dart:** Android interface, animation, navigation and client logic.
 - **Firebase Authentication:** account identity and signed Firebase ID tokens.
 - **Cloudflare Worker:** authenticated API, moderation, matching, delivery and notification dispatch.
-- **Cloudflare D1:** pilot profiles, airplanes, inbox, reports, support tickets and audit events.
-- **Cloudflare Queues and scheduled Worker tasks:** asynchronous matching and flight delivery. Matching is retried each minute while a recipient is not available; same-country symbolic flights have a 90-second minimum duration, while longer routes use an estimated duration based on distance.
+- **Cloudflare D1:** pilot profiles, airplanes, inbox, friendships, Chama conversations and messages, reports, support tickets and audit events.
+- **Cloudflare Queues and scheduled Worker tasks:** asynchronous matching and flight delivery. Matching is retried each minute while a recipient is not available; same-country symbolic flights have a 90-second minimum duration, while longer routes use an estimated duration based on distance. Daily sending is unlimited; account activity is still rate-limited to 10 airplanes and public replies combined per rolling hour, and repeated identical messages are throttled. Unmatched random airplanes expire after 24 hours, unresolved safety reviews after 72 hours, public Open Sky airplanes after 7 days, and received letters after 24 hours unopened or 48 hours after opening.
 - **Workers AI:** content-safety checks, risk triage, classification and translation. It does not write personal messages for pilots. If moderation is unavailable, sending fails with a retryable error before the plane is stored or the daily send limit is consumed. Previously held exact greetings are rechecked by the primary safety guard before release.
-- **Firebase Cloud Messaging:** Android delivery notifications. After enabling notifications in Settings and configuring the Worker FCM service-account secret, Android push alerts and in-app foreground alerts identify the exact incoming airplane.
+- **Firebase Cloud Messaging:** Android delivery and Chama notifications. After enabling notifications in Settings and configuring the Worker FCM service-account secret, Android push alerts and in-app foreground alerts identify the incoming airplane or new Chama message.
 
 ## Repository layout
 
