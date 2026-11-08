@@ -446,6 +446,10 @@ async function createAirplane(
     throw error;
   }
 
+  await env.DB.prepare(
+    "UPDATE onboarding_first_flights SET state = 'LAUNCHED', updated_at = ? WHERE uid = ? AND state = 'READY_TO_LAUNCH'",
+  ).bind(isoNow(), uid).run();
+
   if (moderation.state === "SAFE") ctx.waitUntil(classifyInBackground(env, id, message));
   if (directFlight && status === "FLYING") {
     await env.DB.prepare(
@@ -805,7 +809,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const received = await env.DB.prepare(
       "SELECT COUNT(*) AS received FROM inbox WHERE recipient_uid = ?",
     ).bind(uid).first<{ received: number }>();
-    return json({ pilot: user, stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 } });
+    const firstFlight = await env.DB.prepare(
+      "SELECT state FROM onboarding_first_flights WHERE uid = ?",
+    ).bind(uid).first<{ state: string }>();
+    return json({
+      pilot: user,
+      stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 },
+      firstFlightState: firstFlight?.state ?? null,
+    });
   }
 
   if (method === "POST" && path === "/v1/onboarding/first-flight") {
