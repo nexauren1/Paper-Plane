@@ -1518,13 +1518,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const language = url.searchParams.get("language") === "en" ? "en" : url.searchParams.get("language") === "pt" ? "pt" : null;
     const rows = await env.DB.prepare(
       `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at, p.likes_count,
+              CASE WHEN a.sender_uid = ? THEN 1 ELSE 0 END AS is_own,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
        FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
        WHERE a.audience = 'PUBLIC' AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED'
          AND (? IS NULL OR a.sender_country_code = ?)
          AND (? IS NULL OR a.message_language = ?)
        ORDER BY a.created_at DESC LIMIT 50`,
-    ).bind(country, country, language, language).all();
+    ).bind(uid, country, country, language, language).all();
     return json({ items: rows.results ?? [] });
   }
 
