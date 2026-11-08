@@ -2,47 +2,85 @@
 
 **Send a message to a stranger.**
 
-An Android-first Flutter application built with Dart, following the supplied Paper Plane visual references: a midnight-blue sky, warm gold highlights, paper letters, paper-plane flight motion, Open Sky, pilot profile, collection, and safety screens.
+Paper Plane is an Android-first Flutter application written in Dart. It turns short messages into paper-plane journeys between pilots, with an animated first launch, a private inbox, replies and a public sky.
 
-## Current branch
+## First release scope
 
-The active integration branch is **platform-integration**. It is based on the Flutter UI foundation and keeps the original main branch unchanged.
+The first release concentrates on the full message journey instead of optional extras:
 
-## Flutter application
+- Firebase account creation and sign-in with email/password or Google.
+- Server-backed pilot profile with unique handle, country and birth year.
+- First-flight workshop with a saved private draft and three paper-plane designs.
+- Short paper messages (up to 200 characters), random matching and public Open Sky posts.
+- Server-side matching, delivery status, flight route and progress.
+- Real inbox, opening and reading letters, private airplane replies, hearts and public replies.
+- AI-assisted content screening with a human-review queue for uncertain cases.
+- Report categories, sender blocking and age-band separation for stranger matching.
+- Android push notifications, an in-app foreground notification banner and a shortcut to the inbox.
+- Categorized support requests with a private ticket history.
 
-- Welcome and home experience with animated paper-plane artwork.
-- Write-a-plane composer with a 200-character limit, mood, audience, destination, and reply preference.
-- Flight-state screen with a clear distinction between illustrative preview data and server state.
-- Inbox, sealed incoming plane, and opened paper letter.
-- Open Sky, pilot profile, collection, invite, settings, and safety screens.
-- Firebase runtime, anonymous pilot identity, authenticated Worker API client, and opt-in FCM registration service.
+The private chat/“Chama” screen is only a labelled preview and is not part of the first release. Events, paid golden planes, the separate Admin APK and extended globe features remain later-phase work.
 
-## Backend preparation
+## Architecture
 
-- Firebase Authentication verifies the pilot identity.
-- Cloudflare Worker is the API and business-rules layer.
-- Cloudflare D1 is the primary relational store.
-- Cloudflare Queues handle asynchronous matching and delivery.
-- Workers AI operates internally for safety checks, risk triage, metadata classification, and translation. It does not compose messages for users.
-- Cloudflare Pages remains the public website; the Android app connects to the Worker API.
+- **Flutter/Dart:** Android interface, animation, navigation and client logic.
+- **Firebase Authentication:** account identity and signed Firebase ID tokens.
+- **Cloudflare Worker:** authenticated API, moderation, matching, delivery and notification dispatch.
+- **Cloudflare D1:** pilot profiles, airplanes, inbox, reports, support tickets and audit events.
+- **Cloudflare Queues and scheduled Worker tasks:** asynchronous matching and flight delivery.
+- **Workers AI:** content-safety checks, risk triage, classification and translation. It does not write personal messages for pilots.
+- **Firebase Cloud Messaging:** Android delivery notifications.
 
-See **[Platform integration setup](docs/PLATFORM_INTEGRATION.md)** for Firebase configuration, Cloudflare resource creation, secrets, deployment, and Flutter build commands.
+## Repository layout
 
-## Run locally
+- `lib/` — Flutter/Dart application.
+- `cloudflare/worker/` — API, D1 migrations and backend validation.
+- `firebase/google-services.json` — Android Firebase client configuration.
+- `.github/workflows/android.yml` — Flutter tests and signed release APK build.
+- `.github/workflows/deploy-worker.yml` — D1 migration validation, remote migration and Worker deployment.
+- `docs/` — deployment, privacy and integration notes.
 
-Generate the Android platform folder once, then install dependencies:
+## Build Android
 
-~~~bash
+The GitHub Actions Android workflow generates the Android platform project if needed, installs dependencies, runs Flutter tests, configures release signing from repository Actions secrets, and builds the release APK.
+
+The signing secrets are:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Firebase build values are read from `firebase/google-services.json` by the workflow. Do not commit private signing keys, Firebase service-account JSON, Yoti API tokens or other server secrets to the repository.
+
+## Deploy the Worker
+
+The Worker deployment workflow runs when files under `cloudflare/worker/` change on `main`. It:
+
+1. Installs Worker dependencies.
+2. Applies all migration files in order to a local SQLite validation database.
+3. Type-checks the Worker.
+4. Applies pending migrations to the configured remote D1 database.
+5. Deploys the Worker.
+
+Cloudflare credentials are supplied through GitHub Actions secrets. Runtime integrations may also require Cloudflare Worker secrets such as `FCM_SERVICE_ACCOUNT_JSON`, `YOTI_API_TOKEN` and `YOTI_SDK_ID`. A successful Worker deployment proves that the code and migrations deployed; it does not prove that every optional provider secret is present or that a real device has received a push notification.
+
+## Safety and release checks
+
+- Users are not matched with strangers until trusted age assurance confirms an age band. The profile birth year is not treated as proof.
+- Random matching keeps users in the same verified age band, and respects account status and block relationships.
+- AI moderation is not proof that a user is safe or that a message is harmless. Uncertain items go to review; reports remain available to users.
+- AI risk signals must be treated as review cues, not a conclusion that a user has lied about age.
+- User reports and support tickets are stored separately. Only authorized admin UIDs can access moderation/support administration endpoints.
+- Before public release, verify the Yoti provider secrets, FCM service-account secret, Cloudflare queue/cron configuration, Firebase OAuth SHA fingerprints and real-device behaviour.
+
+## Development
+
+```bash
 flutter create --platforms=android --project-name paper_plane --org com.nexauren .
 flutter pub get
-~~~
+flutter test
+flutter build apk --release
+```
 
-The Firebase and Worker values are supplied at build time. Follow the integration guide before running a network-enabled build.
-
-## Current implementation status
-
-The Dart UI and integration clients are committed, and the Worker API plus D1 migration are prepared. The repository still requires the owner's Firebase project configuration, a real D1 database ID, Cloudflare Queue resources, Worker secrets, and deployment. Until those are configured, the app can run in UI preview mode but cannot deliver letters to real pilots.
-
-**Safety gate:** new users are age-unverified by default. Sending and random matching remain blocked until a trusted age-assurance process is integrated. Users are only matched within the same verified age band. AI screening is not a safety guarantee; human moderation and reporting procedures are required before public launch.
-
-Events remain outside this first implementation and are planned for a later phase.
+See [Platform integration setup](docs/PLATFORM_INTEGRATION.md) and [AI processing and privacy](docs/PRIVACY_AI_PROCESSING.md) for configuration and data-handling details.
