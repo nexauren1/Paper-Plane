@@ -154,7 +154,24 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
       return { state: "REVIEW", categories: ["AI_UNCERTAIN"] };
     }
 
-    // A second internal pass looks for risks specific to anonymous stranger correspondence.
+    // Common standalone greetings are safe after the primary safety guard passes.
+    // Exact-match only: a greeting followed by additional content still receives full triage.
+    const normalizedGreeting = message
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[.!?,;:]+/g, "")
+      .trim()
+      .replace(/\s+/g, " ");
+    const ordinaryGreetings = new Set([
+      "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
+      "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+    ]);
+    if (ordinaryGreetings.has(normalizedGreeting)) {
+      return { state: "SAFE", categories: [] };
+    }
+
+    // A second internal pass looks for explicit risks specific to anonymous stranger correspondence.
     const riskResult = await env.AI.run(CLASSIFICATION_MODEL, {
       messages: [
         {
