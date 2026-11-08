@@ -644,6 +644,7 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _sent = [];
   int _unread = 0;
+  String? _firstFlightState;
   bool _loading = true;
   String? _error;
 
@@ -683,6 +684,7 @@ class _HomePageState extends State<HomePage> {
         _stats = stats;
         _sent = sent;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
+        _firstFlightState = results[0]['firstFlightState']?.toString();
         _loading = false;
       });
     } catch (error) {
@@ -769,6 +771,19 @@ class _HomePageState extends State<HomePage> {
                       if (completed == true) _refresh();
                     },
                   ),
+                ]),
+              ),
+            if (_firstFlightState == 'WAITING_FOR_AGE_VERIFICATION')
+              GlassPanel(
+                highlight: true,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.inventory_2_outlined, color: ppGoldBright, size: 29),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('O teu primeiro avião está no hangar privado', style: TextStyle(fontWeight: FontWeight.w800)),
+                    SizedBox(height: 5),
+                    Text('A carta está guardada online. O servidor vai permitir o voo para outra pessoa quando a verificação de idade confiável estiver concluída.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  ])),
                 ]),
               ),
             GlassPanel(
