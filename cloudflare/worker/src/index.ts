@@ -158,11 +158,11 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
     // Exact-match only: a greeting followed by additional content still receives full triage.
     const normalizedGreeting = message
       .normalize("NFD")
-      .replace(/[\\u0300-\\u036f]/g, "")
+      .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/[.!?,;:]+/g, "")
       .trim()
-      .replace(/\\s+/g, " ");
+      .replace(/\s+/g, " ");
     const ordinaryGreetings = new Set([
       "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
       "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
