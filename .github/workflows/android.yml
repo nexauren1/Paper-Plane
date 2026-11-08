@@ -32,7 +32,6 @@ jobs:
           python3 - <<'PY'
           import json
           import os
-          import re
           import shutil
           from pathlib import Path
 
@@ -76,28 +75,28 @@ jobs:
               raise SystemExit("Flutter Android Gradle files were not generated as expected.")
 
           def add_google_services_plugin(path, apply_false):
-              source = path.read_text(encoding="utf-8")
-              if "com.google.gms.google-services" in source:
+              lines = path.read_text(encoding="utf-8").splitlines()
+              if any("com.google.gms.google-services" in line for line in lines):
                   return
-              match = re.search(
-                  r'(?m)^(?P<indent>\\s*)id\\s*\\(?["\\']com\\.android\\.application["\\']\\)?[^\\n]*$',
-                  source,
+              plugin_index = next(
+                  (index for index, line in enumerate(lines)
+                   if line.strip().startswith("id") and "com.android.application" in line),
+                  None,
               )
-              if match is None:
+              if plugin_index is None:
                   raise SystemExit(f"Could not find the Android application plugin in {path}.")
-              indent = match.group("indent")
+              indent = lines[plugin_index][:len(lines[plugin_index]) - len(lines[plugin_index].lstrip())]
               kotlin = path.suffix == ".kts"
-              plugin = (
-                  f'{indent}id("com.google.gms.google-services") version "4.5.0" apply false'
-                  if apply_false and kotlin else
-                  f'{indent}id "com.google.gms.google-services" version "4.5.0" apply false'
-                  if apply_false else
-                  f'{indent}id("com.google.gms.google-services")'
-                  if kotlin else
-                  f'{indent}id "com.google.gms.google-services"'
-              )
-              updated = source[:match.end()] + "\\n" + plugin + source[match.end():]
-              path.write_text(updated, encoding="utf-8")
+              if apply_false and kotlin:
+                  plugin = indent + 'id("com.google.gms.google-services") version "4.5.0" apply false'
+              elif apply_false:
+                  plugin = indent + 'id "com.google.gms.google-services" version "4.5.0" apply false'
+              elif kotlin:
+                  plugin = indent + 'id("com.google.gms.google-services")'
+              else:
+                  plugin = indent + 'id "com.google.gms.google-services"'
+              lines.insert(plugin_index + 1, plugin)
+              path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
           add_google_services_plugin(settings_path, apply_false=True)
           add_google_services_plugin(app_gradle_path, apply_false=False)
@@ -111,7 +110,7 @@ jobs:
           }
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
               for key, value in env_values.items():
-                  env_file.write(f"{key}={value}\\n")
+                  env_file.write(f"{key}={value}\n")
           PY
 
       - name: Install dependencies
@@ -122,12 +121,12 @@ jobs:
 
       - name: Build release APK with Firebase
         run: |
-          flutter build apk --release \\
-            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \\
-            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \\
-            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \\
-            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \\
-            --dart-define=GOOGLE_SERVER_CLIENT_ID="$GOOGLE_SERVER_CLIENT_ID" \\
+          flutter build apk --release \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            --dart-define=GOOGLE_SERVER_CLIENT_ID="$GOOGLE_SERVER_CLIENT_ID" \
             --dart-define=PAPER_PLANE_API_BASE_URL="https://paper-plane.nexaurenstore.workers.dev"
 
       - name: Upload APK
