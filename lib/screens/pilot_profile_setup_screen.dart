@@ -140,12 +140,13 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
 
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
+    final earliestAllowed = DateTime(now.year - 120, now.month, now.day);
     final latestAllowed = DateTime(now.year - 13, now.month, now.day);
     final initial = _selectedBirthDate ?? DateTime(now.year - 18, now.month, now.day);
     final picked = await showDatePicker(
       context: context,
       initialDate: initial.isAfter(latestAllowed) ? latestAllowed : initial,
-      firstDate: DateTime(1900),
+      firstDate: earliestAllowed,
       lastDate: latestAllowed,
       helpText: 'Seleciona a tua data de nascimento',
       cancelText: 'Cancelar',
