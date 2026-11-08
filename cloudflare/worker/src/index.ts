@@ -809,6 +809,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const received = await env.DB.prepare(
       "SELECT COUNT(*) AS received FROM inbox WHERE recipient_uid = ?",
     ).bind(uid).first<{ received: number }>();
+    if (user.age_verified === 1) {
+      await env.DB.prepare(
+        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
+      ).bind(isoNow(), uid).run();
+    }
     const firstFlight = await env.DB.prepare(
       "SELECT state FROM onboarding_first_flights WHERE uid = ?",
     ).bind(uid).first<{ state: string }>();
