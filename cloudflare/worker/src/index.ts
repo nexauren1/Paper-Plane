@@ -625,8 +625,8 @@ async function deliverAirplane(airplaneId: string, env: Env) {
 }
 
 async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
-  // These two moderation reasons are emitted only after Llama Guard returned SAFE
-  // and the secondary triage could not confidently classify an ordinary message.
+  // Retry only exact greetings previously held by an uncertain/failed moderation pass.
+  // A fresh primary safety-guard SAFE result is required before anything is released.
   const rows = await env.DB.prepare(
     `SELECT a.id, a.sender_uid, a.recipient_uid, a.audience, a.message_text,
             s.country_code AS sender_country, r.country_code AS recipient_country
