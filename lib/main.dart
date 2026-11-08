@@ -2639,6 +2639,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+
 class SafetyScreen extends StatelessWidget {
   const SafetyScreen({super.key});
 
@@ -2646,22 +2647,66 @@ class SafetyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ScreenFrame(
       title: 'Segurança e privacidade',
-      child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
-        const GlassPanel(
-          highlight: true,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(Icons.shield_moon_outlined, color: ppGoldBright, size: 38),
-            SizedBox(height: 12),
-            Text('A tua segurança importa', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-            SizedBox(height: 7),
-            Text('Não partilhes dados pessoais, morada, palavras-passe ou informações que te identifiquem com desconhecidos.', style: TextStyle(color: Colors.white70)),
-          ]),
-        ),
-        const SectionTitle('Controlos'),
-        _ProfileLink(icon: Icons.block, title: 'Pessoas bloqueadas', subtitle: 'A lista ficará disponível com a conta', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A lista de bloqueios será ligada ao servidor.')))),
-        _ProfileLink(icon: Icons.flag_outlined, title: 'As minhas denúncias', subtitle: 'Acompanhamento de segurança', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O centro de denúncias será ligado ao servidor.')))),
-        _ProfileLink(icon: Icons.visibility_off_outlined, title: 'Privacidade', subtitle: 'Controlar o que outras pessoas veem', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Controlos de privacidade em preparação.')))),
-      ]),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+        children: const [
+          GlassPanel(
+            highlight: true,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.shield_moon_outlined, color: ppGoldBright, size: 38),
+              SizedBox(height: 12),
+              Text('Proteção antes da entrega', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+              SizedBox(height: 7),
+              Text(
+                'A correspondência com desconhecidos só é permitida entre contas cuja faixa etária tenha sido confirmada por um processo confiável. O ano de nascimento do perfil nunca substitui essa confirmação.',
+                style: TextStyle(color: Colors.white70, height: 1.5),
+              ),
+            ]),
+          ),
+          SectionTitle('Controlos reais'),
+          GlassPanel(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.flag_outlined, color: ppGoldBright),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Denunciar uma carta', style: TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(height: 4),
+                Text('Abre o avião recebido e escolhe Denunciar. A denúncia é enviada ao servidor para revisão.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+              ])),
+            ]),
+          ),
+          SizedBox(height: 10),
+          GlassPanel(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.block_rounded, color: ppGoldBright),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Bloquear um remetente', style: TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(height: 4),
+                Text('Abre o avião recebido e escolhe Bloquear. O servidor impede novas correspondências entre as duas contas.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+              ])),
+            ]),
+          ),
+          SizedBox(height: 10),
+          GlassPanel(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.visibility_off_outlined, color: ppGoldBright),
+              SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Identidade protegida', style: TextStyle(fontWeight: FontWeight.w800)),
+                SizedBox(height: 4),
+                Text('Nas cartas aleatórias, o remetente não recebe o teu nome de conta nem o teu identificador Firebase. O país é a única referência geográfica mostrada nesta versão.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+              ])),
+            ]),
+          ),
+          SizedBox(height: 14),
+          Text(
+            'Não partilhes morada, contactos, palavras-passe, escola ou outros dados pessoais com desconhecidos. Se uma carta te fizer sentir desconfortável, não respondas: denuncia e bloqueia.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white45, fontSize: 11, height: 1.45),
+          ),
+        ],
+      ),
     );
   }
 }
