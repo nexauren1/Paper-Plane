@@ -52,13 +52,26 @@ verification = subprocess.run(
 )
 if verification.returncode != 0:
     raise SystemExit("The keystore cannot be opened. Check ANDROID_KEYSTORE_PASSWORD.")
+key_password_check = subprocess.run(
+    [
+        "keytool", "-certreq", "-alias", key_alias, "-keystore", str(keystore_path),
+        "-storepass", store_password, "-keypass", key_password,
+        "-file", str(APP / ".paper-plane-key-check.csr"),
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+(APP / ".paper-plane-key-check.csr").unlink(missing_ok=True)
+if key_password_check.returncode != 0:
+    raise SystemExit("ANDROID_KEY_PASSWORD does not unlock the private key for the selected alias.")
 
 certificate = verification.stdout
 if f"Alias name: {key_alias}" not in certificate:
     raise SystemExit("ANDROID_KEY_ALIAS does not match the uploaded keystore.")
 
 def normalized_fingerprint(label: str) -> str:
-    match = re.search(rf"(?m)^\\s*{label}:\\s*([0-9A-Fa-f:]+)\\s*$", certificate)
+    match = re.search(rf"(?m)^\s*{label}:\s*([0-9A-Fa-f:]+)\s*$", certificate)
     return match.group(1).replace(":", "").lower() if match else ""
 
 sha1 = normalized_fingerprint("SHA1")
