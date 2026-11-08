@@ -27,7 +27,7 @@ This branch prepares the production architecture without committing private cred
 - Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, translation, and device registration endpoints are scaffolded.
 - Original planes have a one-per-UTC-day limit and a 200-character limit.
 - Random planes remain queued when there is no eligible recipient; they are not falsely marked delivered.
-- Matching only considers active users whose age group has been verified by a trusted process and is identical to the sender's group. Blocks apply in both directions.
+- Matching only considers active users in the same self-declared age group. Blocks apply in both directions; this is cohort separation, not proof of age.
 - Unread delivered letters expire after 24 hours. Once opened, the retention window changes to 48 hours.
 - A reply must be allowed by the original sender.
 - Open Sky supports up to five public replies.
