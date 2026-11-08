@@ -19,7 +19,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _pilotName = TextEditingController();
   final _pilotHandle = TextEditingController(text: 'chuva_ocidental-07');
-  final _birthYear = TextEditingController();
+  DateTime? _selectedBirthDate;
   Timer? _handleDebounce;
 
   List<Map<String, String>> _countries = [];
@@ -44,7 +44,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
     _pilotHandle.removeListener(_onHandleChanged);
     _pilotName.dispose();
     _pilotHandle.dispose();
-    _birthYear.dispose();
     super.dispose();
   }
 
@@ -131,6 +130,41 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
     }
   }
 
+  String _formatBirthDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  Future<void> _pickBirthDate() async {
+    final now = DateTime.now();
+    final latestAllowed = DateTime(now.year - 13, now.month, now.day);
+    final initial = _selectedBirthDate ?? DateTime(now.year - 18, now.month, now.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isAfter(latestAllowed) ? latestAllowed : initial,
+      firstDate: DateTime(1900),
+      lastDate: latestAllowed,
+      helpText: 'Seleciona a tua data de nascimento',
+      cancelText: 'Cancelar',
+      confirmText: 'Confirmar',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+            primary: _setupGold,
+            onPrimary: _setupNavy,
+            surface: const Color(0xFF142541),
+            onSurface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedBirthDate = DateTime(picked.year, picked.month, picked.day));
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_countryCode == null) {
@@ -149,7 +183,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
       await PaperPlaneApi.instance.savePilotProfile(
         pilotName: _pilotName.text.trim(),
         pilotHandle: _pilotHandle.text.trim().replaceFirst(RegExp(r'^@'), ''),
-        birthYear: int.parse(_birthYear.text.trim()),
+        birthDate: _selectedBirthDate!,
         countryCode: _countryCode!,
         language: 'pt',
       );
@@ -234,7 +268,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                         Text('Escolhe a tua identidade', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                         SizedBox(height: 6),
                         Text(
-                          'O teu nome de copiloto será único e aparecerá com @. O ano de nascimento é um dado de perfil, não substitui uma verificação de idade segura.',
+                          'O teu nome de copiloto será único e aparecerá com @. A tua data de nascimento é declarada por ti. O servidor calcula a faixa etária, mas não verifica a tua identidade.',
                           style: TextStyle(color: Colors.white70, height: 1.45),
                         ),
                       ],
@@ -278,16 +312,32 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   ),
                   const SizedBox(height: 18),
                   TextFormField(
-                    controller: _birthYear,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    validator: (value) {
-                      final year = int.tryParse((value ?? '').trim());
-                      final current = DateTime.now().year;
-                      if (year == null || year < 1900 || year > current) return 'Introduz um ano válido.';
-                      return null;
-                    },
-                    decoration: _decoration('Ano de nascimento', Icons.cake_outlined, hint: 'Ex.: 2008'),
+                    readOnly: true,
+                    controller: TextEditingController(
+                      text: _selectedBirthDate == null ? '' : _formatBirthDate(_selectedBirthDate!),
+                    ),
+                    onTap: _saving ? null : _pickBirthDate,
+                    validator: (_) => _selectedBirthDate == null
+                        ? 'Seleciona a tua data de nascimento.'
+                        : null,
+                    decoration: _decoration(
+                      'Data de nascimento',
+                      Icons.cake_outlined,
+                      hint: 'Dia / mês / ano',
+                    ).copyWith(
+                      suffixIcon: IconButton(
+                        onPressed: _saving ? null : _pickBirthDate,
+                        icon: const Icon(Icons.calendar_month_rounded, color: _setupGoldLight),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      'Usamos a data para calcular a faixa etária. O dia e o mês não ficam guardados; o servidor conserva apenas o ano e a faixa declarada.',
+                      style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   if (_loadingCountries)
