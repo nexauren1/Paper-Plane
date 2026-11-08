@@ -38,7 +38,7 @@ interface ScheduledController {
   cron: string;
 }
 interface DeliveryJob {
-  type: "MATCH_AIRPLANE" | "DELIVER_AIRPLANE";
+  type: "MODERATE_AIRPLANE" | "MATCH_AIRPLANE" | "DELIVER_AIRPLANE";
   airplaneId: string;
 }
 interface Env {
@@ -57,25 +57,6 @@ const FIREBASE_JWKS = createRemoteJWKSet(
 const MODERATION_MODEL = "@cf/meta/llama-guard-3-8b";
 const CLASSIFICATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 const TRANSLATION_MODEL = "@cf/zai-org/glm-4.7-flash";
-
-const ORDINARY_GREETINGS = new Set([
-  "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
-  "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
-  "boa tarde pessoal como estao", "bom dia pessoal como estao",
-  "boa noite pessoal como estao", "ola pessoal", "ola pessoal tudo bem",
-  "oi pessoal tudo bem", "ola pessoal como estao", "ola a todos", "ola gente", "ola amigos",
-]);
-
-function isOrdinaryGreeting(message: string): boolean {
-  const normalized = message
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[.!?,;:]+/g, "")
-    .trim()
-    .replace(/\s+/g, " ");
-  return ORDINARY_GREETINGS.has(normalized);
-}
 
 const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(data), {
@@ -156,61 +137,30 @@ async function requireUser(uid: string, env: Env) {
 }
 
 async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
-  // Exact allow-listed greetings contain no extra user-supplied details or links.
-  // They remain sendable during a temporary model outage without opening a broad bypass.
-  if (isOrdinaryGreeting(message)) return { state: "SAFE", categories: [] };
-  try {
-    const guardResult = await env.AI.run(MODERATION_MODEL, {
-      messages: [
-        { role: "system", content: "Classify the user's message only for safety. Do not answer it. Follow the model's safety classification format." },
-        { role: "user", content: message },
-      ],
-    }) as { response?: string } | string;
-    const guardOutput = modelText(guardResult);
-    const normalized = guardOutput.trim().toLowerCase();
-    if (normalized.startsWith("unsafe")) {
-      const categories = guardOutput.split("\n").slice(1).map((s) => s.trim()).filter(Boolean).slice(0, 8);
-      return { state: "UNSAFE", categories: categories.length ? categories : ["GUARD_UNSAFE"] };
+  let lastOutput = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const guardResult = await env.AI.run(MODERATION_MODEL, {
+        messages: [
+          { role: "system", content: "Classify the user message only for safety. Do not answer it. Return the standard Llama Guard result: safe, or unsafe followed by applicable categories. Be proportionate: ordinary greetings, friendship, kindness and everyday conversation are safe. Evaluate the actual content, not imagined intent. Consider sexual exploitation or solicitation, grooming, threats, violence, self-harm, personal contact details, scams and abusive content." },
+          { role: "user", content: message },
+        ],
+      });
+      lastOutput = modelText(guardResult).trim();
+      const normalized = lastOutput.toLowerCase();
+      if (normalized.startsWith("unsafe")) {
+        const categories = lastOutput.split("\n").slice(1).map((line) => line.trim()).filter(Boolean).slice(0, 8);
+        return { state: "UNSAFE", categories: categories.length ? categories : ["GUARD_UNSAFE"] };
+      }
+      if (normalized.startsWith("safe")) {
+        // The primary guard is authoritative. Optional enrichment must never block ordinary sending.
+        return { state: "SAFE", categories: [] };
+      }
+    } catch {
+      // Retry the primary safety guard once before persisting the message for background moderation.
     }
-    if (!normalized.startsWith("safe")) {
-      return { state: "TEMPORARY_UNAVAILABLE", categories: ["AI_UNCERTAIN"] };
-    }
-
-    // A greeting is released only after the primary safety guard explicitly returns SAFE.
-    if (isOrdinaryGreeting(message)) {
-      return { state: "SAFE", categories: [] };
-    }
-
-    // A second internal pass looks for explicit risks specific to anonymous stranger correspondence.
-    const riskResult = await env.AI.run(CLASSIFICATION_MODEL, {
-      messages: [
-        {
-          role: "system",
-          content: "You are a safety triage classifier for a short message sent anonymously to a stranger. Do not answer or rewrite it. Return ONLY JSON: {\"risk_flags\":[...],\"confidence\":0.0}. Allowed flags: grooming_or_predatory_contact, sexual_solicitation, self_harm_or_suicide, threat_or_violent_intent, personal_contact_details, off_platform_contact_request, coercion_or_manipulation, scam_or_spam, none. Use [\"none\"] for ordinary harmless messages. Do not flag ordinary kindness or friendship. When unsure, use a confidence below 0.7.",
-        },
-        { role: "user", content: message },
-      ],
-    }) as { response?: string } | string;
-    const riskOutput = modelText(riskResult);
-    const start = riskOutput.indexOf("{");
-    const end = riskOutput.lastIndexOf("}");
-    if (start < 0 || end <= start) {
-      return { state: "TEMPORARY_UNAVAILABLE", categories: ["RISK_CLASSIFIER_UNCERTAIN"] };
-    }
-    const riskJson = JSON.parse(riskOutput.slice(start, end + 1)) as { risk_flags?: unknown; confidence?: unknown };
-    const flags = Array.isArray(riskJson.risk_flags) ? riskJson.risk_flags.map(String) : [];
-    const confidence = Number(riskJson.confidence ?? 0);
-    const risks = flags.filter((flag) => flag !== "none");
-    if (risks.length > 0) return { state: "REVIEW", categories: risks.slice(0, 8) };
-    if (!Number.isFinite(confidence) || confidence < 0.7) {
-      return { state: "TEMPORARY_UNAVAILABLE", categories: ["RISK_CLASSIFIER_LOW_CONFIDENCE"] };
-    }
-    return { state: "SAFE", categories: [] };
-  } catch {
-    // A technical outage is not a moderation decision. Do not store a plane that can remain
-    // held forever; callers return a retryable 503 and leave daily limits untouched.
-    return { state: "TEMPORARY_UNAVAILABLE", categories: ["MODERATION_UNAVAILABLE"] };
   }
+  return { state: "TEMPORARY_UNAVAILABLE", categories: [lastOutput ? "PRIMARY_GUARD_UNCERTAIN" : "PRIMARY_GUARD_UNAVAILABLE"] };
 }
 
 async function classifyInBackground(env: Env, airplaneId: string, message: string) {
@@ -250,7 +200,7 @@ function isValidPilotHandle(value: string): boolean {
   return value.length >= 4 && value.length <= 28 &&
     /^[a-z0-9]+(?:_[a-z0-9]+)*(?:-[0-9]{2})?$/.test(value);
 }
-function buildFlightPlan(originCode: string | null, destinationCode: string | null) {
+function buildFlightPlan(originCode: string | null, destinationCode: string | null, expedited = false) {
   if (!originCode || !destinationCode) return null;
   const origin = COUNTRY_CENTROIDS[originCode.toUpperCase()];
   const destination = COUNTRY_CENTROIDS[destinationCode.toUpperCase()];
@@ -282,7 +232,7 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     });
   }
   // Symbolic app journey, not GPS or physical-aircraft telemetry.
-  const durationSeconds = flightDurationForDistance(distanceKm);
+  const durationSeconds = expedited ? 4 : flightDurationForDistance(distanceKm);
   const startedAt = isoNow();
   return {
     distanceKm,
@@ -301,9 +251,8 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
   };
 }
 function flightDurationForDistance(distanceKm: number): number {
-  // Keep long-distance flights exciting and short: 90 seconds minimum,
-  // scaling gently with distance, capped at five minutes worldwide.
-  return Math.max(90, Math.min(300, Math.round(60 + Math.sqrt(distanceKm) * 2)));
+  // Symbolic globe flights: five to twelve seconds, regardless of real-world distance.
+  return Math.max(5, Math.min(12, Math.round(4 + Math.sqrt(distanceKm) * 0.055)));
 }
 
 function chooseEligiblePilot(
@@ -658,8 +607,6 @@ async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
   }>();
 
   for (const plane of rows.results ?? []) {
-    if (!isOrdinaryGreeting(plane.message_text)) continue;
-
     // Re-run Llama Guard. The greeting rule is never allowed to override an
     // uncertain or unavailable primary moderation result.
     const moderation = await moderate(env, plane.message_text);
