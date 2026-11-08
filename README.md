@@ -69,7 +69,7 @@ Cloudflare credentials are supplied through GitHub Actions secrets. Runtime inte
 
 - Users declare their date of birth in the profile form. The Worker calculates an age group and retains only the birth year, declared group and declaration timestamp. This is self-declaration, not identity or age verification.
 - Random matching keeps users in the same self-declared age group, and respects account status, consent, and block relationships. The declared group can be inaccurate and is not proof.
-- AI moderation is not proof that a user is safe or that a message is harmless. Uncertain items go to review; reports remain available to users.
+- AI moderation is not proof that a user is safe or that a message is harmless. Concrete risk flags are held for human review; inconclusive or unavailable moderation returns a retryable error and does not store the plane. Reports remain available to users.
 - AI risk signals must be treated as review cues, not a conclusion that a user has lied about age.
 - User reports and support tickets are stored separately. Only authorized admin UIDs can access moderation/support administration endpoints.
 - Before public release, verify the FCM service-account secret, Cloudflare queue/cron configuration, Firebase OAuth SHA fingerprints, local age-related requirements and real-device behaviour.
