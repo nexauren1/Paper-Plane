@@ -168,9 +168,8 @@ if "keystoreProperties" not in text:
     android_statement_start = re.search(locate, text).start()
     text = text[:android_statement_start] + prefix + text[android_statement_start:]
 
-if kotlin and '@Suppress("DEPRECATION")\\nandroid {' not in text:
-    text = re.sub(r"(?m)^android\\s*\\{", '@Suppress("DEPRECATION")\\nandroid {', text, count=1)
-
+if kotlin and '@Suppress("DEPRECATION")\nandroid {' not in text:
+    text = re.sub(r"(?m)^android\s*\{", '@Suppress("DEPRECATION")\nandroid {', text, count=1)
 signing_config = (
     '\n    signingConfigs {\n'
     '        create("release") {\n'
