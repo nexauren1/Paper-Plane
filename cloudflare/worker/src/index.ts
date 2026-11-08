@@ -61,6 +61,9 @@ const TRANSLATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 const ORDINARY_GREETINGS = new Set([
   "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
   "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+  "boa tarde pessoal como estao", "bom dia pessoal como estao",
+  "boa noite pessoal como estao", "ola pessoal tudo bem",
+  "oi pessoal tudo bem", "ola pessoal como estao",
 ]);
 
 function isOrdinaryGreeting(message: string): boolean {
@@ -153,6 +156,9 @@ async function requireUser(uid: string, env: Env) {
 }
 
 async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
+  // Exact allow-listed greetings contain no extra user-supplied details or links.
+  // They remain sendable during a temporary model outage without opening a broad bypass.
+  if (isOrdinaryGreeting(message)) return { state: "SAFE", categories: [] };
   try {
     const guardResult = await env.AI.run(MODERATION_MODEL, {
       messages: [
@@ -420,16 +426,6 @@ async function createAirplane(
     return json({ error: "DUPLICATE_MESSAGE", message: "This text was already sent recently." }, 429);
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  if (!forcedRecipient) {
-    const existingDaily = await env.DB.prepare(
-      "SELECT original_planes FROM daily_limits WHERE uid = ? AND limit_date = ?",
-    ).bind(uid, today).first<{ original_planes: number }>();
-    if (Number(existingDaily?.original_planes ?? 0) >= 1) {
-      return json({ error: "DAILY_LIMIT_REACHED", message: "One original plane can be launched per day." }, 429);
-    }
-  }
-
   const moderation = await moderate(env, message);
   if (moderation.state === "UNSAFE") {
     return json({ error: "MESSAGE_NOT_ALLOWED", categories: moderation.categories }, 422);
@@ -441,19 +437,21 @@ async function createAirplane(
     }, 503);
   }
 
-  if (!forcedRecipient) {
-    const daily = await env.DB.prepare(
-      "INSERT INTO daily_limits(uid, limit_date, original_planes) VALUES (?, ?, 1) ON CONFLICT(uid, limit_date) DO UPDATE SET original_planes = original_planes + 1 WHERE original_planes < 1 RETURNING original_planes",
-    ).bind(uid, today).first<{ original_planes: number }>();
-    if (!daily) return json({ error: "DAILY_LIMIT_REACHED", message: "One original plane can be launched per day." }, 429);
-  }
-
   const id = uuid();
   let status: string;
   if (moderation.state === "REVIEW") status = "HELD_REVIEW";
   else if (audience === "PUBLIC") status = "DELIVERED";
   else if (forcedRecipient) status = "FLYING";
   else status = "QUEUED";
+
+  const createdAt = isoNow();
+  const expiresAt = audience === "PUBLIC"
+    ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    : status === "QUEUED"
+      ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      : status === "HELD_REVIEW"
+        ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
+        : null;
 
   try {
     await env.DB.prepare(
@@ -462,8 +460,8 @@ async function createAirplane(
       id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
       user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
       moderation.state, JSON.stringify(moderation.categories), contentHash,
-      audience === "PUBLIC" ? isoNow() : null,
-      null,
+      audience === "PUBLIC" ? createdAt : null,
+      expiresAt,
       requestedPlaneModel,
     ).run();
   } catch (error) {
@@ -541,7 +539,7 @@ async function matchAirplane(airplaneId: string, env: Env) {
 
   const matchedAt = isoNow();
   const result = await env.DB.prepare(
-    "UPDATE airplanes SET recipient_uid = ?, status = 'FLYING', matched_at = ?, flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'QUEUED' AND recipient_uid IS NULL",
+    "UPDATE airplanes SET recipient_uid = ?, status = 'FLYING', expires_at = NULL, matched_at = ?, flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'QUEUED' AND recipient_uid IS NULL",
   ).bind(recipient.uid, matchedAt, route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
   if ((result.meta?.changes ?? 0) === 1) {
     await env.DB.prepare("UPDATE users SET last_received_at = ? WHERE uid = ?").bind(matchedAt, recipient.uid).run();
@@ -687,8 +685,8 @@ async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
       changed = (result.meta?.changes ?? 0) === 1;
     } else {
       const result = await env.DB.prepare(
-        "UPDATE airplanes SET status = 'QUEUED', moderation_state = 'SAFE', moderation_categories = '[]' WHERE id = ? AND status = 'HELD_REVIEW'",
-      ).bind(plane.id).run();
+        "UPDATE airplanes SET status = 'QUEUED', moderation_state = 'SAFE', moderation_categories = '[]', expires_at = ? WHERE id = ? AND status = 'HELD_REVIEW'",
+      ).bind(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), plane.id).run();
       changed = (result.meta?.changes ?? 0) === 1;
       if (changed) {
         try {
@@ -1511,6 +1509,11 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Expire stale unmatched planes and unresolved manual reviews before another matching pass.
+    await env.DB.prepare(
+      "UPDATE airplanes SET status = 'EXPIRED' WHERE status IN ('QUEUED','HELD_REVIEW') AND expires_at IS NOT NULL AND expires_at <= ?",
+    ).bind(isoNow()).run();
+
     // Recheck old exact greetings held by uncertain/failed moderation; only a fresh SAFE result is released.
     await releasePreviouslyHeldSafeGreetings(env);
 
