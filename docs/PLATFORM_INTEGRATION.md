@@ -67,12 +67,15 @@ From cloudflare/worker:
 ~~~~bash
 npm install
 npx wrangler login
-npx wrangler d1 create paper-plane-db
+# D1 já criado pelo proprietário do projeto:
+# database_name = paper_plane_db
+# database_id = fcca4c13-7b08-466d-9fdc-0e5dfac54ca9
+# NÃO executar "wrangler d1 create" novamente.
 npx wrangler queues create paper-plane-delivery
 npx wrangler queues create paper-plane-delivery-dlq
 ~~~~
 
-Copy the D1 database ID returned by the first command into wrangler.jsonc. Replace FIREBASE_PROJECT_ID, APP_ORIGINS with the exact Pages website origin(s), comma-separated, and database_id with the actual D1 ID.
+The supplied D1 database ID and name are already recorded in wrangler.jsonc. Do not create a second D1 database. Replace FIREBASE_PROJECT_ID with the Firebase project's exact Project ID and APP_ORIGINS with the exact Pages website origin(s), comma-separated. The Worker name is set to paper-plane to match the supplied workers.dev address.
 
 Then apply the schema and deploy:
 
@@ -112,7 +115,7 @@ flutter run \
   --dart-define=FIREBASE_APP_ID=YOUR_ANDROID_FIREBASE_APP_ID \
   --dart-define=FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_PROJECT_NUMBER \
   --dart-define=FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID \
-  --dart-define=PAPER_PLANE_API_BASE_URL=https://YOUR_WORKER_API_DOMAIN
+  --dart-define=PAPER_PLANE_API_BASE_URL=https://paper-plane.nexaurenstore.workers.dev
 ~~~~
 
 For a release APK, use the same defines with flutter build apk --release. Keep the Firebase API key and app identifiers in the app's normal Firebase configuration; never put a Cloudflare API token, service-account private key, or FCM service-account JSON in the Android application.
