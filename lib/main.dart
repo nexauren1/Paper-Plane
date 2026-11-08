@@ -713,6 +713,17 @@ class _HomePageState extends State<HomePage> {
               ]),
             )
           else ...[
+            if (profileReady && _profile['age_verified'] != 1)
+              const GlassPanel(
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(Icons.verified_user_outlined, color: ppGoldBright, size: 24),
+                  SizedBox(width: 12),
+                  Expanded(child: Text(
+                    'A segurança está ativa. O envio e a correspondência com desconhecidos só serão liberados após uma verificação de idade confiável. O ano indicado no perfil não substitui essa verificação.',
+                    style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45),
+                  )),
+                ]),
+              ),
             if (!profileReady)
               GlassPanel(
                 highlight: true,
