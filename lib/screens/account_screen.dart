@@ -143,8 +143,14 @@ class _AccountScreenState extends State<AccountScreen> {
         firstFlightState != 'LAUNCHED';
     if (needsFirstPlane) {
       if (!mounted) return 'Prepara o teu primeiro avião para continuar.';
+      final savedDraft = profileResult['firstFlight'] as Map<String, dynamic>? ?? const {};
       final firstFlight = await Navigator.of(context).push<Map<String, dynamic>>(
-        MaterialPageRoute(builder: (_) => const FirstFlightWorkshopScreen()),
+        MaterialPageRoute(
+          builder: (_) => FirstFlightWorkshopScreen(
+            initialMessage: savedDraft['message']?.toString() ?? '',
+            initialPlaneModel: savedDraft['planeModel']?.toString() ?? 'DART',
+          ),
+        ),
       );
       if (firstFlight?['completed'] != true) {
         _readyToEnter = false;
