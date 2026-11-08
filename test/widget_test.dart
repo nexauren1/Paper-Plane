@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:paper_plane/main.dart';
 
 void main() {
-  testWidgets('welcome screen opens the Paper Plane home', (tester) async {
+  testWidgets('welcome screen routes to the Firebase account gate', (tester) async {
     tester.view.physicalSize = const Size(1080, 2200);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
@@ -19,8 +19,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
-    // Home now loads the pilot profile and counts from the live Worker API.
-    // Widget tests verify navigation only and must not expect demo/offline data.
-    expect(find.byType(HomePage), findsOneWidget);
+    // In a widget-test environment Firebase is intentionally not initialised.
+    // The app must stop at the real Firebase account gate instead of creating
+    // an anonymous/offline pilot or showing demo account data.
+    expect(find.text('Firebase ainda não está ativo'), findsOneWidget);
   });
 }

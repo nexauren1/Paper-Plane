@@ -31,6 +31,70 @@ jobs:
       - name: Generate Android project files if missing
         run: flutter create --platforms=android --project-name paper_plane --org com.nexauren .
 
+      - name: Use direct Gradle distribution host
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          wrapper = Path("android/gradle/wrapper/gradle-wrapper.properties")
+          if not wrapper.exists():
+              raise SystemExit("Gradle wrapper properties were not generated.")
+
+          content = wrapper.read_text(encoding="utf-8")
+          if "services.gradle.org/distributions/" not in content:
+              raise SystemExit("Unexpected Gradle distribution URL; refusing to change an unknown wrapper.")
+          content = content.replace(
+              "services.gradle.org/distributions/",
+              "mirrors.huaweicloud.com/gradle/",
+          ).replace("-all.zip", "-bin.zip")
+          wrapper.write_text(content, encoding="utf-8")
+          print("Gradle wrapper will use the binary distribution from the Huawei Cloud mirror.")
+          PY
+
+      - name: Configure Maven mirrors for Android build dependencies
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          settings = Path("android/settings.gradle.kts")
+          root_build = Path("android/build.gradle.kts")
+          if not settings.exists() or not root_build.exists():
+              raise SystemExit("Generated Gradle settings/build files were not found.")
+
+          def add_mirrors(path: Path, repositories_start: int):
+              content = path.read_text(encoding="utf-8")
+              if "repo.huaweicloud.com/repository/maven/" in content:
+                  return content
+              marker = "repositories {"
+              index = content.find(marker, repositories_start)
+              if index < 0:
+                  raise SystemExit(f"Could not locate repositories block in {path}.")
+              block_end = content.find("}", index + len(marker))
+              google_line = content.find("google()", index + len(marker), block_end)
+              if google_line >= 0:
+                  newline = content.find("\n", google_line)
+                  insert_at = newline if newline >= 0 else google_line + len("google()")
+              else:
+                  insert_at = index + len(marker)
+              mirror_lines = (
+                  '\n            maven { url = uri("https://maven.aliyun.com/repository/public") }'
+                  '\n            maven { url = uri("https://repo.huaweicloud.com/repository/maven/") }'
+              )
+              return content[:insert_at] + "".join(mirror_lines) + content[insert_at:]
+
+          settings_text = settings.read_text(encoding="utf-8")
+          plugin_management = settings_text.find("pluginManagement {")
+          if plugin_management < 0:
+              raise SystemExit("Could not locate pluginManagement in generated settings.")
+          settings.write_text(add_mirrors(settings, plugin_management), encoding="utf-8")
+
+          root_text = root_build.read_text(encoding="utf-8")
+          root_build.write_text(add_mirrors(root_build, 0), encoding="utf-8")
+          print("Added Maven Central/Gradle Plugin Portal mirrors before default repositories.")
+          PY
+
       - name: Configure Firebase Android and build variables
         shell: bash
         run: |

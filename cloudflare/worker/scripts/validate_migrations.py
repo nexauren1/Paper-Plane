@@ -112,4 +112,15 @@ heart_table = DB.execute(
 ).fetchone()
 assert heart_table is not None, "Missing airplane_hearts table"
 
-print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata and hearts.")
+first_flight_table = DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'onboarding_first_flights'"
+).fetchone()
+assert first_flight_table is not None, "Missing onboarding_first_flights table"
+
+plane_model_column = DB.execute(
+    "SELECT name FROM pragma_table_info('airplanes') WHERE name = 'plane_model'"
+).fetchone()
+assert plane_model_column is not None, "Missing airplane plane_model column"
+
+
+print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop.")

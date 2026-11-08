@@ -99,6 +99,15 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> getProfile() => _request('/v1/profile');
 
+  Future<Map<String, dynamic>> saveFirstFlight({
+    required String message,
+    required String planeModel,
+  }) =>
+      _request('/v1/onboarding/first-flight', method: 'POST', body: {
+        'message': message,
+        'planeModel': planeModel,
+      });
+
   Future<Map<String, dynamic>> getCountries() => _request('/v1/meta/countries');
 
   Future<Map<String, dynamic>> checkPilotHandle(String handle) =>
@@ -122,6 +131,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> getAirplaneFlight(String id) =>
       _request('/v1/airplanes/$id/flight');
 
+  Future<Map<String, dynamic>> getSkyAtlas() => _request('/v1/atlas');
+
+
 
   Future<Map<String, dynamic>> getInbox() => _request('/v1/inbox');
 
@@ -143,6 +155,7 @@ class PaperPlaneApi {
     required String visibility,
     required String? destinationCountry,
     required bool allowReply,
+    String planeModel = 'DART',
   }) {
     return _request(
       '/v1/airplanes',
@@ -154,6 +167,7 @@ class PaperPlaneApi {
         'visibility': visibility == 'Público' ? 'PUBLIC' : 'RANDOM',
         'destinationCountry': destinationCountry,
         'allowReply': allowReply,
+        'planeModel': planeModel,
       },
     );
   }

@@ -497,10 +497,23 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   void _start() {
-    Navigator.of(context).pushReplacement(
+    final navigator = Navigator.of(context);
+    navigator.pushReplacement(
       PageRouteBuilder(
-        settings: const RouteSettings(name: 'MainShell'),
-        pageBuilder: (_, __, ___) => const MainShell(),
+        settings: const RouteSettings(name: 'AccountEntry'),
+        pageBuilder: (_, __, ___) => AccountScreen(
+          onAuthenticated: (firstFlightId) {
+            navigator.pushReplacement(
+              PageRouteBuilder(
+                settings: const RouteSettings(name: 'MainShell'),
+                pageBuilder: (_, __, ___) => MainShell(initialFlightId: firstFlightId),
+                transitionsBuilder: (_, animation, __, child) =>
+                    FadeTransition(opacity: animation, child: child),
+                transitionDuration: const Duration(milliseconds: 650),
+              ),
+            );
+          },
+        ),
         transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 650),
       ),
@@ -553,13 +566,25 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  const MainShell({super.key, this.initialFlightId});
+  final String? initialFlightId;
   @override
   State<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final firstFlightId = widget.initialFlightId;
+    if (firstFlightId != null && firstFlightId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ppPush(context, FlightScreen(airplaneId: firstFlightId));
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -619,6 +644,7 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _sent = [];
   int _unread = 0;
+  String? _firstFlightState;
   bool _loading = true;
   String? _error;
 
@@ -640,7 +666,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final results = await Future.wait([
         PaperPlaneApi.instance.getProfile(),
         PaperPlaneApi.instance.getSentPlanes(),
@@ -658,6 +684,7 @@ class _HomePageState extends State<HomePage> {
         _stats = stats;
         _sent = sent;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
+        _firstFlightState = results[0]['firstFlightState']?.toString();
         _loading = false;
       });
     } catch (error) {
@@ -744,6 +771,19 @@ class _HomePageState extends State<HomePage> {
                       if (completed == true) _refresh();
                     },
                   ),
+                ]),
+              ),
+            if (_firstFlightState == 'WAITING_FOR_AGE_VERIFICATION')
+              GlassPanel(
+                highlight: true,
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.inventory_2_outlined, color: ppGoldBright, size: 29),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('O teu primeiro avião está no hangar privado', style: TextStyle(fontWeight: FontWeight.w800)),
+                    SizedBox(height: 5),
+                    Text('A carta está guardada online. O servidor vai permitir o voo para outra pessoa quando a verificação de idade confiável estiver concluída.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  ])),
                 ]),
               ),
             GlassPanel(
@@ -859,7 +899,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       builder: (_) => const LaunchDialog(),
     );
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final profileResult = await PaperPlaneApi.instance.getProfile();
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       if (pilot['profile_completed'] != 1) {
@@ -1113,6 +1153,109 @@ String _flightTimeLeft(String? arrival) {
   return hours.toString() + 'h ' + minutes.toString() + 'min';
 }
 
+
+class AnimatedSkyFlight extends StatefulWidget {
+  const AnimatedSkyFlight({super.key});
+  @override
+  State<AnimatedSkyFlight> createState() => _AnimatedSkyFlightState();
+}
+
+class _AnimatedSkyFlightState extends State<AnimatedSkyFlight> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 5),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, __) => CustomPaint(
+        painter: _SkyFlightPainter(progress: _controller.value),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _SkyFlightPainter extends CustomPainter {
+  const _SkyFlightPainter({required this.progress});
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(bounds, const Radius.circular(20)),
+      Paint()..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF142C4B), Color(0xFF071225)],
+      ).createShader(bounds),
+    );
+
+    final random = math.Random(41);
+    for (var i = 0; i < 44; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      final opacity = 0.16 + random.nextDouble() * 0.45;
+      canvas.drawCircle(
+        Offset(x, y),
+        0.5 + random.nextDouble() * 1.1,
+        Paint()..color = (i % 9 == 0 ? ppGoldBright : Colors.white).withOpacity(opacity),
+      );
+    }
+
+    final path = Path()
+      ..moveTo(size.width * 0.07, size.height * 0.78)
+      ..cubicTo(
+        size.width * 0.28, size.height * 0.08,
+        size.width * 0.58, size.height * 0.98,
+        size.width * 0.91, size.height * 0.22,
+      );
+    final metric = path.computeMetrics().first;
+    final trail = metric.extractPath(0, metric.length * progress);
+    canvas.drawPath(trail, Paint()
+      ..color = ppGold.withOpacity(0.20)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+    canvas.drawPath(trail, Paint()
+      ..color = ppGoldBright.withOpacity(0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round);
+
+    final tangent = metric.getTangentForOffset(metric.length * progress);
+    if (tangent != null) {
+      canvas.save();
+      canvas.translate(tangent.position.dx, tangent.position.dy);
+      canvas.rotate(tangent.angle + math.pi / 2);
+      final plane = Path()
+        ..moveTo(0, -15)
+        ..lineTo(8, 10)
+        ..lineTo(0, 6)
+        ..lineTo(-8, 10)
+        ..close();
+      canvas.drawPath(plane, Paint()
+        ..color = ppGold.withOpacity(0.28)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+      canvas.drawPath(plane, Paint()..color = ppPaper);
+      canvas.drawPath(plane, Paint()..color = ppGoldBright..style = PaintingStyle.stroke..strokeWidth = 1.2);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SkyFlightPainter oldDelegate) => oldDelegate.progress != progress;
+}
+
 class GlobeFlightPainter extends CustomPainter {
   const GlobeFlightPainter({this.route, this.progress = 0});
   final Map<String, dynamic>? route;
@@ -1238,11 +1381,33 @@ class GlobeFlightPainter extends CustomPainter {
           centerLat, centerLng, center, radius * 0.985,
         );
         if (marker != null) {
-          canvas.drawCircle(marker, 9, Paint()
-            ..color = ppGold.withOpacity(0.24)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
-          canvas.drawCircle(marker, 4.2, Paint()..color = Colors.white);
-          canvas.drawCircle(marker, 2.3, Paint()..color = ppGold);
+          final previous = _project(lat1, lng1, centerLat, centerLng, center, radius * 0.985);
+          final next = _project(lat2, lng2, centerLat, centerLng, center, radius * 0.985);
+          final heading = previous != null && next != null
+              ? math.atan2(next.dy - previous.dy, next.dx - previous.dx)
+              : 0.0;
+          canvas.drawCircle(marker, 18, Paint()
+            ..color = ppGold.withOpacity(0.17)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+          canvas.save();
+          canvas.translate(marker.dx, marker.dy);
+          canvas.rotate(heading + math.pi / 2);
+          final paperPlane = Path()
+            ..moveTo(0, -14)
+            ..lineTo(7, 10)
+            ..lineTo(0, 6)
+            ..lineTo(-7, 10)
+            ..close();
+          canvas.drawPath(paperPlane, Paint()
+            ..color = ppGold.withOpacity(0.35)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+          canvas.drawPath(paperPlane, Paint()..color = ppPaper);
+          canvas.drawPath(paperPlane, Paint()
+            ..color = ppGoldBright
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..strokeJoin = StrokeJoin.round);
+          canvas.restore();
         }
       }
       if (origin is Map) {
@@ -1358,6 +1523,11 @@ class _FlightScreenState extends State<FlightScreen> {
             style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: const SizedBox(height: 142, child: AnimatedSkyFlight()),
+          ),
+          const SizedBox(height: 10),
           GlassPanel(
             padding: const EdgeInsets.all(10),
             highlight: true,
@@ -1497,7 +1667,7 @@ class _InboxPageState extends State<InboxPage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final results = await Future.wait([
         PaperPlaneApi.instance.getInbox(),
         PaperPlaneApi.instance.getSentPlanes(),
@@ -1640,7 +1810,7 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
       final plane = result['airplane'] as Map<String, dynamic>?;
       if (!mounted) return;
       if (plane == null) throw const PaperPlaneApiException('NOT_FOUND', 'Esta carta já não está disponível.');
-      ppPush(context, LetterScreen(airplane: plane));
+      ppPush(context, ArrivalExperienceScreen(airplane: plane));
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível abrir a carta.';
@@ -1708,7 +1878,7 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
           const Spacer(),
           GoldButton(label: _busy ? 'A abrir…' : 'Abrir devagar', icon: Icons.mail_outline, onPressed: _busy ? () {} : _open),
           const SizedBox(height: 12),
-          SoftButton(label: 'Libertar avião', icon: Icons.air_rounded, onPressed: _busy ? () {} : _release),
+          SoftButton(label: 'Libertar avião', icon: Icons.airplanemode_active_rounded, onPressed: _busy ? () {} : _release),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: false), icon: const Icon(Icons.flag_outlined, color: Colors.white54), label: const Text('Denunciar', style: TextStyle(color: Colors.white54))),
@@ -1718,6 +1888,183 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
       ),
     );
   }
+}
+
+
+class ArrivalExperienceScreen extends StatefulWidget {
+  const ArrivalExperienceScreen({super.key, required this.airplane});
+  final Map<String, dynamic> airplane;
+
+  @override
+  State<ArrivalExperienceScreen> createState() => _ArrivalExperienceScreenState();
+}
+
+class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _arrival = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  )..forward();
+
+  @override
+  void dispose() {
+    _arrival.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'O avião chegou',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 25),
+        child: Column(children: [
+          const SizedBox(height: 8),
+          const Text('Uma carta encontrou o caminho até ti.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700, fontSize: 17)),
+          const SizedBox(height: 14),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _arrival,
+              builder: (_, __) => CustomPaint(
+                painter: _HouseArrivalPainter(progress: _arrival.value),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('O avião pousou à tua porta.', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900), textAlign: TextAlign.center),
+          const SizedBox(height: 7),
+          const Text('A carta permanece fechada até escolheres abri-la.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 20),
+          AnimatedBuilder(
+            animation: _arrival,
+            builder: (_, __) => AnimatedOpacity(
+              opacity: _arrival.value >= 0.78 ? 1 : 0.35,
+              duration: const Duration(milliseconds: 260),
+              child: GoldButton(
+                label: _arrival.value >= 0.78 ? 'Abrir carta' : 'A chegar à tua porta…',
+                icon: Icons.mark_email_read_outlined,
+                onPressed: _arrival.value < 0.78
+                    ? () {}
+                    : () => ppPush(context, LetterScreen(airplane: widget.airplane)),
+                height: 62,
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _HouseArrivalPainter extends CustomPainter {
+  const _HouseArrivalPainter({required this.progress});
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(22)),
+      Paint()..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF0B1D34), Color(0xFF030A15)],
+      ).createShader(rect),
+    );
+    final random = math.Random(77);
+    for (var i = 0; i < 65; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height * 0.65;
+      canvas.drawCircle(Offset(x, y), 0.6 + random.nextDouble(), Paint()
+        ..color = Colors.white.withOpacity(0.12 + random.nextDouble() * 0.28));
+    }
+
+    final houseWidth = size.width * 0.61;
+    final houseHeight = size.height * 0.43;
+    final house = Rect.fromCenter(
+      center: Offset(size.width * 0.53, size.height * 0.70),
+      width: houseWidth,
+      height: houseHeight,
+    );
+    final wall = Path()
+      ..moveTo(house.left, house.top + 14)
+      ..lineTo(house.right, house.top + 14)
+      ..lineTo(house.right, house.bottom)
+      ..lineTo(house.left, house.bottom)
+      ..close();
+    final roof = Path()
+      ..moveTo(house.left - 20, house.top + 18)
+      ..lineTo(house.center.dx, house.top - houseHeight * 0.48)
+      ..lineTo(house.right + 20, house.top + 18)
+      ..close();
+    canvas.drawPath(wall, Paint()..color = const Color(0xFF243754));
+    canvas.drawPath(wall, Paint()..color = ppGold.withOpacity(0.36)..style = PaintingStyle.stroke..strokeWidth = 1.4);
+    canvas.drawPath(roof, Paint()..color = const Color(0xFF111C2D));
+    canvas.drawPath(roof, Paint()..color = ppGold.withOpacity(0.75)..style = PaintingStyle.stroke..strokeWidth = 2);
+
+    final door = Rect.fromCenter(
+      center: Offset(house.center.dx, house.bottom - houseHeight * 0.20),
+      width: houseWidth * 0.20,
+      height: houseHeight * 0.42,
+    );
+    canvas.drawRRect(RRect.fromRectAndRadius(door, const Radius.circular(7)), Paint()..color = const Color(0xFF071225));
+    final doorGlow = Paint()
+      ..color = ppGoldBright.withOpacity(0.65)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+    canvas.drawCircle(door.center, 19, doorGlow);
+    canvas.drawRRect(RRect.fromRectAndRadius(door, const Radius.circular(7)), Paint()..color = const Color(0xFF182B43)..style = PaintingStyle.stroke..strokeWidth = 1.5..color = ppGoldBright.withOpacity(0.8));
+
+    for (final dx in [house.left + houseWidth * 0.19, house.right - houseWidth * 0.19]) {
+      final window = Rect.fromCenter(center: Offset(dx, house.top + houseHeight * 0.37), width: houseWidth * 0.19, height: houseHeight * 0.22);
+      canvas.drawRRect(RRect.fromRectAndRadius(window, const Radius.circular(4)), Paint()..color = ppGold.withOpacity(0.75));
+      canvas.drawRRect(RRect.fromRectAndRadius(window, const Radius.circular(4)), Paint()..color = ppGoldBright.withOpacity(0.9)..style = PaintingStyle.stroke..strokeWidth = 1.2);
+    }
+
+    final start = Offset(size.width * 0.13, size.height * 0.18);
+    final end = Offset(door.center.dx, door.top + 6);
+    final control1 = Offset(size.width * 0.65, size.height * 0.08);
+    final control2 = Offset(size.width * 0.16, size.height * 0.58);
+    final flightPath = Path()
+      ..moveTo(start.dx, start.dy)
+      ..cubicTo(control1.dx, control1.dy, control2.dx, control2.dy, end.dx, end.dy);
+    final metric = flightPath.computeMetrics().first;
+    final current = metric.getTangentForOffset(metric.length * progress.clamp(0.0, 1.0));
+    if (current != null) {
+      final trail = metric.extractPath(0, metric.length * progress.clamp(0.0, 1.0));
+      canvas.drawPath(trail, Paint()
+        ..color = ppGold.withOpacity(0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
+      canvas.drawPath(trail, Paint()
+        ..color = ppGoldBright.withOpacity(0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round);
+      canvas.save();
+      canvas.translate(current.position.dx, current.position.dy);
+      canvas.rotate(current.angle + math.pi / 2);
+      final plane = Path()
+        ..moveTo(0, -14)
+        ..lineTo(7, 10)
+        ..lineTo(0, 6)
+        ..lineTo(-7, 10)
+        ..close();
+      canvas.drawPath(plane, Paint()..color = ppGold.withOpacity(0.3)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+      canvas.drawPath(plane, Paint()..color = ppPaper);
+      canvas.drawPath(plane, Paint()..color = ppGoldBright..style = PaintingStyle.stroke..strokeWidth = 1.2);
+      canvas.restore();
+    }
+
+    canvas.drawCircle(end, 12 + progress * 9, Paint()
+      ..color = ppGold.withOpacity((1 - progress).clamp(0.0, 1.0) * 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HouseArrivalPainter oldDelegate) => oldDelegate.progress != progress;
 }
 
 class LetterScreen extends StatefulWidget {
@@ -1875,7 +2222,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final result = await PaperPlaneApi.instance.getOpenSky();
       final messages = (result['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
@@ -2065,7 +2412,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final result = await PaperPlaneApi.instance.getProfile();
       if (!mounted) return;
       setState(() {
@@ -2157,8 +2504,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 Expanded(child: _ProfileNumber(number: received.toString(), label: 'Aviões recebidos')),
               ]),
             ),
+            const SectionTitle('Explorar o teu percurso'),
+            _ProfileLink(
+              icon: Icons.public_rounded,
+              title: 'Atlas do Céu',
+              subtitle: 'Países ligados às tuas cartas e modelos utilizados',
+              onTap: () => ppPush(context, const SkyAtlasScreen()),
+            ),
             const SectionTitle('Conta e preferências'),
-            _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
+            _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, AccountScreen(onAuthenticated: (_) => Navigator.of(context).pop()))),
             _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
             _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
             _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
@@ -2169,6 +2523,183 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+}
+
+
+class SkyAtlasScreen extends StatefulWidget {
+  const SkyAtlasScreen({super.key});
+
+  @override
+  State<SkyAtlasScreen> createState() => _SkyAtlasScreenState();
+}
+
+class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
+  Map<String, dynamic> _stats = {};
+  List<Map<String, dynamic>> _countries = [];
+  Map<String, dynamic> _models = {};
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.requireSignedInPilot();
+      final result = await PaperPlaneApi.instance.getSkyAtlas();
+      final countries = (result['countries'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _stats = result['stats'] as Map<String, dynamic>? ?? {};
+        _models = (_stats['models'] as Map?)?.cast<String, dynamic>() ?? {};
+        _countries = countries;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error is PaperPlaneApiException
+            ? error.message
+            : 'Não foi possível carregar o Atlas pela internet.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDistance = int.tryParse(_stats['totalDistanceKm']?.toString() ?? '') ?? 0;
+    final totalFlights = int.tryParse(_stats['totalFlights']?.toString() ?? '') ?? 0;
+    final completed = int.tryParse(_stats['completedFlights']?.toString() ?? '') ?? 0;
+    final active = int.tryParse(_stats['activeFlights']?.toString() ?? '') ?? 0;
+    final countryCount = int.tryParse(_stats['countriesCount']?.toString() ?? '') ?? _countries.length;
+
+    return ScreenFrame(
+      title: 'Atlas do Céu',
+      action: IconButton(
+        onPressed: _refresh,
+        tooltip: 'Atualizar atlas',
+        icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
+      ),
+      child: RefreshIndicator(
+        color: ppGold,
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+          children: [
+            const Text(
+              'O mundo que as tuas cartas estão a ligar.',
+              style: TextStyle(color: Colors.white70, height: 1.45),
+            ),
+            const SizedBox(height: 15),
+            if (_loading)
+              const Center(child: Padding(
+                padding: EdgeInsets.all(42),
+                child: CircularProgressIndicator(color: ppGold),
+              ))
+            else if (_error != null)
+              GlassPanel(
+                child: Column(children: [
+                  const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 32),
+                  const SizedBox(height: 8),
+                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Tentar novamente'),
+                  ),
+                ]),
+              )
+            else ...[
+              GlassPanel(
+                highlight: true,
+                child: Column(children: [
+                  const Icon(Icons.public_rounded, color: ppGoldBright, size: 52),
+                  const SizedBox(height: 8),
+                  Text(countryCount.toString(), style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: ppGoldBright)),
+                  const Text('PAÍSES LIGADOS ÀS TUAS CARTAS', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 10, letterSpacing: 1.3)),
+                  const SizedBox(height: 17),
+                  Row(children: [
+                    Expanded(child: _atlasStat('Quilómetros', totalDistance.toString(), Icons.route_rounded)),
+                    Container(width: 1, height: 50, color: Colors.white24),
+                    Expanded(child: _atlasStat('Voos concluídos', completed.toString(), Icons.mark_email_read_outlined)),
+                    Container(width: 1, height: 50, color: Colors.white24),
+                    Expanded(child: _atlasStat('Em curso', active.toString(), Icons.flight_takeoff_rounded)),
+                  ]),
+                ]),
+              ),
+              const SectionTitle('Países ligados'),
+              if (_countries.isEmpty)
+                const GlassPanel(
+                  child: Column(children: [
+                    Icon(Icons.explore_outlined, color: ppGoldBright, size: 34),
+                    SizedBox(height: 9),
+                    Text('O teu atlas está à espera da primeira rota.', style: TextStyle(fontWeight: FontWeight.w800)),
+                    SizedBox(height: 5),
+                    Text('Quando uma carta encontrar um destinatário e tiver uma rota registada, os países ligados aparecerão aqui.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+                  ]),
+                )
+              else
+                for (final country in _countries) ...[
+                  const SizedBox(height: 8),
+                  GlassPanel(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Row(children: [
+                      Text(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(country['name']?.toString() ?? _countryName(country['code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800))),
+                      const Icon(Icons.verified_rounded, color: ppGoldBright, size: 19),
+                    ]),
+                  ),
+                ],
+              const SectionTitle('Aviões do teu hangar'),
+              GlassPanel(
+                child: Row(children: [
+                  Expanded(child: _modelStat('Dardo', (_models['DART'] ?? 0).toString(), Icons.bolt_rounded)),
+                  Expanded(child: _modelStat('Planador', (_models['GLIDER'] ?? 0).toString(), Icons.airplanemode_active_rounded)),
+                  Expanded(child: _modelStat('Andorinha', (_models['SWALLOW'] ?? 0).toString(), Icons.airplanemode_active_rounded)),
+                ]),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                totalFlights == 0
+                    ? 'Os dados serão acrescentados quando o servidor registar os teus voos.'
+                    : '$totalFlights aviões registados na tua conta.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _atlasStat(String label, String value, IconData icon) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 5),
+    child: Column(children: [
+      Icon(icon, color: ppGoldBright, size: 19),
+      const SizedBox(height: 5),
+      Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: ppGoldBright)),
+      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+    ]),
+  );
+
+  Widget _modelStat(String title, String value, IconData icon) => Column(children: [
+    Icon(icon, color: ppGoldBright, size: 25),
+    const SizedBox(height: 5),
+    Text(value, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+    Text(title, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+  ]);
 }
 
 class _ProfileNumber extends StatelessWidget {
@@ -2578,7 +3109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       await PaperPlaneNotifications.enableAndRegister();
       if (mounted) setState(() => notifications = true);
       if (mounted) {

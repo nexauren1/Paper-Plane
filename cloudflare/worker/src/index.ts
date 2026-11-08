@@ -357,6 +357,10 @@ async function createAirplane(
   const audience = forcedRecipient ? "DIRECT" : body.visibility === "PUBLIC" ? "PUBLIC" : "RANDOM";
   const language = body.language === "en" ? "en" : "pt";
   const mood = text(body.mood, 32) || null;
+  const requestedPlaneModel = text(body.planeModel, 16).toUpperCase() || "DART";
+  if (!["DART", "GLIDER", "SWALLOW"].includes(requestedPlaneModel)) {
+    return json({ error: "INVALID_PLANE_MODEL" }, 400);
+  }
   const destination = text(body.destinationCountry, 2).toUpperCase() || null;
   const { user, response } = await ensureAgeReady(uid, env);
   if (response) return response;
@@ -425,13 +429,14 @@ async function createAirplane(
 
   try {
     await env.DB.prepare(
-      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at, plane_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(
       id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
       user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
       moderation.state, JSON.stringify(moderation.categories), contentHash,
       audience === "PUBLIC" ? isoNow() : null,
       null,
+      requestedPlaneModel,
     ).run();
   } catch (error) {
     const reason = String(error);
@@ -440,6 +445,10 @@ async function createAirplane(
     }
     throw error;
   }
+
+  await env.DB.prepare(
+    "UPDATE onboarding_first_flights SET state = 'LAUNCHED', updated_at = ? WHERE uid = ? AND state = 'READY_TO_LAUNCH'",
+  ).bind(isoNow(), uid).run();
 
   if (moderation.state === "SAFE") ctx.waitUntil(classifyInBackground(env, id, message));
   if (directFlight && status === "FLYING") {
@@ -800,7 +809,101 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const received = await env.DB.prepare(
       "SELECT COUNT(*) AS received FROM inbox WHERE recipient_uid = ?",
     ).bind(uid).first<{ received: number }>();
-    return json({ pilot: user, stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 } });
+    if (user.age_verified === 1) {
+      await env.DB.prepare(
+        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
+      ).bind(isoNow(), uid).run();
+    }
+    const firstFlight = await env.DB.prepare(
+      "SELECT state, message_text, plane_model FROM onboarding_first_flights WHERE uid = ?",
+    ).bind(uid).first<{ state: string; message_text: string; plane_model: string }>();
+    return json({
+      pilot: user,
+      stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 },
+      firstFlightState: firstFlight?.state ?? null,
+      firstFlight: firstFlight ? {
+        state: firstFlight.state,
+        message: firstFlight.message_text,
+        planeModel: firstFlight.plane_model,
+      } : null,
+    });
+  }
+
+  if (method === "GET" && path === "/v1/atlas") {
+    const rows = await env.DB.prepare(
+      "SELECT status, flight_distance_km, route_json, plane_model FROM airplanes WHERE (sender_uid = ? OR recipient_uid = ?) AND route_json IS NOT NULL ORDER BY created_at DESC LIMIT 500",
+    ).bind(uid, uid).all<{
+      status: string;
+      flight_distance_km: number | null;
+      route_json: string | null;
+      plane_model: string | null;
+    }>();
+    const countries = new Set<string>();
+    const models: Record<string, number> = { DART: 0, GLIDER: 0, SWALLOW: 0 };
+    let totalDistanceKm = 0;
+    let completedFlights = 0;
+    let activeFlights = 0;
+    for (const row of rows.results ?? []) {
+      const model = row.plane_model ?? "DART";
+      if (model in models) models[model] += 1;
+      if (["DELIVERED", "READ", "RESPONDED"].includes(row.status)) completedFlights += 1;
+      if (["QUEUED", "FLYING"].includes(row.status)) activeFlights += 1;
+      if (row.status !== "REJECTED" && row.status !== "CANCELLED") {
+        totalDistanceKm += row.flight_distance_km ?? 0;
+      }
+      try {
+        const route = row.route_json ? JSON.parse(row.route_json) as {
+          originCountry?: string; destinationCountry?: string;
+        } : null;
+        if (route?.originCountry && COUNTRY_CENTROIDS[route.originCountry]) countries.add(route.originCountry);
+        if (route?.destinationCountry && COUNTRY_CENTROIDS[route.destinationCountry]) countries.add(route.destinationCountry);
+      } catch {
+        // Ignore malformed legacy route snapshots; the user's other journeys remain visible.
+      }
+    }
+    const items = [...countries]
+      .map((code) => ({ code, name: COUNTRY_CENTROIDS[code].name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return json({
+      countries: items,
+      stats: {
+        totalFlights: rows.results?.length ?? 0,
+        completedFlights,
+        activeFlights,
+        totalDistanceKm,
+        countriesCount: items.length,
+        models,
+      },
+    });
+  }
+
+  if (method === "POST" && path === "/v1/onboarding/first-flight") {
+    const user = await requireUser(uid, env);
+    if (!user || user.profile_completed !== 1 || !user.country_code) {
+      return json({ error: "PROFILE_SETUP_REQUIRED" }, 409);
+    }
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const message = text(body.message, 200);
+    const planeModel = text(body.planeModel, 16).toUpperCase() || "DART";
+    if (!message || [...message].length > 200) {
+      return json({ error: "MESSAGE_LENGTH", message: "Write 1 to 200 characters for your first plane." }, 400);
+    }
+    if (!["DART", "GLIDER", "SWALLOW"].includes(planeModel)) {
+      return json({ error: "INVALID_PLANE_MODEL" }, 400);
+    }
+    const state = user.age_verified === 1 ? "READY_TO_LAUNCH" : "WAITING_FOR_AGE_VERIFICATION";
+    await env.DB.prepare(
+      "INSERT INTO onboarding_first_flights(uid, message_text, plane_model, state, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET message_text = excluded.message_text, plane_model = excluded.plane_model, state = excluded.state, updated_at = excluded.updated_at",
+    ).bind(uid, message, planeModel, state, isoNow()).run();
+    return json({
+      completed: true,
+      state,
+      privateOnly: state === "WAITING_FOR_AGE_VERIFICATION",
+      message: state === "WAITING_FOR_AGE_VERIFICATION"
+        ? "Your first plane is safely stored in your private hangar. Delivery to another pilot remains locked until trusted age verification is complete."
+        : "Your first plane is ready for launch.",
+    }, 201);
   }
 
   if (method === "GET" && path === "/v1/meta/countries") {
