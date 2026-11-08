@@ -27,9 +27,9 @@ The private chat/“Chama” screen is only a labelled preview and is not part o
 - **Firebase Authentication:** account identity and signed Firebase ID tokens.
 - **Cloudflare Worker:** authenticated API, moderation, matching, delivery and notification dispatch.
 - **Cloudflare D1:** pilot profiles, airplanes, inbox, reports, support tickets and audit events.
-- **Cloudflare Queues and scheduled Worker tasks:** asynchronous matching and flight delivery.
+- **Cloudflare Queues and scheduled Worker tasks:** asynchronous matching and flight delivery. Matching is retried each minute while a recipient is not available; same-country symbolic flights have a 90-second minimum duration, while longer routes use an estimated duration based on distance.
 - **Workers AI:** content-safety checks, risk triage, classification and translation. It does not write personal messages for pilots.
-- **Firebase Cloud Messaging:** Android delivery notifications.
+- **Firebase Cloud Messaging:** Android delivery notifications. After enabling notifications in Settings and configuring the Worker FCM service-account secret, Android push alerts and in-app foreground alerts identify the exact incoming airplane.
 
 ## Repository layout
 
