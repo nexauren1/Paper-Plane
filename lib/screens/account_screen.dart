@@ -11,7 +11,9 @@ const Color _gold = Color(0xFFF0CE7C);
 const Color _goldLight = Color(0xFFFFE7A8);
 
 class AccountScreen extends StatefulWidget {
-  const AccountScreen({super.key});
+  const AccountScreen({super.key, this.onAuthenticated});
+
+  final ValueChanged<String?>? onAuthenticated;
 
   @override
   State<AccountScreen> createState() => _AccountScreenState();
@@ -26,6 +28,8 @@ class _AccountScreenState extends State<AccountScreen> {
   bool _creating = false;
   bool _busy = false;
   bool _showPassword = false;
+  bool _readyToEnter = false;
+  String? _firstFlightId;
 
   @override
   void dispose() {
@@ -60,10 +64,12 @@ class _AccountScreenState extends State<AccountScreen> {
     }
 
     if (!mounted) return;
+    final proceed = _readyToEnter;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
+    if (proceed) widget.onAuthenticated?.call(_firstFlightId);
   }
 
   Future<void> _continueWithGoogle() async {
@@ -79,25 +85,67 @@ class _AccountScreenState extends State<AccountScreen> {
     }
 
     if (!mounted) return;
+    final proceed = _readyToEnter;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
+    if (proceed) widget.onAuthenticated?.call(_firstFlightId);
+  }
+
+  Future<void> _continueExistingAccount() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    String message;
+    try {
+      message = await _syncPilot('Sessão confirmada.');
+    } catch (error) {
+      message = _friendlyError(error);
+    }
+    if (!mounted) return;
+    final proceed = _readyToEnter;
+    setState(() => _busy = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+    if (proceed) widget.onAuthenticated?.call(_firstFlightId);
   }
 
   Future<String> _syncPilot(String successMessage) async {
-    final result = await PaperPlaneApi.instance.bootstrapPilot();
-    final pilot = result['pilot'] as Map<String, dynamic>? ?? const {};
+    await PaperPlaneApi.instance.bootstrapPilot();
+    var profileResult = await PaperPlaneApi.instance.getProfile();
+    var pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+
     if (pilot['profile_completed'] != 1) {
-      if (!mounted) return '$successMessage';
+      if (!mounted) return 'Completa o perfil para continuar.';
       final completed = await Navigator.of(context).push<bool>(
         MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
       );
       if (completed != true) {
-        return 'A conta foi criada, mas falta completar o perfil de copiloto para utilizar os voos.';
+        _readyToEnter = false;
+        return 'O perfil é necessário antes de continuar.';
       }
+      profileResult = await PaperPlaneApi.instance.getProfile();
     }
-    return '$successMessage Perfil sincronizado com o Paper Plane.';
+
+    final stats = profileResult['stats'] as Map<String, dynamic>? ?? const {};
+    final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
+    if (sent == 0) {
+      if (!mounted) return 'Prepara o teu primeiro avião para continuar.';
+      final firstFlight = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(builder: (_) => const FirstFlightWorkshopScreen()),
+      );
+      if (firstFlight?['completed'] != true) {
+        _readyToEnter = false;
+        return 'O primeiro avião é o passo de entrada no Paper Plane.';
+      }
+      _firstFlightId = firstFlight?['airplaneId']?.toString();
+    } else {
+      _firstFlightId = null;
+    }
+
+    _readyToEnter = true;
+    return '$successMessage Perfil e primeiro voo preparados.';
   }
 
   Future<void> _resetPassword() async {
@@ -215,10 +263,16 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
                 const SizedBox(height: 16),
                 _GoldAction(
-                  label: 'Terminar sessão',
-                  icon: Icons.logout_rounded,
+                  label: 'Continuar para o Paper Plane',
+                  icon: Icons.flight_takeoff_rounded,
                   busy: _busy,
-                  onPressed: _signOut,
+                  onPressed: _continueExistingAccount,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _signOut,
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Terminar sessão'),
                 ),
               ],
             ),
