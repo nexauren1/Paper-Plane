@@ -750,27 +750,30 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Escreve uma mensagem antes de lançar o avião.')));
       return;
     }
+    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível iniciar: liga a configuração Firebase e o servidor Cloudflare.')),
+      );
+      return;
+    }
 
     showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const LaunchDialog(),
     );
-
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 650));
-
-      if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Modo de demonstração: configura Firebase e o endereço da API para enviar aviões reais.')),
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      final profileResult = await PaperPlaneApi.instance.getProfile();
+      final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+      if (pilot['profile_completed'] != 1) {
+        if (mounted) Navigator.of(context).pop();
+        final completed = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
         );
-        ppPush(context, const FlightScreen());
-        return;
+        if (completed != true) return;
       }
 
-      await PaperPlaneAuth.ensureAnonymousPilot();
       final result = await PaperPlaneApi.instance.sendPlane(
         message: _message.text.trim(),
         language: 'pt',
@@ -788,14 +791,17 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       if (!mounted) return;
       Navigator.of(context).pop();
       final airplane = result['airplane'] as Map<String, dynamic>? ?? const {};
-      final status = airplane['status']?.toString() ?? 'QUEUED';
-      ppPush(context, FlightScreen(status: status, isDemo: false));
+      final id = airplane['id']?.toString();
+      if (id == null || id.isEmpty) {
+        throw const PaperPlaneApiException('AIRPLANE_NOT_CREATED', 'O servidor não confirmou a criação do avião.');
+      }
+      ppPush(context, FlightScreen(airplaneId: id));
     } catch (error) {
       if (!mounted) return;
-      Navigator.of(context).pop();
+      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
       final message = error is PaperPlaneApiException
           ? error.message
-          : 'Não foi possível lançar o avião. Tenta novamente.';
+          : 'Não foi possível lançar o avião. Verifica a ligação e tenta novamente.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }
@@ -907,7 +913,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
           const SizedBox(height: 18),
           GoldButton(label: 'Lançar avião', icon: Icons.send_rounded, onPressed: _send, height: 64),
           const SizedBox(height: 9),
-          const Text('Máximo de 200 caracteres. O lançamento real será ativado com a ligação ao servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const Text('Máximo de 200 caracteres. O servidor gere a procura de destinatário, a rota e a entrega.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
         ],
       ),
     );
