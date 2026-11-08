@@ -164,6 +164,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> releasePlane(String id) =>
       _request('/v1/airplanes/$id/release', method: 'POST');
 
+  Future<Map<String, dynamic>> sendHeart(String id) =>
+      _request('/v1/airplanes/$id/heart', method: 'POST');
+
   Future<Map<String, dynamic>> translatePlane(String id, String language) =>
       _request('/v1/airplanes/$id/translation', method: 'POST', body: {'language': language});
 
