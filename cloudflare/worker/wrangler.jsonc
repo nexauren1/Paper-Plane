@@ -5,7 +5,7 @@
   "compatibility_date": "2026-11-07",
   "observability": { "enabled": true },
   "vars": {
-    "FIREBASE_PROJECT_ID": "REPLACE_WITH_FIREBASE_PROJECT_ID",
+    "FIREBASE_PROJECT_ID": "studio-7819491277-fa972",
     "APP_ORIGINS": "https://REPLACE_WITH_YOUR_PAGES_DOMAIN"
   },
   "ai": { "binding": "AI" },
