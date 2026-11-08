@@ -1499,7 +1499,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   const flightMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/flight$/);
   if (method === "GET" && flightMatch) {
-    const plane = await env.DB.prepare(
+    const loadFlightPlane = () => env.DB.prepare(
       "SELECT id, sender_uid, recipient_uid, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
     ).bind(flightMatch[1], uid, uid).first<{
       id: string; sender_uid: string; recipient_uid: string | null; status: string;
@@ -1508,7 +1508,65 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       flight_duration_seconds: number | null; flight_started_at: string | null;
       estimated_arrival_at: string | null; route_json: string | null;
     }>();
+    let plane = await loadFlightPlane();
     if (!plane) return json({ error: "NOT_FOUND" }, 404);
+
+    // The sender's live tracker also nudges matching. Queue + cron remain the
+    // background retry paths, but an open flight screen no longer waits for cron.
+    if (plane.status === "QUEUED" && plane.sender_uid === uid) {
+      await matchAirplane(plane.id, env);
+      plane = await loadFlightPlane();
+      if (!plane) return json({ error: "NOT_FOUND" }, 404);
+    }
+
+    let matchingInfo: {
+      sameGroupProfiles: number;
+      eligibleRecipients: number;
+      reason: string;
+    } | null = null;
+    if (plane.status === "QUEUED" && plane.sender_uid === uid) {
+      const sender = await requireUser(uid, env);
+      if (sender && ["UNDER_18", "ADULT"].includes(sender.declared_age_band)) {
+        const counts = await env.DB.prepare(
+          `SELECT COUNT(*) AS same_group_profiles,
+                  COALESCE(SUM(CASE
+                    WHEN u.accept_random_mail = 1
+                     AND NOT EXISTS (
+                       SELECT 1 FROM blocks b
+                       WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid)
+                          OR (b.blocker_uid = u.uid AND b.blocked_uid = ?)
+                     )
+                     AND NOT EXISTS (
+                       SELECT 1 FROM reports r
+                       WHERE r.reporter_uid = u.uid
+                         AND r.reported_uid = ?
+                         AND r.status = 'OPEN'
+                     )
+                    THEN 1 ELSE 0 END), 0) AS eligible_recipients
+             FROM users u
+             WHERE u.uid <> ?
+               AND u.status = 'ACTIVE'
+               AND u.profile_completed = 1
+               AND u.country_code IS NOT NULL
+               AND u.declared_age_band = ?`,
+        ).bind(uid, uid, uid, uid, sender.declared_age_band).first<{
+          same_group_profiles: number;
+          eligible_recipients: number;
+        }>();
+        const sameGroupProfiles = Number(counts?.same_group_profiles ?? 0);
+        const eligibleRecipients = Number(counts?.eligible_recipients ?? 0);
+        matchingInfo = {
+          sameGroupProfiles,
+          eligibleRecipients,
+          reason: sameGroupProfiles === 0
+            ? "NO_PILOTS_IN_DECLARED_AGE_GROUP"
+            : eligibleRecipients === 0
+              ? "NO_RECIPIENTS_ACCEPTING_PLANES"
+              : "MATCHING_RETRYING",
+        };
+      }
+    }
+
     let route: { points?: Array<{ lat: number; lng: number }>; [key: string]: unknown } | null = null;
     try { route = plane.route_json ? JSON.parse(plane.route_json) : null; } catch { route = null; }
     const progress = flightProgress(plane.flight_started_at, plane.estimated_arrival_at, plane.status);
@@ -1529,6 +1587,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       flight: {
         id: plane.id, status: plane.status, matchedAt: plane.matched_at,
         searching: plane.status === "QUEUED",
+        matchingInfo,
         distanceKm: plane.flight_distance_km,
         durationSeconds: plane.flight_duration_seconds,
         startedAt: plane.flight_started_at,
