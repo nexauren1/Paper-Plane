@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/paper_plane_api.dart';
+import 'age_verification_screen.dart';
 
 const Color _workshopNavy = Color(0xFF071225);
 const Color _workshopGold = Color(0xFFF0CE7C);
@@ -126,6 +127,19 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
     });
   }
 
+  Future<void> _verifyAgeAndContinue() async {
+    final verified = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AgeVerificationScreen()),
+    );
+    if (verified == true && mounted) {
+      setState(() {
+        _waitingForAge = false;
+        _error = null;
+      });
+    }
+  }
+
+
   @override
   Widget build(BuildContext context) {
     if (_waitingForAge) {
@@ -147,17 +161,32 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white70, height: 1.5),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     height: 58,
                     child: FilledButton.icon(
-                      onPressed: _continueToSky,
-                      icon: const Icon(Icons.flight_takeoff_rounded),
-                      label: const Text('Entrar no meu céu'),
+                      onPressed: _verifyAgeAndContinue,
+                      icon: const Icon(Icons.verified_user_outlined),
+                      label: const Text('Verificar idade para libertar o avião'),
                       style: FilledButton.styleFrom(
                         backgroundColor: _workshopGold,
                         foregroundColor: _workshopNavy,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: _continueToSky,
+                      icon: const Icon(Icons.flight_takeoff_rounded),
+                      label: const Text('Entrar no meu céu por agora'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _workshopGoldBright,
+                        side: BorderSide(color: _workshopGold.withOpacity(0.5)),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                       ),
                     ),
