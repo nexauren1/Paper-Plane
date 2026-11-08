@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
@@ -7,6 +8,7 @@ import 'services/paper_plane_auth.dart';
 import 'services/paper_plane_notifications.dart';
 import 'services/paper_plane_analytics.dart';
 import 'screens/account_screen.dart';
+import 'screens/pilot_profile_setup_screen.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -978,79 +980,369 @@ class _LaunchDialogState extends State<LaunchDialog> with SingleTickerProviderSt
   }
 }
 
-class FlightScreen extends StatelessWidget {
-  const FlightScreen({super.key, this.status = 'QUEUED', this.isDemo = true});
 
-  final String status;
-  final bool isDemo;
-
-  String get _statusLabel => switch (status) {
-    'QUEUED' => 'À espera de um destinatário elegível',
-    'FLYING' => 'A encaminhar a mensagem',
-    'DELIVERED' => 'Mensagem publicada / entregue',
-    'HELD_REVIEW' => 'Retido para revisão de segurança',
-    'READ' => 'Mensagem aberta',
-    _ => 'Estado: $status',
+String _countryName(String? code) {
+  const names = <String, String>{
+    'MZ': 'Moçambique', 'JP': 'Japão', 'BR': 'Brasil', 'PT': 'Portugal',
+    'ZA': 'África do Sul', 'IN': 'Índia', 'TH': 'Tailândia', 'US': 'Estados Unidos',
+    'GB': 'Reino Unido', 'FR': 'França', 'DE': 'Alemanha', 'AO': 'Angola',
+    'KE': 'Quénia', 'NG': 'Nigéria', 'CA': 'Canadá', 'AU': 'Austrália',
   };
+  if (code == null || code.isEmpty) return 'Outro lugar do mundo';
+  return names[code.toUpperCase()] ?? code.toUpperCase();
+}
+
+String _countryFlag(String? code) {
+  if (code == null || code.length != 2) return '🌍';
+  return String.fromCharCodes(code.toUpperCase().codeUnits.map((value) => value + 127397));
+}
+
+String _flightTimeLeft(String? arrival) {
+  if (arrival == null) return 'A calcular';
+  final date = DateTime.tryParse(arrival);
+  if (date == null) return 'A calcular';
+  final left = date.difference(DateTime.now());
+  if (left.isNegative) return 'A concluir';
+  final hours = left.inHours;
+  final minutes = left.inMinutes.remainder(60);
+  if (hours == 0) return minutes.toString() + 'min';
+  return hours.toString() + 'h ' + minutes.toString() + 'min';
+}
+
+class GlobeFlightPainter extends CustomPainter {
+  const GlobeFlightPainter({this.route, this.progress = 0});
+  final Map<String, dynamic>? route;
+  final double progress;
+
+  Offset? _project(double lat, double lng, double centerLat, double centerLng, Offset center, double radius) {
+    const r = math.pi / 180;
+    final p = lat * r;
+    final l = lng * r;
+    final cp = centerLat * r;
+    final cl = centerLng * r;
+    final delta = l - cl;
+    final x = math.cos(p) * math.sin(delta);
+    final y = math.sin(p) * math.cos(cp) - math.cos(p) * math.cos(delta) * math.sin(cp);
+    final z = math.sin(p) * math.sin(cp) + math.cos(p) * math.cos(delta) * math.cos(cp);
+    if (z < -0.025) return null;
+    return Offset(center.dx + x * radius, center.dy - y * radius);
+  }
+
+  List<double> _midpoint(Map<String, dynamic> origin, Map<String, dynamic> destination) {
+    const r = math.pi / 180;
+    List<double> vector(Map<String, dynamic> point) {
+      final lat = (point['lat'] as num).toDouble() * r;
+      final lng = (point['lng'] as num).toDouble() * r;
+      return [math.cos(lat) * math.cos(lng), math.cos(lat) * math.sin(lng), math.sin(lat)];
+    }
+    final a = vector(origin), b = vector(destination);
+    final x = a[0] + b[0], y = a[1] + b[1], z = a[2] + b[2];
+    return [
+      math.atan2(z, math.sqrt(x * x + y * y)) / r,
+      math.atan2(y, x) / r,
+    ];
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width * 0.44, size.height * 0.43);
+    final origin = route?['origin'];
+    final destination = route?['destination'];
+    final midpoint = origin is Map && destination is Map
+        ? _midpoint(Map<String, dynamic>.from(origin), Map<String, dynamic>.from(destination))
+        : <double>[0, 0];
+    final centerLat = midpoint[0], centerLng = midpoint[1];
+    final sphereRect = Rect.fromCircle(center: center, radius: radius);
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(-0.35, -0.42),
+          radius: 1.1,
+          colors: [Color(0xFF1B3B65), Color(0xFF0B1C35), Color(0xFF030914)],
+          stops: [0, 0.56, 1],
+        ).createShader(sphereRect),
+    );
+    canvas.drawCircle(center, radius, Paint()
+      ..color = ppGold.withOpacity(0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2);
+    canvas.save();
+    canvas.clipPath(Path()..addOval(sphereRect));
+
+    final gridPaint = Paint()
+      ..color = const Color(0xFF6D8CB8).withOpacity(0.23)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    for (var factor = -0.75; factor <= 0.75; factor += 0.25) {
+      final y = center.dy + radius * factor;
+      final rx = radius * math.sqrt(1 - factor * factor);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx, y), width: rx * 2, height: math.max(1, radius * 0.12)), gridPaint);
+    }
+    canvas.drawOval(Rect.fromCenter(center: center, width: radius * 0.72, height: radius * 2), gridPaint);
+    canvas.drawOval(Rect.fromCenter(center: center, width: radius * 1.45, height: radius * 2), gridPaint);
+
+    final raw = route?['points'];
+    final points = raw is List
+        ? raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+        : <Map<String, dynamic>>[];
+    if (points.isNotEmpty) {
+      final path = Path();
+      Offset? previous;
+      for (final point in points) {
+        final projected = _project(
+          (point['lat'] as num).toDouble(),
+          (point['lng'] as num).toDouble(),
+          centerLat, centerLng, center, radius * 0.985,
+        );
+        if (projected == null) {
+          previous = null;
+          continue;
+        }
+        if (previous == null) {
+          path.moveTo(projected.dx, projected.dy);
+        } else {
+          path.lineTo(projected.dx, projected.dy);
+        }
+        previous = projected;
+      }
+      canvas.drawPath(path, Paint()
+        ..color = ppGold.withOpacity(0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 10
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
+      canvas.drawPath(path, Paint()
+        ..color = ppGoldBright
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2
+        ..strokeCap = StrokeCap.round);
+
+      final scaled = progress.clamp(0.0, 1.0) * (points.length - 1);
+      final index = math.min(points.length - 2, scaled.floor());
+      if (points.length > 1) {
+        final fraction = scaled - index;
+        final first = points[index], second = points[index + 1];
+        final lat1 = (first['lat'] as num).toDouble();
+        final lng1 = (first['lng'] as num).toDouble();
+        final lat2 = (second['lat'] as num).toDouble();
+        final lng2 = (second['lng'] as num).toDouble();
+        final marker = _project(
+          lat1 + (lat2 - lat1) * fraction,
+          lng1 + (lng2 - lng1) * fraction,
+          centerLat, centerLng, center, radius * 0.985,
+        );
+        if (marker != null) {
+          canvas.drawCircle(marker, 9, Paint()
+            ..color = ppGold.withOpacity(0.24)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+          canvas.drawCircle(marker, 4.2, Paint()..color = Colors.white);
+          canvas.drawCircle(marker, 2.3, Paint()..color = ppGold);
+        }
+      }
+      if (origin is Map) {
+        final p = _project((origin['lat'] as num).toDouble(), (origin['lng'] as num).toDouble(), centerLat, centerLng, center, radius * 0.985);
+        if (p != null) canvas.drawCircle(p, 4, Paint()..color = const Color(0xFF8DE0AF));
+      }
+      if (destination is Map) {
+        final p = _project((destination['lat'] as num).toDouble(), (destination['lng'] as num).toDouble(), centerLat, centerLng, center, radius * 0.985);
+        if (p != null) canvas.drawCircle(p, 4, Paint()..color = ppGoldBright);
+      }
+    } else {
+      canvas.drawCircle(center, radius * 0.28, Paint()
+        ..color = ppGold.withOpacity(0.08)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22));
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant GlobeFlightPainter oldDelegate) =>
+      oldDelegate.route != route || oldDelegate.progress != progress;
+}
+
+class FlightScreen extends StatefulWidget {
+  const FlightScreen({super.key, required this.airplaneId});
+  final String airplaneId;
+
+  @override
+  State<FlightScreen> createState() => _FlightScreenState();
+}
+
+class _FlightScreenState extends State<FlightScreen> {
+  Map<String, dynamic>? _flight;
+  String? _error;
+  bool _loading = true;
+  Timer? _poller;
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+    _poller = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _flight != null) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _poller?.cancel();
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final response = await PaperPlaneApi.instance.getAirplaneFlight(widget.airplaneId);
+      if (!mounted) return;
+      setState(() {
+        _flight = response['flight'] as Map<String, dynamic>?;
+        _error = null;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error is PaperPlaneApiException ? error.message : 'Não foi possível atualizar o voo pela internet.';
+        _loading = false;
+      });
+    }
+  }
+
+  double get _progress {
+    final flight = _flight;
+    if (flight == null) return 0;
+    final status = flight['status']?.toString() ?? '';
+    if (['DELIVERED', 'READ', 'RESPONDED'].contains(status)) return 1;
+    final started = DateTime.tryParse(flight['startedAt']?.toString() ?? '');
+    final arrival = DateTime.tryParse(flight['estimatedArrivalAt']?.toString() ?? '');
+    if (started == null || arrival == null || !arrival.isAfter(started)) {
+      return ((flight['progress'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0);
+    }
+    return (DateTime.now().difference(started).inMilliseconds /
+        arrival.difference(started).inMilliseconds).clamp(0.0, 0.999);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final flight = _flight;
+    final status = flight?['status']?.toString() ?? 'QUEUED';
+    final searching = flight?['searching'] == true || status == 'QUEUED';
+    final route = flight?['route'] is Map ? Map<String, dynamic>.from(flight!['route'] as Map) : null;
+    final distance = (flight?['distanceKm'] as num?)?.toInt();
+    final travelled = distance == null ? null : (distance * _progress).round();
+    final destinationCode = route?['destinationCountry']?.toString();
+
     return ScreenFrame(
-      title: isDemo ? 'O teu avião está a voar' : 'Estado do avião',
+      title: 'O teu avião está a voar',
+      action: IconButton(onPressed: _refresh, tooltip: 'Atualizar voo', icon: const Icon(Icons.refresh_rounded, color: ppGoldBright)),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
         children: [
           const SizedBox(height: 5),
           Text(
-            isDemo ? 'A caminho do Japão' : _statusLabel,
+            _loading ? 'A contactar o servidor…' : searching
+                ? 'À procura de alguém para receber a tua carta'
+                : status == 'FLYING'
+                    ? 'Em rota para ' + _countryName(destinationCode)
+                    : ['DELIVERED', 'READ', 'RESPONDED'].contains(status)
+                        ? 'O avião chegou ao destino'
+                        : status == 'HELD_REVIEW' ? 'Em revisão de segurança' : 'Estado: ' + status,
             style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           GlassPanel(
             padding: const EdgeInsets.all(10),
             highlight: true,
-            child: SizedBox(height: 250, child: CustomPaint(painter: FlightMapPainter(), child: const Center(child: AnimatedPlane(width: 68)))),
-          ),
-          const SizedBox(height: 14),
-          GlassPanel(
-            child: isDemo
-                ? Row(children: [
-                    Expanded(child: _flightMetric('DISTÂNCIA PERCORRIDA', '2 340 km', Icons.route)),
-                    Container(width: 1, height: 65, color: Colors.white24),
-                    Expanded(child: _flightMetric('PROGRESSO', '62%', Icons.trending_up)),
-                  ])
-                : Row(children: [
-                    Expanded(child: _flightMetric('ESTADO DO SERVIDOR', status, Icons.cloud_done_outlined)),
-                    Container(width: 1, height: 65, color: Colors.white24),
-                    Expanded(child: _flightMetric('ENTREGA', status == 'QUEUED' ? 'Na fila' : 'Em processo', Icons.mark_email_unread_outlined)),
-                  ]),
-          ),
-          if (isDemo) ...[
-            const SectionTitle('Países atravessados'),
-            const GlassPanel(
-              child: Column(children: [
-                _CountryFlightRow(flag: '🇲🇿', country: 'Moçambique', status: 'Partida'),
-                Divider(color: Colors.white12),
-                _CountryFlightRow(flag: '🇮🇳', country: 'Índia', status: 'Passado'),
-                Divider(color: Colors.white12),
-                _CountryFlightRow(flag: '🇹🇭', country: 'Tailândia', status: 'Passado'),
-                Divider(color: Colors.white12),
-                _CountryFlightRow(flag: '🇯🇵', country: 'Japão', status: 'Destino'),
-              ]),
-            ),
-            const SizedBox(height: 17),
-            const Text('Demonstração visual do percurso', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
-            const SizedBox(height: 14),
-            GoldButton(label: 'Ver chegada da carta', icon: Icons.mark_email_read_outlined, onPressed: () => ppPush(context, const ArrivalScreen())),
-          ] else ...[
-            const SizedBox(height: 14),
-            const GlassPanel(
-              child: Text(
-                'O mapa representa a viagem simbólica do avião. O Paper Plane não usa GPS nem inventa quilómetros ou horas de chegada. A entrega só será confirmada quando o servidor encontrar um destinatário elegível.',
-                style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+            child: SizedBox(
+              height: 290,
+              child: CustomPaint(
+                painter: GlobeFlightPainter(route: route, progress: _progress),
+                child: Center(
+                  child: route == null
+                      ? Icon(Icons.public_rounded, size: 44, color: ppGold.withOpacity(0.65))
+                      : const SizedBox.shrink(),
+                ),
               ),
             ),
-          ],
+          ),
+          const SizedBox(height: 12),
+          if (_loading)
+            const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: ppGold)))
+          else if (_error != null)
+            GlassPanel(
+              child: Column(children: [
+                const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 30),
+                const SizedBox(height: 8),
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+              ]),
+            )
+          else if (searching)
+            GlassPanel(
+              highlight: true,
+              child: Column(children: [
+                const Icon(Icons.radar_rounded, color: ppGoldBright, size: 34),
+                const SizedBox(height: 7),
+                const Text('O avião continua à procura de um destinatário elegível.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                const Text('A procura é feita pelo servidor. Quando encontrar alguém, a rota, a distância e a previsão de chegada serão registadas aqui.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+                const SizedBox(height: 10),
+                const LinearProgressIndicator(color: ppGold, backgroundColor: Colors.white12),
+              ]),
+            )
+          else if (['FLYING', 'DELIVERED', 'READ', 'RESPONDED'].contains(status))
+            GlassPanel(
+              child: Column(children: [
+                Row(children: [
+                  Expanded(child: _flightMetric('DISTÂNCIA PERCORRIDA', travelled == null ? '—' : travelled.toString() + ' km', Icons.route_rounded)),
+                  Container(width: 1, height: 66, color: Colors.white24),
+                  Expanded(child: _flightMetric('DISTÂNCIA TOTAL', distance == null ? '—' : distance.toString() + ' km', Icons.public_rounded)),
+                ]),
+                const SizedBox(height: 18),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: LinearProgressIndicator(minHeight: 13, value: _progress, backgroundColor: Colors.white12, color: ppGoldBright),
+                ),
+                const SizedBox(height: 9),
+                Row(children: [
+                  Text((_progress * 100).round().toString() + '% percorrido', style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  Text(status == 'FLYING' ? 'Chegada em ' + _flightTimeLeft(flight?['estimatedArrivalAt']?.toString()) : 'Chegada confirmada', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                ]),
+              ]),
+            ),
+          const SizedBox(height: 10),
+          if (route != null)
+            GlassPanel(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Percurso do avião', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Text(_countryFlag(route['originCountry']?.toString()), style: const TextStyle(fontSize: 24)),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text(_countryName(route['originCountry']?.toString()))),
+                  const Icon(Icons.flight_takeoff_rounded, color: ppGold),
+                ]),
+                const Padding(padding: EdgeInsets.symmetric(vertical: 7), child: Divider(color: Colors.white12)),
+                Row(children: [
+                  Text(_countryFlag(route['destinationCountry']?.toString()), style: const TextStyle(fontSize: 24)),
+                  const SizedBox(width: 9),
+                  Expanded(child: Text(_countryName(route['destinationCountry']?.toString()))),
+                  const Icon(Icons.location_on_outlined, color: ppGold),
+                ]),
+              ]),
+            ),
+          if (status == 'HELD_REVIEW')
+            const GlassPanel(child: Text('A mensagem está retida para revisão de segurança. Não será entregue até a revisão terminar.', style: TextStyle(color: Colors.white70))),
+          if (['DELIVERED', 'READ', 'RESPONDED'].contains(status))
+            const GlassPanel(child: Text('Entrega registada no servidor. O estado da carta será atualizado quando o destinatário a abrir ou responder.', style: TextStyle(color: Colors.white70))),
+          const SizedBox(height: 14),
+          const Text('O globo mostra uma rota digital calculada entre centros geográficos aproximados dos países. Não é localização GPS nem rastreamento de aeronaves físicas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45)),
           const SizedBox(height: 14),
           SoftButton(label: 'Voltar ao início', icon: Icons.home_outlined, onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
         ],
@@ -1059,157 +1351,14 @@ class FlightScreen extends StatelessWidget {
   }
 
   Widget _flightMetric(String label, String value, IconData icon) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: ppGoldBright),
-          const SizedBox(height: 5),
-          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
-          Text(value, style: const TextStyle(color: ppGoldBright, fontSize: 24, fontWeight: FontWeight.w800)),
-        ]),
-      );
-}
-
-class CountryFlightRow extends StatelessWidget {
-  const CountryFlightRow({super.key, required this.flag, required this.country, required this.status});
-  final String flag;
-  final String country;
-  final String status;
-
-  @override
-  Widget build(BuildContext context) => Row(children: [
-    Text(flag, style: const TextStyle(fontSize: 21)),
-    const SizedBox(width: 12),
-    Expanded(child: Text(country, style: const TextStyle(fontWeight: FontWeight.w600))),
-    Text(status, style: const TextStyle(color: ppGoldBright, fontSize: 12)),
-  ]);
-}
-
-class _CountryFlightRow extends StatelessWidget {
-  const _CountryFlightRow({required this.flag, required this.country, required this.status});
-  final String flag;
-  final String country;
-  final String status;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 7),
-    child: CountryFlightRow(flag: flag, country: country, status: status),
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, color: ppGoldBright),
+      const SizedBox(height: 5),
+      Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+      Text(value, style: const TextStyle(color: ppGoldBright, fontSize: 21, fontWeight: FontWeight.w800)),
+    ]),
   );
-}
-
-class FlightMapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final mapPaint = Paint()..color = const Color(0xFF42618F).withOpacity(0.32);
-    final linePaint = Paint()
-      ..color = ppGold.withOpacity(0.76)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8;
-    final route = Path()
-      ..moveTo(size.width * 0.12, size.height * 0.70)
-      ..cubicTo(size.width * 0.27, size.height * 0.07, size.width * 0.62, size.height * 0.05, size.width * 0.84, size.height * 0.40);
-    for (var i = 0; i < 6; i++) {
-      final rect = Rect.fromLTWH(size.width * (0.06 + i * 0.16), size.height * (0.23 + (i.isEven ? 0.11 : 0.02)), size.width * 0.12, size.height * 0.23);
-      canvas.drawOval(rect, mapPaint);
-    }
-    canvas.drawPath(route, linePaint);
-    for (final point in [Offset(size.width * 0.12, size.height * 0.70), Offset(size.width * 0.84, size.height * 0.40)]) {
-      canvas.drawCircle(point, 4, Paint()..color = ppGoldBright);
-      canvas.drawCircle(point, 9, Paint()..color = ppGold.withOpacity(0.15));
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-
-class ArrivalScreen extends StatelessWidget {
-  const ArrivalScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ScreenFrame(
-      title: 'Carta chegou!',
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
-        children: [
-          const SizedBox(height: 8),
-          const Text('O teu avião pousou agora', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 5),
-          const Text('Uma mensagem chegou ao seu destino.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 16),
-          GlassPanel(
-            highlight: true,
-            padding: const EdgeInsets.all(12),
-            child: SizedBox(
-              height: 190,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Positioned.fill(child: CustomPaint(painter: FlightMapPainter())),
-                  const Icon(Icons.location_on_rounded, color: ppGoldBright, size: 24),
-                  const Positioned(
-                    bottom: 9,
-                    left: 8,
-                    child: Text('Moçambique', style: TextStyle(color: ppGoldBright, fontSize: 11)),
-                  ),
-                  const Positioned(
-                    top: 8,
-                    right: 7,
-                    child: Text('Brasil', style: TextStyle(color: ppGoldBright, fontSize: 11)),
-                  ),
-                  const Align(alignment: Alignment.bottomRight, child: PlaneMark(width: 48)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 13),
-          Row(children: const [
-            Expanded(child: _CollectionStat(value: '9 840 km', label: 'Distância percorrida')),
-            SizedBox(width: 10),
-            Expanded(child: _CollectionStat(value: '12h 34min', label: 'Tempo de voo')),
-          ]),
-          const SizedBox(height: 15),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE9F0FA),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: ppBlueLight.withOpacity(0.12), blurRadius: 15)],
-            ),
-            child: Column(children: const [
-              Icon(Icons.mail_rounded, color: Color(0xFF45618D), size: 44),
-              SizedBox(height: 8),
-              Text('Conteúdo da carta', style: TextStyle(color: Color(0xFF52647F), fontWeight: FontWeight.w800)),
-              SizedBox(height: 12),
-              Text('De: Maputo, Moçambique', style: TextStyle(color: Color(0xFF59677B))),
-              Text('Para: Destino internacional', style: TextStyle(color: Color(0xFF59677B))),
-              SizedBox(height: 6),
-              Text('Chegada registada nesta demonstração', style: TextStyle(color: Color(0xFF8792A2), fontSize: 11)),
-            ]),
-          ),
-          const SizedBox(height: 18),
-          GoldButton(
-            label: 'Abrir carta',
-            icon: Icons.mark_email_read_outlined,
-            onPressed: () => ppPush(
-              context,
-              const LetterScreen(
-                from: 'Alguém no Brasil',
-                flag: '🇧🇷',
-                message: 'Que esta mensagem te encontre num bom momento. Mesmo longe, podemos partilhar gentileza.',
-              ),
-            ),
-          ),
-          const SizedBox(height: 11),
-          SoftButton(label: 'Voltar à caixa', icon: Icons.inbox_outlined, onPressed: () => Navigator.pop(context)),
-          const SizedBox(height: 13),
-          const Text('Percurso ilustrativo. A entrega real será controlada pelo servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
-        ],
-      ),
-    );
-  }
 }
 
 class InboxPage extends StatelessWidget {
