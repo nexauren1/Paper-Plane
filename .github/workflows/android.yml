@@ -46,10 +46,10 @@ jobs:
               raise SystemExit("Unexpected Gradle distribution URL; refusing to change an unknown wrapper.")
           content = content.replace(
               "services.gradle.org/distributions/",
-              "downloads.gradle.org/distributions/",
-          )
+              "mirrors.huaweicloud.com/gradle/",
+          ).replace("-all.zip", "-bin.zip")
           wrapper.write_text(content, encoding="utf-8")
-          print("Gradle wrapper will download directly from downloads.gradle.org.")
+          print("Gradle wrapper will use the binary distribution from the Huawei Cloud mirror.")
           PY
 
       - name: Configure Firebase Android and build variables
