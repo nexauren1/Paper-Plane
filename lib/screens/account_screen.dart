@@ -42,6 +42,8 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    _readyToEnter = false;
+    _firstFlightId = null;
     setState(() => _busy = true);
 
     String message;
@@ -75,6 +77,8 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _continueWithGoogle() async {
     if (_busy) return;
+    _readyToEnter = false;
+    _firstFlightId = null;
     setState(() => _busy = true);
 
     String message;
@@ -96,6 +100,8 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _continueExistingAccount() async {
     if (_busy) return;
+    _readyToEnter = false;
+    _firstFlightId = null;
     setState(() => _busy = true);
     String message;
     try {
@@ -131,7 +137,11 @@ class _AccountScreenState extends State<AccountScreen> {
 
     final stats = profileResult['stats'] as Map<String, dynamic>? ?? const {};
     final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
-    if (sent == 0) {
+    final firstFlightState = profileResult['firstFlightState']?.toString();
+    final needsFirstPlane = sent == 0 &&
+        firstFlightState != 'WAITING_FOR_AGE_VERIFICATION' &&
+        firstFlightState != 'LAUNCHED';
+    if (needsFirstPlane) {
       if (!mounted) return 'Prepara o teu primeiro avião para continuar.';
       final firstFlight = await Navigator.of(context).push<Map<String, dynamic>>(
         MaterialPageRoute(builder: (_) => const FirstFlightWorkshopScreen()),
