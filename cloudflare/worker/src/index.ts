@@ -58,6 +58,22 @@ const MODERATION_MODEL = "@cf/meta/llama-guard-3-8b";
 const CLASSIFICATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 const TRANSLATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 
+const ORDINARY_GREETINGS = new Set([
+  "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
+  "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+]);
+
+function isOrdinaryGreeting(message: string): boolean {
+  const normalized = message
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[.!?,;:]+/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+  return ORDINARY_GREETINGS.has(normalized);
+}
+
 const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(data), {
     status,
@@ -154,20 +170,8 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
       return { state: "REVIEW", categories: ["AI_UNCERTAIN"] };
     }
 
-    // Common standalone greetings are safe after the primary safety guard passes.
-    // Exact-match only: a greeting followed by additional content still receives full triage.
-    const normalizedGreeting = message
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[.!?,;:]+/g, "")
-      .trim()
-      .replace(/\s+/g, " ");
-    const ordinaryGreetings = new Set([
-      "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
-      "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
-    ]);
-    if (ordinaryGreetings.has(normalizedGreeting)) {
+    // A greeting is released only after the primary safety guard explicitly returns SAFE.
+    if (isOrdinaryGreeting(message)) {
       return { state: "SAFE", categories: [] };
     }
 
@@ -269,7 +273,7 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     });
   }
   // Symbolic app journey, not GPS or physical-aircraft telemetry.
-  const durationSeconds = Math.max(5 * 60 * 60, Math.ceil(distanceKm / 900 * 60 * 60));
+  const durationSeconds = Math.max(90, Math.ceil(distanceKm / 900 * 60 * 60));
   const startedAt = isoNow();
   return {
     distanceKm,
@@ -279,6 +283,8 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     routeJson: JSON.stringify({
       originCountry: originCode.toUpperCase(),
       destinationCountry: destinationCode.toUpperCase(),
+      originName: origin.name,
+      destinationName: destination.name,
       origin: { lat: origin.lat, lng: origin.lng },
       destination: { lat: destination.lat, lng: destination.lng },
       points,
@@ -609,6 +615,70 @@ async function deliverAirplane(airplaneId: string, env: Env) {
     "INSERT OR IGNORE INTO inbox(airplane_id, recipient_uid) VALUES (?, ?)",
   ).bind(airplaneId, plane.recipient_uid).run();
   await notifyNewPlane(plane.recipient_uid, airplaneId, env);
+}
+
+async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
+  // These two moderation reasons are emitted only after Llama Guard returned SAFE
+  // and the secondary triage could not confidently classify an ordinary message.
+  const rows = await env.DB.prepare(
+    `SELECT a.id, a.sender_uid, a.recipient_uid, a.audience, a.message_text,
+            s.country_code AS sender_country, r.country_code AS recipient_country
+     FROM airplanes a
+     JOIN users s ON s.uid = a.sender_uid
+     LEFT JOIN users r ON r.uid = a.recipient_uid
+     WHERE a.status = 'HELD_REVIEW'
+       AND a.moderation_categories IN (?, ?)
+     ORDER BY a.created_at ASC LIMIT 30`,
+  ).bind(
+    JSON.stringify(["RISK_CLASSIFIER_UNCERTAIN"]),
+    JSON.stringify(["RISK_CLASSIFIER_LOW_CONFIDENCE"]),
+  ).all<{
+    id: string; sender_uid: string; recipient_uid: string | null; audience: string;
+    message_text: string; sender_country: string | null; recipient_country: string | null;
+  }>();
+
+  for (const plane of rows.results ?? []) {
+    if (!isOrdinaryGreeting(plane.message_text)) continue;
+    const now = isoNow();
+    let changed = false;
+
+    if (plane.audience === "PUBLIC") {
+      const result = await env.DB.prepare(
+        "UPDATE airplanes SET status = 'DELIVERED', moderation_state = 'SAFE', moderation_categories = '[]', delivered_at = COALESCE(delivered_at, ?) WHERE id = ? AND status = 'HELD_REVIEW'",
+      ).bind(now, plane.id).run();
+      changed = (result.meta?.changes ?? 0) === 1;
+      if (changed) {
+        await env.DB.prepare("INSERT OR IGNORE INTO public_sky (airplane_id) VALUES (?)")
+          .bind(plane.id).run();
+      }
+    } else if (plane.recipient_uid) {
+      if (!plane.sender_country || !plane.recipient_country) continue;
+      const flight = buildFlightPlan(plane.sender_country, plane.recipient_country);
+      if (!flight) continue;
+      const result = await env.DB.prepare(
+        "UPDATE airplanes SET status = 'FLYING', moderation_state = 'SAFE', moderation_categories = '[]', matched_at = ?, flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'HELD_REVIEW'",
+      ).bind(now, flight.distanceKm, flight.durationSeconds, flight.startedAt, flight.arrivalAt, flight.routeJson, plane.id).run();
+      changed = (result.meta?.changes ?? 0) === 1;
+    } else {
+      const result = await env.DB.prepare(
+        "UPDATE airplanes SET status = 'QUEUED', moderation_state = 'SAFE', moderation_categories = '[]' WHERE id = ? AND status = 'HELD_REVIEW'",
+      ).bind(plane.id).run();
+      changed = (result.meta?.changes ?? 0) === 1;
+      if (changed) {
+        try {
+          await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: plane.id });
+        } catch {
+          // The minute-by-minute scheduled matcher will pick up this queued plane.
+        }
+      }
+    }
+
+    if (changed) {
+      await env.DB.prepare(
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'KNOWN_SAFE_GREETING_AUTO_RELEASED', ?, ?)",
+      ).bind(uuid(), plane.id, JSON.stringify({ rule: "primary_guard_safe_exact_greeting" })).run();
+    }
+  }
 }
 
 async function translateMessage(airplaneId: string, targetLanguage: "pt" | "en", message: string, env: Env): Promise<string | null> {
@@ -1148,7 +1218,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     return json({
       flight: {
-        id: plane.id, status: plane.status,
+        id: plane.id, status: plane.status, matchedAt: plane.matched_at,
         searching: plane.status === "QUEUED",
         distanceKm: plane.flight_distance_km,
         durationSeconds: plane.flight_duration_seconds,
@@ -1409,6 +1479,9 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    // Recover old exact greetings held only by the secondary classifier after the primary guard passed.
+    await releasePreviouslyHeldSafeGreetings(env);
+
     // Keep searching until an eligible pilot is found. There is no fake delivery timer.
     const queued = await env.DB.prepare(
       "SELECT id FROM airplanes WHERE status = 'QUEUED' AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 40",
