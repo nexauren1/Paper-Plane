@@ -9,6 +9,8 @@ import 'services/paper_plane_notifications.dart';
 import 'services/paper_plane_analytics.dart';
 import 'screens/account_screen.dart';
 import 'screens/pilot_profile_setup_screen.dart';
+import 'screens/age_verification_screen.dart';
+import 'screens/first_flight_workshop_screen.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -645,6 +647,7 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _sent = [];
   int _unread = 0;
   String? _firstFlightState;
+  Map<String, dynamic> _firstFlight = {};
   bool _loading = true;
   String? _error;
 
@@ -685,6 +688,7 @@ class _HomePageState extends State<HomePage> {
         _sent = sent;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
         _firstFlightState = results[0]['firstFlightState']?.toString();
+        _firstFlight = results[0]['firstFlight'] as Map<String, dynamic>? ?? {};
         _loading = false;
       });
     } catch (error) {
@@ -693,6 +697,31 @@ class _HomePageState extends State<HomePage> {
         _loading = false;
         _error = error is PaperPlaneApiException ? error.message : 'Não foi possível sincronizar o painel do piloto.';
       });
+    }
+  }
+
+  Future<void> _openAgeVerification() async {
+    final verified = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AgeVerificationScreen()),
+    );
+    if (verified == true) await _refresh();
+  }
+
+  Future<void> _launchSavedFirstFlight() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => FirstFlightWorkshopScreen(
+          initialMessage: _firstFlight['message']?.toString() ?? '',
+          initialPlaneModel: _firstFlight['planeModel']?.toString() ?? 'DART',
+        ),
+      ),
+    );
+    if (result?['completed'] == true) {
+      final airplaneId = result?['airplaneId']?.toString();
+      await _refresh();
+      if (mounted && airplaneId != null && airplaneId.isNotEmpty) {
+        ppPush(context, FlightScreen(airplaneId: airplaneId));
+      }
     }
   }
 
@@ -743,14 +772,24 @@ class _HomePageState extends State<HomePage> {
             )
           else ...[
             if (profileReady && _profile['age_verified'] != 1)
-              const GlassPanel(
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Icon(Icons.verified_user_outlined, color: ppGoldBright, size: 24),
-                  SizedBox(width: 12),
-                  Expanded(child: Text(
-                    'A segurança está ativa. O envio e a correspondência com desconhecidos só serão liberados após uma verificação de idade confiável. O ano indicado no perfil não substitui essa verificação.',
-                    style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45),
-                  )),
+              GlassPanel(
+                highlight: true,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(Icons.verified_user_outlined, color: ppGoldBright, size: 24),
+                    SizedBox(width: 12),
+                    Expanded(child: Text(
+                      'A segurança está ativa. A correspondência só é libertada depois de confirmar a idade e separar pilotos adolescentes de adultos.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45),
+                    )),
+                  ]),
+                  const SizedBox(height: 12),
+                  GoldButton(
+                    label: 'Verificar a minha idade',
+                    icon: Icons.shield_outlined,
+                    onPressed: _openAgeVerification,
+                    height: 52,
+                  ),
                 ]),
               ),
             if (!profileReady)
@@ -782,8 +821,28 @@ class _HomePageState extends State<HomePage> {
                   const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('O teu primeiro avião está no hangar privado', style: TextStyle(fontWeight: FontWeight.w800)),
                     SizedBox(height: 5),
-                    Text('A carta está guardada online. O servidor vai permitir o voo para outra pessoa quando a verificação de idade confiável estiver concluída.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                    Text('A carta está guardada online. Assim que a idade estiver confirmada, poderás lançar o avião para a faixa de pilotos compatível.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
                   ])),
+                ]),
+              ),
+            if (_firstFlightState == 'READY_TO_LAUNCH')
+              GlassPanel(
+                highlight: true,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Row(children: [
+                    Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 26),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('O teu primeiro avião está pronto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+                  ]),
+                  const SizedBox(height: 6),
+                  const Text('A verificação terminou. Retoma a oficina, vê o papel transformar-se em avião e lança a tua primeira viagem online.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  const SizedBox(height: 12),
+                  GoldButton(
+                    label: 'Lançar o primeiro avião',
+                    icon: Icons.rocket_launch_rounded,
+                    onPressed: _launchSavedFirstFlight,
+                    height: 54,
+                  ),
                 ]),
               ),
             GlassPanel(
