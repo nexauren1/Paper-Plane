@@ -584,9 +584,15 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
+    PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (PaperPlaneNotifications.consumePendingInboxOpen()) _openInboxFromNotification();
+      final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
+      if (pendingAirplaneId != null) {
+        _openPlaneFromNotification(pendingAirplaneId);
+      } else if (PaperPlaneNotifications.consumePendingInboxOpen()) {
+        _openInboxFromNotification();
+      }
       final firstFlightId = widget.initialFlightId;
       if (firstFlightId != null && firstFlightId.isNotEmpty) {
         ppPush(context, FlightScreen(airplaneId: firstFlightId));
@@ -598,9 +604,37 @@ class _MainShellState extends State<MainShell> {
     if (mounted) setState(() => _index = 1);
   }
 
+  Future<void> _openPlaneFromNotification(String airplaneId) async {
+    if (!mounted || airplaneId.isEmpty) return;
+    setState(() => _index = 1);
+    String? senderCountry;
+    try {
+      final response = await PaperPlaneApi.instance.getInbox();
+      final items = (response['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>();
+      for (final item in items) {
+        if (item['id']?.toString() == airplaneId) {
+          senderCountry = item['sender_country_code']?.toString();
+          break;
+        }
+      }
+    } catch (_) {
+      // The inbox tab remains available if the network is temporarily unavailable.
+    }
+    if (!mounted) return;
+    ppPush(
+      context,
+      IncomingPlaneScreen(
+        airplaneId: airplaneId,
+        countryCode: senderCountry,
+      ),
+    );
+  }
+
   @override
   void dispose() {
     PaperPlaneNotifications.onOpenInbox = null;
+    PaperPlaneNotifications.onOpenPlane = null;
     super.dispose();
   }
 
