@@ -442,7 +442,7 @@ async function createAirplane(
   }
 
   if (moderation.state === "SAFE") ctx.waitUntil(classifyInBackground(env, id, message));
-  if (directFlight) {
+  if (directFlight && status === "FLYING") {
     await env.DB.prepare(
       "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
     ).bind(directFlight.distanceKm, directFlight.durationSeconds, directFlight.startedAt, directFlight.arrivalAt, directFlight.routeJson, id).run();
@@ -745,12 +745,18 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (nextStatus === "DELIVERED") {
       await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
     } else if (nextStatus === "FLYING") {
+      const sender = await requireUser(plane.sender_uid, env);
+      const recipient = plane.recipient_uid ? await requireUser(plane.recipient_uid, env) : null;
+      const route = buildFlightPlan(sender?.country_code ?? null, recipient?.country_code ?? null);
+      if (!route || !recipient) return json({ error: "ROUTE_UNAVAILABLE" }, 409);
+      await env.DB.prepare(
+        "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
+      ).bind(route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
       if (plane.reply_to_id) {
         await env.DB.prepare(
           "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
         ).bind(plane.reply_to_id).run();
       }
-      await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId }, { delaySeconds: 30 });
     } else {
       await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
     }
@@ -797,6 +803,52 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ pilot: user, stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 } });
   }
 
+  if (method === "GET" && path === "/v1/meta/countries") {
+    return json({
+      items: Object.entries(COUNTRY_CENTROIDS)
+        .map(([code, country]) => ({ code, name: country.name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }
+
+  if (method === "GET" && path === "/v1/users/handle-availability") {
+    const handle = normalizePilotHandle(url.searchParams.get("handle"));
+    if (!isValidPilotHandle(handle)) return json({ valid: false, available: false, error: "INVALID_PILOT_HANDLE" });
+    const existing = await env.DB.prepare(
+      "SELECT uid FROM users WHERE lower(pilot_handle) = ? AND uid <> ? LIMIT 1",
+    ).bind(handle, uid).first<{ uid: string }>();
+    return json({ valid: true, available: !existing });
+  }
+
+  if (method === "POST" && path === "/v1/profile") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const pilotName = text(body.pilotName, 40);
+    const handle = normalizePilotHandle(body.pilotHandle);
+    const birthYear = Number(body.birthYear);
+    const countryCode = text(body.countryCode, 2).toUpperCase();
+    const language = body.language === "en" ? "en" : "pt";
+    if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
+    if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
+    const currentYear = new Date().getUTCFullYear();
+    if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > currentYear) {
+      return json({ error: "INVALID_BIRTH_YEAR" }, 400);
+    }
+    if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
+    try {
+      await env.DB.prepare(
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, birthYear, countryCode, language, isoNow(), uid).run();
+    } catch (error) {
+      if (String(error).toLowerCase().includes("unique")) {
+        return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
+      }
+      throw error;
+    }
+    const pilot = await requireUser(uid, env);
+    return json({ pilot, canSend: pilot?.age_verified === 1 });
+  }
+
   if (method === "POST" && path === "/v1/airplanes") {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) return json({ error: "INVALID_JSON" }, 400);
@@ -836,9 +888,54 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/airplanes/sent") {
     const rows = await env.DB.prepare(
-      "SELECT id, audience, status, destination_country, created_at, delivered_at, read_at FROM airplanes WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 100",
+      "SELECT id, audience, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at FROM airplanes WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 100",
     ).bind(uid).all();
     return json({ items: rows.results ?? [] });
+  }
+
+  const flightMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/flight$/);
+  if (method === "GET" && flightMatch) {
+    const plane = await env.DB.prepare(
+      "SELECT id, sender_uid, recipient_uid, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
+    ).bind(flightMatch[1], uid, uid).first<{
+      id: string; sender_uid: string; recipient_uid: string | null; status: string;
+      destination_country: string | null; created_at: string; matched_at: string | null;
+      delivered_at: string | null; read_at: string | null; flight_distance_km: number | null;
+      flight_duration_seconds: number | null; flight_started_at: string | null;
+      estimated_arrival_at: string | null; route_json: string | null;
+    }>();
+    if (!plane) return json({ error: "NOT_FOUND" }, 404);
+    let route: { points?: Array<{ lat: number; lng: number }>; [key: string]: unknown } | null = null;
+    try { route = plane.route_json ? JSON.parse(plane.route_json) : null; } catch { route = null; }
+    const progress = flightProgress(plane.flight_started_at, plane.estimated_arrival_at, plane.status);
+    let currentPosition: { lat: number; lng: number } | null = null;
+    const points = route?.points ?? [];
+    if (points.length > 0) {
+      const scaled = progress * (points.length - 1);
+      const index = Math.min(points.length - 2, Math.floor(scaled));
+      const fraction = scaled - index;
+      const first = points[index] ?? points[0];
+      const second = points[Math.min(points.length - 1, index + 1)] ?? first;
+      currentPosition = {
+        lat: first.lat + (second.lat - first.lat) * fraction,
+        lng: first.lng + (second.lng - first.lng) * fraction,
+      };
+    }
+    return json({
+      flight: {
+        id: plane.id, status: plane.status,
+        searching: plane.status === "QUEUED",
+        distanceKm: plane.flight_distance_km,
+        durationSeconds: plane.flight_duration_seconds,
+        startedAt: plane.flight_started_at,
+        estimatedArrivalAt: plane.estimated_arrival_at,
+        deliveredAt: plane.delivered_at,
+        readAt: plane.read_at,
+        progress,
+        currentPosition,
+        route,
+      },
+    });
   }
 
   const releaseMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/release$/);
@@ -1030,7 +1127,7 @@ export default {
     for (const message of batch.messages) {
       try {
         if (message.body.type === "MATCH_AIRPLANE") await matchAirplane(message.body.airplaneId, env);
-        if (message.body.type === "DELIVER_AIRPLANE") await deliverAirplane(message.body.airplaneId, env);
+        // Delivery is finalized by cron after the stored arrival timestamp.
         message.ack();
       } catch {
         message.retry({ delaySeconds: 60 });
@@ -1039,12 +1136,20 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Revisit queued planes every five minutes; unmatched planes remain queued, never falsely marked delivered.
+    // Keep searching until an eligible pilot is found. There is no fake delivery timer.
     const queued = await env.DB.prepare(
-      "SELECT id FROM airplanes WHERE status = 'QUEUED' AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 20",
+      "SELECT id FROM airplanes WHERE status = 'QUEUED' AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 40",
     ).all<{ id: string }>();
     for (const plane of queued.results ?? []) {
       await matchAirplane(plane.id, env);
+    }
+
+    // Finish a flight only after its persisted arrival time.
+    const arrived = await env.DB.prepare(
+      "SELECT id FROM airplanes WHERE status = 'FLYING' AND recipient_uid IS NOT NULL AND estimated_arrival_at IS NOT NULL AND estimated_arrival_at <= ? ORDER BY estimated_arrival_at ASC LIMIT 40",
+    ).bind(isoNow()).all<{ id: string }>();
+    for (const plane of arrived.results ?? []) {
+      await deliverAirplane(plane.id, env);
     }
 
     // Expire unread mail after 24 hours and opened mail 48 hours after it was opened.
