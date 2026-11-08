@@ -829,6 +829,54 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     });
   }
 
+  if (method === "GET" && path === "/v1/atlas") {
+    const rows = await env.DB.prepare(
+      "SELECT status, flight_distance_km, route_json, plane_model FROM airplanes WHERE (sender_uid = ? OR recipient_uid = ?) AND route_json IS NOT NULL ORDER BY created_at DESC LIMIT 500",
+    ).bind(uid, uid).all<{
+      status: string;
+      flight_distance_km: number | null;
+      route_json: string | null;
+      plane_model: string | null;
+    }>();
+    const countries = new Set<string>();
+    const models: Record<string, number> = { DART: 0, GLIDER: 0, SWALLOW: 0 };
+    let totalDistanceKm = 0;
+    let completedFlights = 0;
+    let activeFlights = 0;
+    for (const row of rows.results ?? []) {
+      const model = row.plane_model ?? "DART";
+      if (model in models) models[model] += 1;
+      if (["DELIVERED", "READ", "RESPONDED"].includes(row.status)) completedFlights += 1;
+      if (["QUEUED", "FLYING"].includes(row.status)) activeFlights += 1;
+      if (row.status !== "REJECTED" && row.status !== "CANCELLED") {
+        totalDistanceKm += row.flight_distance_km ?? 0;
+      }
+      try {
+        const route = row.route_json ? JSON.parse(row.route_json) as {
+          originCountry?: string; destinationCountry?: string;
+        } : null;
+        if (route?.originCountry && COUNTRY_CENTROIDS[route.originCountry]) countries.add(route.originCountry);
+        if (route?.destinationCountry && COUNTRY_CENTROIDS[route.destinationCountry]) countries.add(route.destinationCountry);
+      } catch {
+        // Ignore malformed legacy route snapshots; the user's other journeys remain visible.
+      }
+    }
+    const items = [...countries]
+      .map((code) => ({ code, name: COUNTRY_CENTROIDS[code].name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return json({
+      countries: items,
+      stats: {
+        totalFlights: rows.results?.length ?? 0,
+        completedFlights,
+        activeFlights,
+        totalDistanceKm,
+        countriesCount: items.length,
+        models,
+      },
+    });
+  }
+
   if (method === "POST" && path === "/v1/onboarding/first-flight") {
     const user = await requireUser(uid, env);
     if (!user || user.profile_completed !== 1 || !user.country_code) {
