@@ -101,6 +101,11 @@ class PaperPlaneApi {
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
         'PROFILE_SETUP_REQUIRED' => 'Completa primeiro o perfil do piloto.',
         'PILOT_HANDLE_TAKEN' => 'Esse nome de copiloto já existe. Escolhe outro.',
+        'PILOT_NOT_FOUND' => 'Não encontrámos um copiloto ativo com esse @nome.',
+        'FRIEND_AGE_GROUP_MISMATCH' => 'Por segurança, só podes adicionar pessoas da mesma faixa etária declarada.',
+        'CHAT_NOT_FOUND' => 'Esta Chama já não está disponível.',
+        'CHAT_UNAVAILABLE' => 'Não é possível enviar mensagens nesta conversa.',
+        'CHAT_RATE_LIMIT' => 'Atingiste o limite temporário de mensagens. Tenta novamente mais tarde.',
         'INVALID_PILOT_HANDLE' => 'Usa 4 a 28 caracteres: letras, números, _ e um sufixo como -07.',
         'INVALID_BIRTH_YEAR' => 'Indica um ano de nascimento válido.',
         'INVALID_COUNTRY' => 'Escolhe um país válido.',
@@ -163,6 +168,44 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> getInbox() => _request('/v1/inbox');
 
   Future<Map<String, dynamic>> getSentPlanes() => _request('/v1/airplanes/sent');
+
+  Future<Map<String, dynamic>> getFriends() => _request('/v1/friends');
+
+  Future<Map<String, dynamic>> getFriendRequests() =>
+      _request('/v1/friends/requests');
+
+  Future<Map<String, dynamic>> searchFriends(String query) =>
+      _request('/v1/friends/search?q=${Uri.encodeQueryComponent(query)}');
+
+  Future<Map<String, dynamic>> requestFriend(String handle) =>
+      _request('/v1/friends/requests', method: 'POST', body: {'handle': handle});
+
+  Future<Map<String, dynamic>> respondFriendRequest(
+    String requestId, {
+    required bool accept,
+  }) =>
+      _request('/v1/friends/requests/$requestId', method: 'POST', body: {
+        'action': accept ? 'accept' : 'decline',
+      });
+
+  Future<Map<String, dynamic>> removeFriend(String uid) =>
+      _request('/v1/friends/remove', method: 'POST', body: {'uid': uid});
+
+  Future<Map<String, dynamic>> getChats() => _request('/v1/chats');
+
+  Future<Map<String, dynamic>> getChat(String conversationId) =>
+      _request('/v1/chats/$conversationId');
+
+  Future<Map<String, dynamic>> sendChatMessage(
+    String conversationId,
+    String message,
+  ) =>
+      _request('/v1/chats/$conversationId/messages', method: 'POST', body: {
+        'message': message,
+      });
+
+  String buildFriendInviteLink(String pilotHandle) =>
+      'https://paper-plane.nexaurenstore.workers.dev/invite?handle=${Uri.encodeQueryComponent(pilotHandle.replaceFirst(RegExp(r'^@'), ''))}';
 
   Future<Map<String, dynamic>> getOpenSky({String? country, String? language}) {
     final query = <String, String>{
