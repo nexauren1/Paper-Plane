@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -42,7 +41,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
       setState(() => _error = 'Escreve primeiro uma mensagem para dentro do avião.');
       return;
     }
-    if (text.characters.length > 200) {
+    if (text.runes.length > 200) {
       setState(() => _error = 'A primeira carta pode ter no máximo 200 caracteres.');
       return;
     }
