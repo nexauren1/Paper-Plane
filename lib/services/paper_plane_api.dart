@@ -20,7 +20,10 @@ class PaperPlaneApi {
   PaperPlaneApi._();
 
   static final PaperPlaneApi instance = PaperPlaneApi._();
-  static const String baseUrl = String.fromEnvironment('PAPER_PLANE_API_BASE_URL');
+  static const String baseUrl = String.fromEnvironment(
+    'PAPER_PLANE_API_BASE_URL',
+    defaultValue: 'https://paper-plane.nexaurenstore.workers.dev',
+  );
   static bool get isConfigured => baseUrl.startsWith('https://') || baseUrl.startsWith('http://');
 
   final http.Client _client = http.Client();
