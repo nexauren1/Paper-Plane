@@ -896,11 +896,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const received = await env.DB.prepare(
       "SELECT COUNT(*) AS received FROM inbox WHERE recipient_uid = ?",
     ).bind(uid).first<{ received: number }>();
-    if (["UNDER_18", "ADULT"].includes(user.declared_age_band)) {
-      await env.DB.prepare(
-        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
-      ).bind(isoNow(), uid).run();
-    }
     const firstFlight = await env.DB.prepare(
       "SELECT state, message_text, plane_model FROM onboarding_first_flights WHERE uid = ?",
     ).bind(uid).first<{ state: string; message_text: string; plane_model: string }>();
@@ -1048,9 +1043,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       await env.DB.prepare(
         "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
       ).bind(pilotName, handle, birthYear, declaredAgeBand, isoNow(), countryCode, language, isoNow(), uid).run();
-      await env.DB.prepare(
-        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
-      ).bind(isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
         return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
