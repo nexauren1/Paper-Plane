@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "paper-plane-api",
+  "name": "paper-plane",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-07",
   "observability": { "enabled": true },
@@ -12,8 +12,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "paper-plane-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_name": "paper_plane_db",
+      "database_id": "fcca4c13-7b08-466d-9fdc-0e5dfac54ca9",
       "migrations_dir": "migrations"
     }
   ],
