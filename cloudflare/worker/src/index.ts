@@ -357,6 +357,10 @@ async function createAirplane(
   const audience = forcedRecipient ? "DIRECT" : body.visibility === "PUBLIC" ? "PUBLIC" : "RANDOM";
   const language = body.language === "en" ? "en" : "pt";
   const mood = text(body.mood, 32) || null;
+  const requestedPlaneModel = text(body.planeModel, 16).toUpperCase() || "DART";
+  if (!["DART", "GLIDER", "SWALLOW"].includes(requestedPlaneModel)) {
+    return json({ error: "INVALID_PLANE_MODEL" }, 400);
+  }
   const destination = text(body.destinationCountry, 2).toUpperCase() || null;
   const { user, response } = await ensureAgeReady(uid, env);
   if (response) return response;
@@ -425,13 +429,14 @@ async function createAirplane(
 
   try {
     await env.DB.prepare(
-      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at, plane_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(
       id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
       user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
       moderation.state, JSON.stringify(moderation.categories), contentHash,
       audience === "PUBLIC" ? isoNow() : null,
       null,
+      requestedPlaneModel,
     ).run();
   } catch (error) {
     const reason = String(error);
@@ -801,6 +806,35 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       "SELECT COUNT(*) AS received FROM inbox WHERE recipient_uid = ?",
     ).bind(uid).first<{ received: number }>();
     return json({ pilot: user, stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 } });
+  }
+
+  if (method === "POST" && path === "/v1/onboarding/first-flight") {
+    const user = await requireUser(uid, env);
+    if (!user || user.profile_completed !== 1 || !user.country_code) {
+      return json({ error: "PROFILE_SETUP_REQUIRED" }, 409);
+    }
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const message = text(body.message, 200);
+    const planeModel = text(body.planeModel, 16).toUpperCase() || "DART";
+    if (!message || [...message].length > 200) {
+      return json({ error: "MESSAGE_LENGTH", message: "Write 1 to 200 characters for your first plane." }, 400);
+    }
+    if (!["DART", "GLIDER", "SWALLOW"].includes(planeModel)) {
+      return json({ error: "INVALID_PLANE_MODEL" }, 400);
+    }
+    const state = user.age_verified === 1 ? "READY_TO_LAUNCH" : "WAITING_FOR_AGE_VERIFICATION";
+    await env.DB.prepare(
+      "INSERT INTO onboarding_first_flights(uid, message_text, plane_model, state, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET message_text = excluded.message_text, plane_model = excluded.plane_model, state = excluded.state, updated_at = excluded.updated_at",
+    ).bind(uid, message, planeModel, state, isoNow()).run();
+    return json({
+      completed: true,
+      state,
+      privateOnly: state === "WAITING_FOR_AGE_VERIFICATION",
+      message: state === "WAITING_FOR_AGE_VERIFICATION"
+        ? "Your first plane is safely stored in your private hangar. Delivery to another pilot remains locked until trusted age verification is complete."
+        : "Your first plane is ready for launch.",
+    }, 201);
   }
 
   if (method === "GET" && path === "/v1/meta/countries") {
