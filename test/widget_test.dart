@@ -19,8 +19,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
-    // Home now loads the pilot profile and counts from the live Worker API.
-    // Widget tests verify navigation only and must not expect demo/offline data.
-    expect(find.byType(HomePage), findsOneWidget);
+    // First use now opens Firebase account creation/sign-in before the app shell.
+    expect(find.text('Criar conta'), findsWidgets);
+    expect(find.text('Entrar'), findsOneWidget);
   });
 }
