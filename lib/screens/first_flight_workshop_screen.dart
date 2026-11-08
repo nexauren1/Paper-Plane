@@ -262,7 +262,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                 ),
               ),
               const SizedBox(height: 9),
-              const Text('O avião e o texto são guardados online. Não há envio fictício nem destinatário inventado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white45, fontSize: 11)),
+              const Text('O avião e o texto são guardados online. Não há envio fictício nem destinatário inventado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 11)),
             ],
           ),
         ),
