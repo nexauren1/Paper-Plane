@@ -62,8 +62,8 @@ const ORDINARY_GREETINGS = new Set([
   "ola", "oi", "oie", "bom dia", "boa tarde", "boa noite",
   "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
   "boa tarde pessoal como estao", "bom dia pessoal como estao",
-  "boa noite pessoal como estao", "ola pessoal tudo bem",
-  "oi pessoal tudo bem", "ola pessoal como estao",
+  "boa noite pessoal como estao", "ola pessoal", "ola pessoal tudo bem",
+  "oi pessoal tudo bem", "ola pessoal como estao", "ola a todos", "ola gente", "ola amigos",
 ]);
 
 function isOrdinaryGreeting(message: string): boolean {
