@@ -65,16 +65,22 @@ jobs:
 
           def add_mirrors(path: Path, repositories_start: int):
               content = path.read_text(encoding="utf-8")
-              if "maven.aliyun.com/repository/public" in content:
+              if "repo.huaweicloud.com/repository/maven/" in content:
                   return content
               marker = "repositories {"
               index = content.find(marker, repositories_start)
               if index < 0:
                   raise SystemExit(f"Could not locate repositories block in {path}.")
-              insert_at = index + len(marker)
+              block_end = content.find("}", index + len(marker))
+              google_line = content.find("google()", index + len(marker), block_end)
+              if google_line >= 0:
+                  newline = content.find("\n", google_line)
+                  insert_at = newline if newline >= 0 else google_line + len("google()")
+              else:
+                  insert_at = index + len(marker)
               mirror_lines = (
-                  '\n            maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }'
                   '\n            maven { url = uri("https://maven.aliyun.com/repository/public") }'
+                  '\n            maven { url = uri("https://repo.huaweicloud.com/repository/maven/") }'
               )
               return content[:insert_at] + "".join(mirror_lines) + content[insert_at:]
 
