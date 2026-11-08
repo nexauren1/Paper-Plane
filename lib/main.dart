@@ -2009,57 +2009,130 @@ class _CountryChip extends StatelessWidget {
       );
 }
 
-class ProfilePage extends StatelessWidget {
+
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
   @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  Map<String, dynamic> _profile = {};
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      final result = await PaperPlaneApi.instance.getProfile();
+      if (!mounted) return;
+      setState(() {
+        _profile = result;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error is PaperPlaneApiException ? error.message : 'Não foi possível carregar o perfil online.';
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
-      children: [
-        Row(children: [
-          const Expanded(child: Text('Perfil & Convidar', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
-          IconButton(onPressed: () => ppPush(context, const SettingsScreen()), icon: const Icon(Icons.settings_outlined, color: ppGold)),
-        ]),
-        const SizedBox(height: 9),
-        GlassPanel(
-          highlight: true,
-          child: Row(children: [
-            Container(
-              width: 76,
-              height: 76,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: ppBlue.withOpacity(0.38), border: Border.all(color: ppGold.withOpacity(0.45))),
-              child: const Icon(Icons.flight_outlined, color: ppGoldBright, size: 42),
+    final pilot = _profile['pilot'] as Map<String, dynamic>? ?? const {};
+    final stats = _profile['stats'] as Map<String, dynamic>? ?? const {};
+    final complete = pilot['profile_completed'] == 1;
+    final name = pilot['pilot_name']?.toString() ?? 'Piloto';
+    final handle = pilot['pilot_handle']?.toString();
+    final country = pilot['country_code']?.toString();
+    final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
+    final received = int.tryParse(stats['received']?.toString() ?? '') ?? 0;
+
+    return RefreshIndicator(
+      color: ppGold,
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+        children: [
+          Row(children: [
+            const Expanded(child: Text('Perfil & Conta', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
+            IconButton(onPressed: () => ppPush(context, const SettingsScreen()), icon: const Icon(Icons.settings_outlined, color: ppGold)),
+          ]),
+          if (_loading)
+            const Padding(padding: EdgeInsets.all(38), child: Center(child: CircularProgressIndicator(color: ppGold)))
+          else if (_error != null)
+            GlassPanel(
+              child: Column(children: [
+                const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 30),
+                const SizedBox(height: 8),
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 9),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+              ]),
+            )
+          else ...[
+            GlassPanel(
+              highlight: true,
+              child: Row(children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: ppBlue.withOpacity(0.38), border: Border.all(color: ppGold.withOpacity(0.45))),
+                  child: const Icon(Icons.flight_outlined, color: ppGoldBright, size: 42),
+                ),
+                const SizedBox(width: 15),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                  if (handle != null) Text('@' + handle, style: const TextStyle(color: ppGoldBright)),
+                  const SizedBox(height: 4),
+                  Text(country == null ? 'País não definido' : _countryFlag(country) + ' ' + _countryName(country), style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(complete ? 'Perfil sincronizado' : 'Perfil por completar', style: TextStyle(color: complete ? const Color(0xFF8DE0AF) : ppGold, fontSize: 11)),
+                ])),
+              ]),
             ),
-            const SizedBox(width: 15),
-            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Piloto', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-              SizedBox(height: 5),
-              Text('✈  Piloto nível 2', style: TextStyle(color: ppGoldBright)),
-              SizedBox(height: 5),
-              Text('🌐  Português · English', style: TextStyle(color: Colors.white60, fontSize: 12)),
-            ])),
-          ]),
-        ),
-        const SectionTitle('A tua coleção'),
-        GlassPanel(
-          child: Row(children: [
-            const Expanded(child: _ProfileNumber(number: '128', label: 'Voos')),
-            Container(width: 1, height: 55, color: Colors.white24),
-            const Expanded(child: _ProfileNumber(number: '24', label: 'Países')),
-            Container(width: 1, height: 55, color: Colors.white24),
-            const Expanded(child: _ProfileNumber(number: '9', label: 'Recebidos')),
-          ]),
-        ),
-        const SectionTitle('Conta e preferências'),
-        _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
-        _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
-        _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Controla a tua privacidade', onTap: () => ppPush(context, const SafetyScreen())),
-        _ProfileLink(icon: Icons.card_giftcard, title: 'Convidar amigos', subtitle: 'Partilha o Paper Plane', onTap: () => ppPush(context, const InviteScreen())),
-        _ProfileLink(icon: Icons.collections_bookmark_outlined, title: 'A minha coleção', subtitle: 'Selos, países e conquistas', onTap: () => ppPush(context, const CollectionScreen())),
-        _ProfileLink(icon: Icons.local_fire_department_outlined, title: 'Chama do Deserto', subtitle: 'Pré-visualização · depende de consentimento mútuo', onTap: () => ppPush(context, const ChamaScreen())),
-        _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Perguntas e contacto', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
-      ],
+            if (!complete) ...[
+              const SizedBox(height: 12),
+              GoldButton(
+                label: 'Completar perfil de copiloto',
+                icon: Icons.person_add_alt_1_rounded,
+                onPressed: () async {
+                  final result = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
+                  );
+                  if (result == true) _refresh();
+                },
+              ),
+            ],
+            const SectionTitle('Resumo da conta'),
+            GlassPanel(
+              child: Row(children: [
+                Expanded(child: _ProfileNumber(number: sent.toString(), label: 'Aviões enviados')),
+                Container(width: 1, height: 55, color: Colors.white24),
+                Expanded(child: _ProfileNumber(number: received.toString(), label: 'Aviões recebidos')),
+              ]),
+            ),
+            const SectionTitle('Conta e preferências'),
+            _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
+            _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
+            _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
+            _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
+          ],
+          const SizedBox(height: 10),
+          const Text('Os dados do perfil e os totais são obtidos no servidor Paper Plane.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
+      ),
     );
   }
 }
