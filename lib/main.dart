@@ -11,6 +11,8 @@ import 'screens/account_screen.dart';
 import 'screens/pilot_profile_setup_screen.dart';
 import 'screens/first_flight_workshop_screen.dart';
 import 'screens/support_screen.dart';
+import 'screens/chat_hub_screen.dart';
+import 'screens/quiz_screen.dart';
 import 'widgets/report_dialog.dart';
 
 const Color ppNavy = Color(0xFF071225);
@@ -585,11 +587,14 @@ class _MainShellState extends State<MainShell> {
     super.initState();
     PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
     PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
+    PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
       if (pendingAirplaneId != null) {
         _openPlaneFromNotification(pendingAirplaneId);
+      } else if (PaperPlaneNotifications.consumePendingChatOpen()) {
+        _openChatFromNotification();
       } else if (PaperPlaneNotifications.consumePendingInboxOpen()) {
         _openInboxFromNotification();
       }
@@ -602,6 +607,10 @@ class _MainShellState extends State<MainShell> {
 
   void _openInboxFromNotification() {
     if (mounted) setState(() => _index = 1);
+  }
+
+  void _openChatFromNotification() {
+    if (mounted) setState(() => _index = 3);
   }
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
@@ -635,6 +644,7 @@ class _MainShellState extends State<MainShell> {
   void dispose() {
     PaperPlaneNotifications.onOpenInbox = null;
     PaperPlaneNotifications.onOpenPlane = null;
+    PaperPlaneNotifications.onOpenChat = null;
     super.dispose();
   }
 
@@ -644,6 +654,8 @@ class _MainShellState extends State<MainShell> {
       HomePage(onWrite: () => ppPush(context, const WritePlaneScreen()), onOpenInbox: () => setState(() => _index = 1)),
       const InboxPage(),
       const OpenSkyPage(),
+      const ChatHubScreen(),
+      const QuizScreen(),
       const ProfilePage(),
     ];
 
@@ -662,17 +674,53 @@ class _MainShellState extends State<MainShell> {
         ),
         child: SafeArea(
           top: false,
-          child: NavigationBar(
-            height: 70,
-            backgroundColor: Colors.transparent,
-            indicatorColor: ppGold.withOpacity(0.13),
-            selectedIndex: _index,
-            onDestinationSelected: (value) => setState(() => _index = value),
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded, color: ppGold), label: 'Home'),
-              NavigationDestination(icon: Icon(Icons.inbox_outlined), selectedIcon: Icon(Icons.inbox_rounded, color: ppGold), label: 'Caixa'),
-              NavigationDestination(icon: Icon(Icons.public_outlined), selectedIcon: Icon(Icons.public, color: ppGold), label: 'Open Sky'),
-              NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded, color: ppGold), label: 'Perfil'),
+          child: SizedBox(
+            height: 66,
+            child: Row(children: [
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+              _navItem(1, Icons.inbox_outlined, Icons.inbox_rounded, 'Caixa'),
+              _navItem(2, Icons.public_outlined, Icons.public_rounded, 'Open Sky'),
+              _navItem(3, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chat'),
+              _navItem(4, Icons.quiz_outlined, Icons.quiz_rounded, 'Quiz'),
+              _navItem(5, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(int index, IconData icon, IconData selectedIcon, String label) {
+    final selected = _index == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _index = index),
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 1),
+          decoration: BoxDecoration(
+            color: selected ? ppGold.withOpacity(0.13) : Colors.transparent,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(selected ? selectedIcon : icon, color: selected ? ppGoldBright : Colors.white70, size: 21),
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: selected ? ppGoldBright : Colors.white60,
+                    fontSize: 9.5,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
