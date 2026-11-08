@@ -282,7 +282,12 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     });
   }
   // Symbolic app journey, not GPS or physical-aircraft telemetry.
-  const durationSeconds = Math.max(90, Math.ceil(distanceKm / 900 * 60 * 60));
+  // Keep long-distance flights exciting and short: 90 seconds minimum,
+  // scaling gently with distance, capped at five minutes worldwide.
+  const durationSeconds = Math.max(
+    90,
+    Math.min(300, Math.round(60 + Math.sqrt(distanceKm) * 2)),
+  );
   const startedAt = isoNow();
   return {
     distanceKm,
