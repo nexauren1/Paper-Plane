@@ -152,7 +152,7 @@ async function requireUser(uid: string, env: Env) {
   }>();
 }
 
-async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE"; categories: string[] }> {
+async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
   try {
     const guardResult = await env.AI.run(MODERATION_MODEL, {
       messages: [
@@ -199,8 +199,9 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
     }
     return { state: "SAFE", categories: [] };
   } catch {
-    // Fail closed: moderation outages and malformed classifications never auto-publish content.
-    return { state: "REVIEW", categories: ["MODERATION_UNAVAILABLE"] };
+    // A technical outage is not a moderation decision. Do not store a plane that can remain
+    // held forever; callers return a retryable 503 and leave daily limits untouched.
+    return { state: "TEMPORARY_UNAVAILABLE", categories: ["MODERATION_UNAVAILABLE"] };
   }
 }
 
@@ -431,6 +432,12 @@ async function createAirplane(
   if (moderation.state === "UNSAFE") {
     return json({ error: "MESSAGE_NOT_ALLOWED", categories: moderation.categories }, 422);
   }
+  if (moderation.state === "TEMPORARY_UNAVAILABLE") {
+    return json({
+      error: "MODERATION_TEMPORARILY_UNAVAILABLE",
+      message: "Safety checks are temporarily unavailable. Your plane was not launched; please try again.",
+    }, 503);
+  }
 
   if (!forcedRecipient) {
     const daily = await env.DB.prepare(
@@ -627,11 +634,13 @@ async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
      JOIN users s ON s.uid = a.sender_uid
      LEFT JOIN users r ON r.uid = a.recipient_uid
      WHERE a.status = 'HELD_REVIEW'
-       AND a.moderation_categories IN (?, ?)
+       AND a.moderation_categories IN (?, ?, ?, ?)
      ORDER BY a.created_at ASC LIMIT 30`,
   ).bind(
     JSON.stringify(["RISK_CLASSIFIER_UNCERTAIN"]),
     JSON.stringify(["RISK_CLASSIFIER_LOW_CONFIDENCE"]),
+    JSON.stringify(["AI_UNCERTAIN"]),
+    JSON.stringify(["MODERATION_UNAVAILABLE"]),
   ).all<{
     id: string; sender_uid: string; recipient_uid: string | null; audience: string;
     message_text: string; sender_country: string | null; recipient_country: string | null;
@@ -639,6 +648,21 @@ async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
 
   for (const plane of rows.results ?? []) {
     if (!isOrdinaryGreeting(plane.message_text)) continue;
+
+    // Re-run Llama Guard. The greeting rule is never allowed to override an
+    // uncertain or unavailable primary moderation result.
+    const moderation = await moderate(env, plane.message_text);
+    if (moderation.state === "TEMPORARY_UNAVAILABLE" || moderation.state === "REVIEW") continue;
+    if (moderation.state === "UNSAFE") {
+      await env.DB.prepare(
+        "UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE', moderation_categories = ? WHERE id = ? AND status = 'HELD_REVIEW'",
+      ).bind(JSON.stringify(moderation.categories), plane.id).run();
+      await env.DB.prepare(
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'HELD_GREETING_REJECTED_AFTER_RECHECK', ?, ?)",
+      ).bind(uuid(), plane.id, JSON.stringify({ categories: moderation.categories })).run();
+      continue;
+    }
+
     const now = isoNow();
     let changed = false;
 
@@ -1420,6 +1444,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (Number(count?.count ?? 0) >= 5) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
     const moderation = await moderate(env, message);
     if (moderation.state === "UNSAFE") return json({ error: "MESSAGE_NOT_ALLOWED" }, 422);
+    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
+      return json({
+        error: "MODERATION_TEMPORARILY_UNAVAILABLE",
+        message: "Safety checks are temporarily unavailable. Your reply was not sent; please try again.",
+      }, 503);
+    }
     const id = uuid();
     const moderationState = moderation.state === "SAFE" ? "SAFE" : "REVIEW";
     try {
