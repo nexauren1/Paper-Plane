@@ -371,6 +371,14 @@ async function createYotiAgeSession(
       level: "PASSIVE",
       authenticity: "AUTO",
     },
+    digital_id: {
+      allowed: true,
+      threshold: minimumAge,
+      age_estimation_allowed: !docScanOnly,
+      age_estimation_threshold: estimateThreshold,
+      retry_enabled: false,
+      retry_limit: 1,
+    },
     doc_scan: {
       allowed: true,
       threshold: minimumAge,
@@ -511,7 +519,7 @@ async function ageVerificationStatus(
       }
     }
 
-    if (session.stage === "AGE_BAND" && method === "DOC_SCAN") {
+    if (session.stage === "AGE_BAND" && method !== null && method !== "AGE_ESTIMATION") {
       await env.DB.batch([
         env.DB.prepare(
           "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
