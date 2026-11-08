@@ -1305,6 +1305,55 @@ class _SkyFlightPainter extends CustomPainter {
   bool shouldRepaint(covariant _SkyFlightPainter oldDelegate) => oldDelegate.progress != progress;
 }
 
+class AnimatedGlobeFlight extends StatefulWidget {
+  const AnimatedGlobeFlight({
+    super.key,
+    required this.route,
+    required this.progress,
+  });
+
+  final Map<String, dynamic>? route;
+  final double progress;
+
+  @override
+  State<AnimatedGlobeFlight> createState() => _AnimatedGlobeFlightState();
+}
+
+class _AnimatedGlobeFlightState extends State<AnimatedGlobeFlight>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 18),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _motion,
+      builder: (context, child) => CustomPaint(
+        painter: GlobeFlightPainter(
+          route: widget.route,
+          progress: widget.progress,
+          rotation: math.sin(_motion.value * math.pi * 2) * 5.0,
+          pulse: (math.sin(_motion.value * math.pi * 2 * 1.4) + 1) / 2,
+        ),
+        child: child,
+      ),
+      child: Center(
+        child: widget.route == null
+            ? Icon(Icons.public_rounded, size: 44, color: ppGold.withOpacity(0.65))
+            : const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
 class GlobeFlightPainter extends CustomPainter {
   const GlobeFlightPainter({
     this.route,
@@ -1820,17 +1869,14 @@ class _FlightScreenState extends State<FlightScreen> {
   bool _loading = true;
   Timer? _poller;
   Timer? _ticker;
-  double _globePhase = 0;
 
   @override
   void initState() {
     super.initState();
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
-    _ticker = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      if (mounted && _flight != null) {
-        setState(() => _globePhase = (_globePhase + 0.04) % (math.pi * 2));
-      }
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _flight != null) setState(() {});
     });
   }
 
@@ -1911,18 +1957,9 @@ class _FlightScreenState extends State<FlightScreen> {
             highlight: true,
             child: SizedBox(
               height: 340,
-              child: CustomPaint(
-                painter: GlobeFlightPainter(
-                  route: route,
-                  progress: _progress,
-                  rotation: math.sin(_globePhase) * 5.0,
-                  pulse: (math.sin(_globePhase * 1.4) + 1) / 2,
-                ),
-                child: Center(
-                  child: route == null
-                      ? Icon(Icons.public_rounded, size: 44, color: ppGold.withOpacity(0.65))
-                      : const SizedBox.shrink(),
-                ),
+              child: AnimatedGlobeFlight(
+                route: route,
+                progress: _progress,
               ),
             ),
           ),
