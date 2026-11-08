@@ -1361,81 +1361,217 @@ class _FlightScreenState extends State<FlightScreen> {
   );
 }
 
-class InboxPage extends StatelessWidget {
+
+class InboxPage extends StatefulWidget {
   const InboxPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 21, 20, 24),
-      children: [
-        const Text('A tua caixa', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
-        const Text('Aviões que chegaram até ti', style: TextStyle(color: Colors.white70)),
-        const SizedBox(height: 19),
-        const _InboxCard(flag: '🇯🇵', from: 'Alguém no Japão', preview: 'Hoje passei no meu exame. Espero que também tenhas boas notícias.', time: 'Hoje · 18:32', fresh: true),
-        const SizedBox(height: 12),
-        const _InboxCard(flag: '🇧🇷', from: 'Alguém no Brasil', preview: 'Que o teu dia tenha um pouco de luz e tranquilidade.', time: 'Ontem · 21:05'),
-        const SizedBox(height: 12),
-        const _InboxCard(flag: '🇵🇹', from: 'Alguém em Portugal', preview: 'Um pequeno pensamento pode viajar muito longe.', time: 'Há 2 dias'),
-        const SectionTitle('A sair'),
-        GlassPanel(
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.flight_takeoff, color: ppGoldBright, size: 30),
-            title: const Text('O teu avião para o Japão'),
-            subtitle: const Text('Em voo · Demonstração', style: TextStyle(color: Colors.white60)),
-            trailing: const Icon(Icons.chevron_right, color: ppGold),
-            onTap: () => ppPush(context, const FlightScreen()),
-          ),
-        ),
-      ],
-    );
-  }
+  State<InboxPage> createState() => _InboxPageState();
 }
 
-class _InboxCard extends StatelessWidget {
-  const _InboxCard({required this.flag, required this.from, required this.preview, required this.time, this.fresh = false});
-  final String flag;
-  final String from;
-  final String preview;
-  final String time;
-  final bool fresh;
+class _InboxPageState extends State<InboxPage> {
+  List<Map<String, dynamic>> _received = [];
+  List<Map<String, dynamic>> _sent = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      final results = await Future.wait([
+        PaperPlaneApi.instance.getInbox(),
+        PaperPlaneApi.instance.getSentPlanes(),
+      ]);
+      final received = (results[0]['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      final sent = (results[1]['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      if (!mounted) return;
+      setState(() {
+        _received = received;
+        _sent = sent;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error is PaperPlaneApiException ? error.message : 'Não foi possível carregar os aviões pela internet.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: () => ppPush(context, IncomingPlaneScreen(from: from, flag: flag, preview: preview)),
-      child: GlassPanel(
-        highlight: fresh,
-        child: Row(children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(color: ppBlue.withOpacity(0.35), borderRadius: BorderRadius.circular(15)),
-            child: const Icon(Icons.mail_outline_rounded, color: ppGoldBright, size: 29),
-          ),
-          const SizedBox(width: 13),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(from, style: const TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            const SizedBox(height: 5),
-            Text(time, style: const TextStyle(color: ppGold, fontSize: 11)),
-          ])),
-          if (fresh) const Padding(padding: EdgeInsets.only(left: 7), child: CircleAvatar(radius: 4, backgroundColor: ppGold)),
-        ]),
+    return RefreshIndicator(
+      color: ppGold,
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.fromLTRB(20, 21, 20, 24),
+        children: [
+          const Text('A tua caixa', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          const Text('Correio sincronizado com o servidor', style: TextStyle(color: Colors.white70)),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: CircularProgressIndicator(color: ppGold)),
+            )
+          else if (_error != null)
+            GlassPanel(
+              child: Column(children: [
+                const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 32),
+                const SizedBox(height: 8),
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+              ]),
+            )
+          else ...[
+            const SectionTitle('Recebidos'),
+            if (_received.isEmpty)
+              const GlassPanel(child: Text('Ainda não recebeste aviões. Quando uma carta chegar, aparecerá aqui.', style: TextStyle(color: Colors.white70)))
+            else
+              for (final plane in _received) ...[
+                const SizedBox(height: 10),
+                InkWell(
+                  borderRadius: BorderRadius.circular(19),
+                  onTap: () => ppPush(context, IncomingPlaneScreen(
+                    airplaneId: plane['id']?.toString() ?? '',
+                    countryCode: plane['sender_country_code']?.toString(),
+                  )),
+                  child: GlassPanel(
+                    highlight: plane['status'] == 'DELIVERED',
+                    child: Row(children: [
+                      Container(
+                        width: 52, height: 52,
+                        decoration: BoxDecoration(color: ppBlue.withOpacity(0.35), borderRadius: BorderRadius.circular(15)),
+                        child: const Icon(Icons.mark_email_unread_outlined, color: ppGoldBright, size: 28),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('Alguém em ' + _countryName(plane['sender_country_code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        const Text('Uma carta selada chegou até ti.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        const SizedBox(height: 4),
+                        Text(plane['status'] == 'READ' ? 'Já aberta' : 'Nova carta', style: const TextStyle(color: ppGold, fontSize: 11)),
+                      ])),
+                      const Icon(Icons.chevron_right, color: ppGold),
+                    ]),
+                  ),
+                ),
+              ],
+            const SectionTitle('A sair'),
+            if (_sent.isEmpty)
+              const GlassPanel(child: Text('Ainda não lançaste nenhum avião.', style: TextStyle(color: Colors.white70)))
+            else
+              for (final plane in _sent) ...[
+                const SizedBox(height: 10),
+                InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () => ppPush(context, FlightScreen(airplaneId: plane['id'].toString())),
+                  child: GlassPanel(
+                    child: Row(children: [
+                      const Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(
+                          plane['status'] == 'QUEUED'
+                              ? 'À procura de destinatário'
+                              : plane['status'] == 'FLYING'
+                                  ? 'Em voo · ' + (plane['flight_distance_km']?.toString() ?? 'a calcular') + ' km'
+                                  : plane['status']?.toString() ?? 'Estado desconhecido',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('Lançado ' + (plane['created_at']?.toString() ?? ''), style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                      ])),
+                      const Icon(Icons.chevron_right, color: ppGold),
+                    ]),
+                  ),
+                ),
+              ],
+          ],
+          const SizedBox(height: 12),
+          const Text('Puxa para baixo para sincronizar os aviões e os seus estados.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
       ),
     );
   }
 }
 
-class IncomingPlaneScreen extends StatelessWidget {
-  const IncomingPlaneScreen({super.key, required this.from, required this.flag, required this.preview});
-  final String from;
-  final String flag;
-  final String preview;
+class IncomingPlaneScreen extends StatefulWidget {
+  const IncomingPlaneScreen({super.key, required this.airplaneId, this.countryCode});
+  final String airplaneId;
+  final String? countryCode;
+
+  @override
+  State<IncomingPlaneScreen> createState() => _IncomingPlaneScreenState();
+}
+
+class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
+  bool _busy = false;
+
+  Future<void> _open() async {
+    setState(() => _busy = true);
+    try {
+      final result = await PaperPlaneApi.instance.openIncomingPlane(widget.airplaneId);
+      final plane = result['airplane'] as Map<String, dynamic>?;
+      if (!mounted) return;
+      if (plane == null) throw const PaperPlaneApiException('NOT_FOUND', 'Esta carta já não está disponível.');
+      ppPush(context, LetterScreen(airplane: plane));
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível abrir a carta.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _release() async {
+    setState(() => _busy = true);
+    try {
+      await PaperPlaneApi.instance.releasePlane(widget.airplaneId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O avião foi libertado.')));
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível libertar este avião.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _reportOrBlock({required bool block}) async {
+    setState(() => _busy = true);
+    try {
+      if (block) {
+        await PaperPlaneApi.instance.blockSenderOfPlane(widget.airplaneId);
+      } else {
+        await PaperPlaneApi.instance.reportPlane(widget.airplaneId, reason: 'INAPPROPRIATE');
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(block ? 'Remetente bloqueado.' : 'Denúncia enviada para análise.')));
+      if (block) Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível concluir esta ação.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1443,53 +1579,119 @@ class IncomingPlaneScreen extends StatelessWidget {
       title: 'Avião recebido',
       child: Padding(
         padding: const EdgeInsets.fromLTRB(22, 12, 22, 26),
-        child: Column(
-          children: [
-            const Spacer(),
-            const Icon(Icons.mark_email_unread_rounded, color: ppGoldBright, size: 125),
-            const SizedBox(height: 25),
-            const Text('Recebeste um novo avião', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 10),
-            Text('De: ' + from + ' ' + flag, style: const TextStyle(color: ppGoldBright, fontSize: 16)),
-            const SizedBox(height: 22),
-            GlassPanel(child: Row(children: [
-              const Icon(Icons.lock_outline_rounded, color: ppGold, size: 31),
-              const SizedBox(width: 13),
-              const Expanded(child: Text('Mensagem selada · Chegou agora', style: TextStyle(color: Colors.white70))),
-            ])),
-            const Spacer(),
-            GoldButton(label: 'Abrir devagar', icon: Icons.mail_outline, onPressed: () => ppPush(context, LetterScreen(from: from, flag: flag, message: preview))),
-            const SizedBox(height: 12),
-            SoftButton(label: 'Deixar voar', icon: Icons.air, onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A opção de libertar será ligada ao servidor.')));
-            }),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: () => showReportDialog(context),
-              icon: const Icon(Icons.shield_outlined, color: Colors.white54),
-              label: const Text('Denunciar', style: TextStyle(color: Colors.white54)),
-            ),
-          ],
-        ),
+        child: Column(children: [
+          const Spacer(),
+          const Icon(Icons.mark_email_unread_rounded, color: ppGoldBright, size: 125),
+          const SizedBox(height: 25),
+          const Text('Recebeste um novo avião', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Text('De: Alguém em ' + _countryName(widget.countryCode) + ' ' + _countryFlag(widget.countryCode), style: const TextStyle(color: ppGoldBright, fontSize: 16)),
+          const SizedBox(height: 22),
+          const GlassPanel(child: Row(children: [
+            Icon(Icons.lock_outline_rounded, color: ppGold, size: 31),
+            SizedBox(width: 13),
+            Expanded(child: Text('Mensagem selada · Abre quando estiveres pronto.', style: TextStyle(color: Colors.white70))),
+          ])),
+          const Spacer(),
+          GoldButton(label: _busy ? 'A abrir…' : 'Abrir devagar', icon: Icons.mail_outline, onPressed: _busy ? () {} : _open),
+          const SizedBox(height: 12),
+          SoftButton(label: 'Libertar avião', icon: Icons.air_rounded, onPressed: _busy ? () {} : _release),
+          const SizedBox(height: 12),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: false), icon: const Icon(Icons.flag_outlined, color: Colors.white54), label: const Text('Denunciar', style: TextStyle(color: Colors.white54))),
+            TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: true), icon: const Icon(Icons.block_rounded, color: Colors.white54), label: const Text('Bloquear', style: TextStyle(color: Colors.white54))),
+          ]),
+        ]),
       ),
     );
   }
 }
 
-class LetterScreen extends StatelessWidget {
-  const LetterScreen({super.key, required this.from, required this.flag, required this.message});
-  final String from;
-  final String flag;
-  final String message;
+class LetterScreen extends StatefulWidget {
+  const LetterScreen({super.key, required this.airplane});
+  final Map<String, dynamic> airplane;
+
+  @override
+  State<LetterScreen> createState() => _LetterScreenState();
+}
+
+class _LetterScreenState extends State<LetterScreen> {
+  final TextEditingController _reply = TextEditingController();
+  bool _busy = false;
+  bool _hearted = false;
+
+  @override
+  void dispose() {
+    _reply.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendReply() async {
+    final message = _reply.text.trim();
+    if (message.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final result = await PaperPlaneApi.instance.replyToPlane(
+        widget.airplane['id'].toString(),
+        message: message,
+        language: 'pt',
+        allowReply: true,
+      );
+      final plane = result['airplane'] as Map<String, dynamic>? ?? const {};
+      final id = plane['id']?.toString();
+      if (!mounted) return;
+      if (id == null || id.isEmpty) throw const PaperPlaneApiException('REPLY_NOT_CREATED', 'A resposta não foi criada.');
+      ppPush(context, FlightScreen(airplaneId: id));
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar a resposta.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _sendHeart() async {
+    if (_hearted || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await PaperPlaneApi.instance.sendHeart(widget.airplane['id'].toString());
+      if (!mounted) return;
+      setState(() => _hearted = true);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coração enviado.')));
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o coração.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _report() async {
+    try {
+      await PaperPlaneApi.instance.reportPlane(widget.airplane['id'].toString(), reason: 'INAPPROPRIATE');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Denúncia enviada para análise.')));
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar a denúncia.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final country = widget.airplane['sender_country_code']?.toString();
+    final message = widget.airplane['message_text']?.toString() ?? '';
+    final replyValue = widget.airplane['allow_reply'];
+    final allowReply = replyValue == 1 || replyValue == true;
     return ScreenFrame(
-      title: 'A tua carta',
-      action: IconButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Partilha ainda não ligada.'))), icon: const Icon(Icons.share_outlined, color: ppGold)),
+      title: 'Mensagem',
       child: ListView(
         padding: const EdgeInsets.fromLTRB(19, 10, 19, 25),
         children: [
+          const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
             decoration: BoxDecoration(
@@ -1498,20 +1700,40 @@ class LetterScreen extends StatelessWidget {
               boxShadow: [BoxShadow(color: ppGold.withOpacity(0.16), blurRadius: 19)],
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('De: ' + from + ' ' + flag, style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
+              Text('De: Alguém em ' + _countryName(country) + ' ' + _countryFlag(country), style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
               const SizedBox(height: 24),
               Text(message, style: const TextStyle(color: ppInk, fontSize: 22, height: 1.6, fontStyle: FontStyle.italic)),
-              const SizedBox(height: 26),
-              const Divider(color: Color(0x338B806F)),
-              const Text('Recebido hoje · 18:32', style: TextStyle(color: Color(0xFF82745A), fontSize: 12)),
+              const SizedBox(height: 22),
+              Text('Recebido · ' + (widget.airplane['delivered_at']?.toString() ?? ''), style: const TextStyle(color: Color(0xFF82745A), fontSize: 11)),
             ]),
           ),
-          const SizedBox(height: 27),
-          GoldButton(label: 'Responder com avião', icon: Icons.send_rounded, onPressed: () => ppPush(context, const WritePlaneScreen())),
-          const SizedBox(height: 12),
-          SoftButton(label: 'Enviar coração', icon: Icons.favorite_border, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coração guardado localmente nesta demonstração.')))),
-          const SizedBox(height: 12),
-          Center(child: TextButton.icon(onPressed: () => showReportDialog(context), icon: const Icon(Icons.shield_outlined), label: const Text('Denunciar'))),
+          const SizedBox(height: 18),
+          if (allowReply) ...[
+            const SectionTitle('Responder com outro avião'),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: const Color(0xFF142541), borderRadius: BorderRadius.circular(18), border: Border.all(color: ppGold.withOpacity(0.28))),
+              child: TextField(
+                controller: _reply,
+                maxLength: 200,
+                maxLines: 4,
+                minLines: 3,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(hintText: 'Escreve uma resposta gentil…', border: InputBorder.none, counterStyle: TextStyle(color: Colors.white54)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            GoldButton(label: _busy ? 'A enviar…' : 'Responder com avião', icon: Icons.send_rounded, onPressed: _busy ? () {} : _sendReply),
+            const SizedBox(height: 10),
+          ] else
+            const GlassPanel(child: Text('O remetente desativou as respostas para esta carta.', style: TextStyle(color: Colors.white70))),
+          SoftButton(
+            label: _hearted ? 'Coração enviado' : 'Enviar coração',
+            icon: _hearted ? Icons.favorite : Icons.favorite_border,
+            onPressed: _busy || _hearted ? () {} : _sendHeart,
+          ),
+          const SizedBox(height: 8),
+          Center(child: TextButton.icon(onPressed: _report, icon: const Icon(Icons.shield_outlined, color: Colors.white54), label: const Text('Denunciar mensagem', style: TextStyle(color: Colors.white54)))),
         ],
       ),
     );
