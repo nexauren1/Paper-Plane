@@ -2010,12 +2010,13 @@ class _FlightScreenState extends State<FlightScreen> {
   bool _loading = true;
   Timer? _poller;
   Timer? _ticker;
+  bool _openingChama = false;
 
   @override
   void initState() {
     super.initState();
     _refresh();
-    _poller = Timer.periodic(const Duration(seconds: 15), (_) => _refresh());
+    _poller = Timer.periodic(const Duration(seconds: 4), (_) => _refresh());
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && _flight != null) setState(() {});
     });
@@ -2032,11 +2033,31 @@ class _FlightScreenState extends State<FlightScreen> {
     try {
       final response = await PaperPlaneApi.instance.getAirplaneFlight(widget.airplaneId);
       if (!mounted) return;
+      final latest = response['flight'] as Map<String, dynamic>?;
       setState(() {
-        _flight = response['flight'] as Map<String, dynamic>?;
+        _flight = latest;
         _error = null;
         _loading = false;
       });
+      final status = latest?['status']?.toString() ?? '';
+      final conversationId = latest?['conversationId']?.toString() ?? '';
+      if (!_openingChama &&
+          conversationId.isNotEmpty &&
+          ['DELIVERED', 'READ', 'RESPONDED'].contains(status)) {
+        _openingChama = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ChamaConversationScreen(
+                conversationId: conversationId,
+                fallbackName: 'Copiloto',
+                fallbackHandle: 'copiloto',
+              ),
+            ),
+          );
+        });
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -2064,7 +2085,8 @@ class _FlightScreenState extends State<FlightScreen> {
   Widget build(BuildContext context) {
     final flight = _flight;
     final status = flight?['status']?.toString() ?? 'QUEUED';
-    final searching = flight?['searching'] == true || status == 'QUEUED';
+    final moderationPending = flight?['moderationState']?.toString() == 'PENDING';
+    final searching = flight?['searching'] == true || (status == 'QUEUED' && !moderationPending);
     final route = flight?['route'] is Map ? Map<String, dynamic>.from(flight!['route'] as Map) : null;
     final distance = (flight?['distanceKm'] as num?)?.toInt();
     final travelled = distance == null ? null : (distance * _progress).round();
@@ -2092,8 +2114,9 @@ class _FlightScreenState extends State<FlightScreen> {
         children: [
           const SizedBox(height: 5),
           Text(
-            _loading ? 'A contactar o servidor…' : searching
-                ? 'À procura de alguém para receber a tua carta'
+            _loading ? 'A contactar o servidor…' : moderationPending
+                ? 'A confirmar a segurança da tua carta'
+                : searching ? 'À procura de alguém para receber a tua carta'
                 : status == 'FLYING'
                     ? 'Em rota para ' + (destinationName?.trim().isNotEmpty == true ? destinationName! : _countryName(destinationCode))
                     : ['DELIVERED', 'READ', 'RESPONDED'].contains(status)
@@ -2162,6 +2185,19 @@ class _FlightScreenState extends State<FlightScreen> {
                 Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+              ]),
+            )
+          else if (moderationPending)
+            GlassPanel(
+              highlight: true,
+              child: Column(children: [
+                const Icon(Icons.shield_outlined, color: ppGoldBright, size: 34),
+                const SizedBox(height: 8),
+                const Text('A tua carta está guardada em segurança.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 7),
+                const Text('O serviço de segurança está a recuperar. O servidor vai tentar novamente automaticamente; não precisas de escrever outra mensagem nem repetir o envio.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
+                const SizedBox(height: 10),
+                const LinearProgressIndicator(color: ppGold, backgroundColor: Colors.white12),
               ]),
             )
           else if (searching)
