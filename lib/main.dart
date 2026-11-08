@@ -616,6 +616,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   Map<String, dynamic> _profile = {};
+  Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _sent = [];
   int _unread = 0;
   bool _loading = true;
@@ -646,6 +647,7 @@ class _HomePageState extends State<HomePage> {
         PaperPlaneApi.instance.getInbox(),
       ]);
       final pilot = results[0]['pilot'] as Map<String, dynamic>? ?? {};
+      final stats = results[0]['stats'] as Map<String, dynamic>? ?? {};
       final sent = (results[1]['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       final inbox = (results[2]['items'] as List<dynamic>? ?? const [])
@@ -653,6 +655,7 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       setState(() {
         _profile = pilot;
+        _stats = stats;
         _sent = sent;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
         _loading = false;
@@ -670,8 +673,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final name = _profile['pilot_name']?.toString();
     final handle = _profile['pilot_handle']?.toString();
-    final stats = _profile['stats'] as Map<String, dynamic>? ?? const {};
-    final received = int.tryParse(stats['received']?.toString() ?? '') ?? 0;
+    final received = int.tryParse(_stats['received']?.toString() ?? '') ?? 0;
     final active = _sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).length;
     final profileReady = _profile['profile_completed'] == 1;
 
