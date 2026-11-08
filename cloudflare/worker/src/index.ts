@@ -607,6 +607,35 @@ async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
   }
 }
 
+async function notifyChatMessage(uid: string, conversationId: string, env: Env) {
+  const accessToken = await exchangeFcmAccessToken(env);
+  if (!accessToken) return;
+  const devices = await env.DB.prepare(
+    "SELECT d.fcm_token FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'",
+  ).bind(uid).all<{ fcm_token: string }>();
+  for (const device of devices.results ?? []) {
+    try {
+      await fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            token: device.fcm_token,
+            notification: {
+              title: "A Chama do Deserto",
+              body: "Tens uma nova mensagem na tua conversa.",
+            },
+            data: { type: "CHAT_MESSAGE", conversationId },
+            android: { priority: "HIGH" },
+          },
+        }),
+      });
+    } catch {
+      // Chat delivery remains stored even when the push service is unavailable.
+    }
+  }
+}
+
 async function deliverAirplane(airplaneId: string, env: Env) {
   const plane = await env.DB.prepare(
     "SELECT id, recipient_uid FROM airplanes WHERE id = ? AND status = 'FLYING' AND recipient_uid IS NOT NULL",
@@ -746,6 +775,31 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       </main></body></html>`,
       { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
     );
+  }
+
+  if (method === "GET" && path === "/invite") {
+    const handle = normalizePilotHandle(url.searchParams.get("handle"));
+    if (!isValidPilotHandle(handle)) {
+      return new Response(
+        "<!doctype html><html lang=\"pt\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Convite Paper Plane</title><body style=\"background:#071225;color:#f4f0e7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\"><main style=\"max-width:420px;padding:28px;text-align:center\"><h1 style=\"color:#ffe7a8\">Paper Plane</h1><p>Este convite não tem um nome de copiloto válido.</p></main></body></html>",
+        { status: 400, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+      );
+    }
+    const pilot = await env.DB.prepare(
+      "SELECT pilot_name, pilot_handle FROM users WHERE lower(pilot_handle) = ? AND status = 'ACTIVE' AND profile_completed = 1 LIMIT 1",
+    ).bind(handle).first<{ pilot_name: string; pilot_handle: string }>();
+    if (!pilot) {
+      return new Response(
+        "<!doctype html><html lang=\"pt\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Convite Paper Plane</title><body style=\"background:#071225;color:#f4f0e7;font:16px system-ui;display:grid;min-height:100vh;place-items:center\"><main style=\"max-width:420px;padding:28px;text-align:center\"><h1 style=\"color:#ffe7a8\">Paper Plane</h1><p>Este convite já não está disponível.</p></main></body></html>",
+        { status: 404, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+      );
+    }
+    const safeName = pilot.pilot_name.replace(/[&<>\"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+    })[char] ?? char);
+    const safeHandle = pilot.pilot_handle.replace(/[&<>\"']/g, "");
+    const page = `<!doctype html><html lang="pt"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071225"><title>Convite de ${safeName} · Paper Plane</title><body style="margin:0;background:radial-gradient(circle at top,#17365c,#071225 60%);color:#f4f0e7;font:16px system-ui;display:grid;min-height:100vh;place-items:center"><main style="max-width:420px;padding:30px;text-align:center"><div style="font-size:54px">✈️</div><p style="letter-spacing:3px;color:#ffe7a8;font-weight:800">PAPER PLANE</p><h1>${safeName} convidou-te</h1><p style="color:#c5d2e5">Adiciona este copiloto no Paper Plane para poderem trocar aviões e, depois de uma resposta mútua, acender a Chama do Deserto.</p><div style="padding:16px;border:1px solid #d8b86d;border-radius:18px;background:#132642;font-size:22px;font-weight:800;color:#ffe7a8">@${safeHandle}</div><p style="color:#aebed4;font-size:13px">Abre o Paper Plane → Chat → Amigos → Adicionar por @nome e procura o identificador acima.</p></main></body></html>`;
+    return new Response(page, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
   }
 
   if (method === "GET" && path === "/v1/health") {
