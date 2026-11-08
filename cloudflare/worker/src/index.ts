@@ -938,6 +938,21 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     });
   }
 
+  const heartMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/heart$/);
+  if (method === "POST" && heartMatch) {
+    const result = await env.DB.prepare(
+      "INSERT OR IGNORE INTO airplane_hearts(airplane_id, uid) SELECT id, ? FROM airplanes WHERE id = ? AND recipient_uid = ? AND status IN ('DELIVERED','READ','RESPONDED')",
+    ).bind(uid, heartMatch[1], uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) {
+      const existing = await env.DB.prepare(
+        "SELECT 1 AS found FROM airplane_hearts WHERE airplane_id = ? AND uid = ?",
+      ).bind(heartMatch[1], uid).first();
+      if (!existing) return json({ error: "NOT_FOUND_OR_NOT_RECEIVED" }, 404);
+      return json({ ok: true, hearted: true, alreadySent: true });
+    }
+    return json({ ok: true, hearted: true });
+  }
+
   const releaseMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/release$/);
   if (method === "POST" && releaseMatch) {
     const result = await env.DB.prepare(
