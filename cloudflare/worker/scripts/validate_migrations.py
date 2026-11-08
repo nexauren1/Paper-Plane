@@ -123,4 +123,48 @@ plane_model_column = DB.execute(
 assert plane_model_column is not None, "Missing airplane plane_model column"
 
 
-print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop.")
+
+# Random flight matching prefers the requested country but must fall back globally.
+seed_user("sender")
+seed_user("recipient-jp")
+seed_user("recipient-br")
+for uid, country in [
+    ("sender", "MZ"),
+    ("recipient-jp", "JP"),
+    ("recipient-br", "BR"),
+]:
+    DB.execute(
+        "UPDATE users SET country_code = ?, profile_completed = 1, age_band = 'ADULT', age_verified = 1 WHERE uid = ?",
+        (country, uid),
+    )
+
+recipient_query = """
+    SELECT u.uid, u.country_code, u.language
+    FROM users u
+    WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
+      AND u.age_verified = 1 AND u.age_band = ?
+      AND u.accept_random_mail = 1 AND u.uid <> ?
+      AND NOT EXISTS (
+        SELECT 1 FROM blocks b
+        WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid)
+           OR (b.blocker_uid = u.uid AND b.blocked_uid = ?)
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM reports r
+        WHERE r.reporter_uid = u.uid AND r.reported_uid = ? AND r.status = 'OPEN'
+      )
+    ORDER BY CASE WHEN ? IS NOT NULL AND u.country_code = ? THEN 0 ELSE 1 END,
+      COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC,
+      u.uid ASC
+    LIMIT 40
+"""
+bindings = ("ADULT", "sender", "sender", "sender", "sender", "JP", "JP")
+preferred = DB.execute(recipient_query, bindings).fetchall()
+assert preferred and preferred[0][0] == "recipient-jp", "Requested country should be preferred"
+
+DB.execute("UPDATE users SET accept_random_mail = 0 WHERE uid = 'recipient-jp'")
+fallback = DB.execute(recipient_query, bindings).fetchall()
+assert fallback and all(row[0] != "recipient-jp" for row in fallback), "Ineligible destination pilot must be skipped"
+assert any(row[0] == "recipient-br" for row in fallback), "Plane must fall back to an eligible pilot worldwide"
+
+print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop and global recipient fallback.")
