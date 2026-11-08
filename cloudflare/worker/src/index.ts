@@ -1453,16 +1453,14 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ).bind(uid).first<{ count: number }>();
     if (Number(recent?.count ?? 0) >= 20) return json({ error: "REPORT_RATE_LIMIT" }, 429);
     const id = uuid();
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO reports(id, reporter_uid, airplane_id, reported_uid, reason, details) SELECT ?, ?, a.id, a.sender_uid, ?, ? FROM airplanes a WHERE a.id = ? AND a.sender_uid <> ? AND (a.recipient_uid = ? OR a.audience = 'PUBLIC')",
-      ).bind(id, uid, reason, text(body.details, 500) || null, airplaneId, uid, uid),
-      env.DB.prepare(
-        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'MESSAGE_REPORTED', ?, ?)",
-      ).bind(uuid(), uid, airplaneId, JSON.stringify({ category: reason, reportId: id })),
-    ]);
+    await env.DB.prepare(
+      "INSERT INTO reports(id, reporter_uid, airplane_id, reported_uid, reason, details) SELECT ?, ?, a.id, a.sender_uid, ?, ? FROM airplanes a WHERE a.id = ? AND a.sender_uid <> ? AND (a.recipient_uid = ? OR a.audience = 'PUBLIC')",
+    ).bind(id, uid, reason, text(body.details, 500) || null, airplaneId, uid, uid).run();
     const created = await env.DB.prepare("SELECT id FROM reports WHERE id = ?").bind(id).first();
     if (!created) return json({ error: "NOT_FOUND" }, 404);
+    await env.DB.prepare(
+      "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'MESSAGE_REPORTED', ?, ?)",
+    ).bind(uuid(), uid, airplaneId, JSON.stringify({ category: reason, reportId: id })).run();
     return json({ ok: true, reportId: id }, 201);
   }
 
