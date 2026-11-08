@@ -42,23 +42,16 @@ This branch prepares the production architecture without committing private cred
 - The models never compose a letter on behalf of a pilot.
 - AI is a screening aid, not a safety guarantee. It can miss harmful content or flag harmless content. Human review, reporting, blocking, rate limits, and clear community rules remain necessary.
 
-## Age assurance and child-safety gate
+## Self-declared age groups and child safety
 
-Every pilot begins with `age_band = UNVERIFIED` and `age_verified = 0`. The profile's self-declared birth year is not proof and never unlocks messaging.
+The profile form asks users to declare their full date of birth. The Worker validates the calendar date, calculates the age using server time, and assigns one of two cohorts: `UNDER_18` or `ADULT`. The app does not send users to a third-party identity or document-verification provider.
 
-The selected provider adapter is **Yoti Age Verification**:
-- Stage 1 verifies the minimum age of 13. Age estimation uses a conservative threshold; an inconclusive estimate is followed by a document-only session. An unsuccessful minimum-age check leaves the pilot unverified and unable to send or receive stranger mail.
-- Stage 2 distinguishes `UNDER_18` from `ADULT`. A successful over-18 check assigns `ADULT`; a completed document check that does not meet 18 assigns `UNDER_18`.
-- Matching is restricted to the exact same verified band. The matching query also enforces account status, consent, blocks, and open reports.
-- If a provider result is pending, uncertain, expired, or unavailable, the pilot remains unverified. No client-supplied value can set `age_verified`.
+For data minimization, the Worker does not retain the full date of birth. D1 keeps the birth year, the derived declared age group, and the time of declaration. Users must be at least 13 according to the date they enter. A declared date is not proof of age or identity and can be inaccurate or deliberately false.
 
-The Worker creates Yoti sessions and fetches results server-to-server. Configure the provider credentials as Cloudflare Worker secrets named `YOTI_API_TOKEN` and `YOTI_SDK_ID`; never put them in Dart, GitHub source, or chat. Yoti's API requires a Yoti Hub API key and SDK ID. Confirm that the required Age Verification methods and document types are enabled for Mozambique and each launch country before public release.
+Random and direct matching only pair users in the same declared age group. The server also enforces account status, profile completion, consent, blocks, and open reports. This separation is a basic risk-reduction measure, not a guarantee that a user is who they say they are or that contact is safe.
 
-D1 stores only the provider session reference, method, state, and final age band. It does not store document images, selfies, biometric payloads, full dates of birth, or raw provider result bodies. The external provider processes any verification evidence according to its own contract and privacy terms; review those terms and the local legal requirements before launch.
+Moderation, reporting, blocking, rate limits, human review, transparent community rules, and careful handling of reports remain essential. Do not use AI to infer a person's age from appearance, voice, writing style, or other speculative signals. Any account-risk signals should be treated as review cues, not proof of lying.
 
-Official provider flow: create a session, open `https://age.yoti.com?sessionId=…&sdkId=…`, then fetch `/api/v1/sessions/{sessionId}/result`. The app can resume and query the result; the API key stays exclusively on the Worker. See [Yoti Age Verification quick start](https://developers.yoti.com/age-verification/quick-start), [API reference](https://developers.yoti.com/age-verification-api), and [result states](https://developers.yoti.com/age-verification/results).
-
-This gate is necessary but not sufficient by itself. Same-band matching does not eliminate grooming or abuse risks. Human review, reporting, blocking, rate limits, parental/guardian requirements where applicable, privacy notice, data deletion, and launch-jurisdiction rules must be reviewed before opening the service.
 ## Firebase setup
 
 1. Open the existing Firebase project.
@@ -100,8 +93,6 @@ npm run db:remote
 npm run typecheck
 npx wrangler secret put FCM_SERVICE_ACCOUNT_JSON
 npx wrangler secret put ADMIN_UIDS
-npx wrangler secret put YOTI_API_TOKEN
-npx wrangler secret put YOTI_SDK_ID
 npm run deploy
 ~~~~
 
@@ -118,7 +109,7 @@ A manual-only deployment workflow is included at .github/workflows/deploy-worker
 - CLOUDFLARE_API_TOKEN — a scoped token that can deploy Workers and apply D1 migrations.
 - CLOUDFLARE_ACCOUNT_ID — the Cloudflare account ID.
 
-The D1 database and Queue resources must already exist, and wrangler.jsonc must contain the real D1 database ID and Firebase Project ID. The Worker secrets FCM_SERVICE_ACCOUNT_JSON, ADMIN_UIDS, and YOTI_API_TOKEN plus YOTI_SDK_ID are configured in Cloudflare, not GitHub. Then run the "Deploy Paper Plane Worker" workflow manually from the platform-integration branch.
+The D1 database and Queue resources must already exist, and wrangler.jsonc must contain the real D1 database ID and Firebase Project ID. The Worker secrets FCM_SERVICE_ACCOUNT_JSON and ADMIN_UIDS are configured in Cloudflare, not GitHub. Then run the "Deploy Paper Plane Worker" workflow manually from the platform-integration branch.
 
 The automatic Cloudflare CI checks also validate both SQL migrations in an in-memory SQLite database and typecheck the Worker code. They do not deploy anything.
 
@@ -148,9 +139,8 @@ Pages remains the public website. Use a Worker custom domain such as api.yourdom
 
 - Add the signing certificate SHA-1 and SHA-256 fingerprints to Firebase and refresh firebase/google-services.json before validating Google sign-in on the signed release APK.
 - Create the D1 database and Queue resources in the correct Cloudflare account.
-- Complete Yoti Hub onboarding, configure the YOTI_API_TOKEN and YOTI_SDK_ID Worker secrets, and verify real test sessions. The adapter uses authenticated result polling; no unsigned callback is trusted. Until provider credentials are configured, new users remain UNVERIFIED and cannot send or receive stranger mail.
 - Build the human moderation dashboard/workflow on top of the admin endpoints and define response coverage and escalation procedures.
-- Verify local laws, privacy notice, data-retention and deletion process, and child-safety requirements for each launch region.
+- Verify local laws and privacy requirements for every launch country, and publish clear notices for self-declared age information and user safety.
 - Connect live API data to every visual screen; the composer, auth, notification registration, and API clients are prepared, but inbox, Open Sky, profile, collection, and some other visual screens still show illustrative content.
 - Test FCM delivery on a real Android device and configure notification channels.
 - Add integration tests using Firebase Auth and Cloudflare staging resources before production.
