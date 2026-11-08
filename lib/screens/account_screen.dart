@@ -5,6 +5,7 @@ import '../services/firebase_runtime.dart';
 import '../services/paper_plane_api.dart';
 import '../services/paper_plane_auth.dart';
 import 'pilot_profile_setup_screen.dart';
+import 'first_flight_workshop_screen.dart';
 
 const Color _navy = Color(0xFF071225);
 const Color _gold = Color(0xFFF0CE7C);
