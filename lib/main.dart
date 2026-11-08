@@ -11,6 +11,8 @@ import 'screens/account_screen.dart';
 import 'screens/pilot_profile_setup_screen.dart';
 import 'screens/age_verification_screen.dart';
 import 'screens/first_flight_workshop_screen.dart';
+import 'screens/support_screen.dart';
+import 'widgets/report_dialog.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -25,6 +27,7 @@ const Color ppPanel = Color(0xCC172844);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await FirebaseRuntime.initialize();
+  await PaperPlaneNotifications.initializeMessageHandlers();
   await PaperPlaneAnalytics.initialize();
   runApp(const PaperPlaneApp());
 }
@@ -35,6 +38,7 @@ class PaperPlaneApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: PaperPlaneNotifications.scaffoldMessengerKey,
       title: 'Paper Plane',
       debugShowCheckedModeBanner: false,
       navigatorObservers: [
@@ -580,12 +584,25 @@ class _MainShellState extends State<MainShell> {
   @override
   void initState() {
     super.initState();
-    final firstFlightId = widget.initialFlightId;
-    if (firstFlightId != null && firstFlightId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) ppPush(context, FlightScreen(airplaneId: firstFlightId));
-      });
-    }
+    PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (PaperPlaneNotifications.consumePendingInboxOpen()) _openInboxFromNotification();
+      final firstFlightId = widget.initialFlightId;
+      if (firstFlightId != null && firstFlightId.isNotEmpty) {
+        ppPush(context, FlightScreen(airplaneId: firstFlightId));
+      }
+    });
+  }
+
+  void _openInboxFromNotification() {
+    if (mounted) setState(() => _index = 1);
+  }
+
+  @override
+  void dispose() {
+    PaperPlaneNotifications.onOpenInbox = null;
+    super.dispose();
   }
 
   @override
@@ -1896,19 +1913,19 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
   }
 
   Future<void> _reportOrBlock({required bool block}) async {
+    if (!block) {
+      await showReportDialog(context, widget.airplaneId);
+      return;
+    }
     setState(() => _busy = true);
     try {
-      if (block) {
-        await PaperPlaneApi.instance.blockSenderOfPlane(widget.airplaneId);
-      } else {
-        await PaperPlaneApi.instance.reportPlane(widget.airplaneId, reason: 'INAPPROPRIATE');
-      }
+      await PaperPlaneApi.instance.blockSenderOfPlane(widget.airplaneId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(block ? 'Remetente bloqueado.' : 'Denúncia enviada para análise.')));
-      if (block) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Remetente bloqueado. Não receberás novas correspondências desta conta.')));
+      Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
-      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível concluir esta ação.';
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear este remetente.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2188,15 +2205,7 @@ class _LetterScreenState extends State<LetterScreen> {
   }
 
   Future<void> _report() async {
-    try {
-      await PaperPlaneApi.instance.reportPlane(widget.airplane['id'].toString(), reason: 'INAPPROPRIATE');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Denúncia enviada para análise.')));
-    } catch (error) {
-      if (!mounted) return;
-      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar a denúncia.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-    }
+    await showReportDialog(context, widget.airplane['id'].toString());
   }
 
   @override
@@ -2410,6 +2419,38 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                     const SizedBox(width: 10),
                     Expanded(child: Text(_countryName(message['sender_country_code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
                     Text(message['created_at']?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+                    if (message['is_own'] != 1 && message['is_own'] != true)
+                      PopupMenuButton<String>(
+                        tooltip: 'Mais opções',
+                        icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
+                        onSelected: (action) async {
+                          final airplaneId = message['id'].toString();
+                          if (action == 'report') {
+                            await showReportDialog(context, airplaneId);
+                          } else if (action == 'block') {
+                            try {
+                              await PaperPlaneApi.instance.blockSenderOfPlane(airplaneId);
+                              await _refresh();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Remetente bloqueado.')),
+                                );
+                              }
+                            } catch (error) {
+                              if (mounted) {
+                                final messageText = error is PaperPlaneApiException
+                                    ? error.message
+                                    : 'Não foi possível bloquear esta conta.';
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(messageText)));
+                              }
+                            }
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'report', child: Text('Denunciar mensagem')),
+                          PopupMenuItem(value: 'block', child: Text('Bloquear remetente')),
+                        ],
+                      ),
                   ]),
                   const SizedBox(height: 12),
                   Text(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.45)),
@@ -3224,8 +3265,32 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool notifications = false;
-  bool darkMode = true;
-  String language = 'Português';
+  bool _loadingNotifications = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationPreference();
+  }
+
+  Future<void> _loadNotificationPreference() async {
+    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
+      if (mounted) setState(() => _loadingNotifications = false);
+      return;
+    }
+    try {
+      final result = await PaperPlaneApi.instance.getProfile();
+      final pilot = result['pilot'] as Map<String, dynamic>? ?? const {};
+      if (mounted) {
+        setState(() {
+          notifications = pilot['push_enabled'] == 1 || pilot['push_enabled'] == true;
+          _loadingNotifications = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingNotifications = false);
+    }
+  }
 
   Future<void> _setNotifications(bool enabled) async {
     if (!enabled) {
@@ -3282,40 +3347,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
         const SectionTitle('Preferências'),
         GlassPanel(
-          child: Column(children: [
-            DropdownButtonFormField<String>(
-              value: language,
-              decoration: const InputDecoration(labelText: 'Idioma', prefixIcon: Icon(Icons.language, color: ppGold)),
-              dropdownColor: const Color(0xFF152541),
-              items: const [
-                DropdownMenuItem(value: 'Português', child: Text('Português')),
-                DropdownMenuItem(value: 'English', child: Text('English')),
-              ],
-              onChanged: (value) => setState(() => language = value ?? language),
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeColor: ppGold,
+            title: const Text('Notificações neste dispositivo'),
+            subtitle: Text(
+              _loadingNotifications
+                  ? 'A consultar a preferência da tua conta…'
+                  : notifications
+                      ? 'Recebe avisos de novos aviões no Android e dentro da aplicação.'
+                      : 'Ativa para receber avisos quando um avião chegar.',
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
             ),
-            const SizedBox(height: 9),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              activeColor: ppGold,
-              title: const Text('Notificações'),
-              value: notifications,
-              onChanged: _setNotifications,
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              activeColor: ppGold,
-              title: const Text('Modo escuro'),
-              value: darkMode,
-              onChanged: (value) => setState(() => darkMode = value),
-            ),
-          ]),
+            value: notifications,
+            onChanged: _loadingNotifications ? null : _setNotifications,
+          ),
         ),
         const SectionTitle('Conta'),
         _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
         _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
-        _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
+        _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Comunicar problemas e acompanhar pedidos', onTap: () => ppPush(context, const SupportScreen())),
         const SizedBox(height: 12),
-        const Text('As preferências desta versão são locais e ainda não estão sincronizadas com uma conta.', style: TextStyle(color: Colors.white38, fontSize: 11)),
+        const Text('As notificações são sincronizadas com a conta e podem ser desativadas a qualquer momento.', style: TextStyle(color: Colors.white38, fontSize: 11)),
       ]),
     );
   }
@@ -3450,14 +3503,3 @@ class _SimpleMessage extends StatelessWidget {
   );
 }
 
-Future<void> showReportDialog(BuildContext context) async {
-  await showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      backgroundColor: const Color(0xFF172844),
-      title: const Text('Denunciar mensagem'),
-      content: const Text('A ferramenta de denúncias será ligada ao sistema de segurança. Não respondas a mensagens que te deixem desconfortável.'),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
-    ),
-  );
-}
