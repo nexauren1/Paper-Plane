@@ -562,7 +562,7 @@ async function bootstrap(uid: string, env: Env) {
   if (existing) return existing;
   const pilotCode = `PP-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, age_band, age_verified, profile_completed) VALUES (?, ?, 'Piloto', 'UNVERIFIED', 0, 0)",
+    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, age_band, age_verified, profile_completed, push_enabled) VALUES (?, ?, 'Piloto', 'UNVERIFIED', 0, 0, 0)",
   ).bind(uid, pilotCode).run();
   return requireUser(uid, env);
 }
@@ -866,6 +866,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         service: "paper-plane-api",
         database: "connected",
         ai: env.AI ? "binding_available" : "unavailable",
+        integrations: {
+          ageAssurance: env.YOTI_API_TOKEN && env.YOTI_SDK_ID ? "configured" : "needs_configuration",
+          androidPush: env.FCM_SERVICE_ACCOUNT_JSON ? "configured" : "needs_configuration",
+        },
         time: isoNow(),
       });
     } catch {
@@ -1485,15 +1489,30 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ ok: true });
   }
 
+  if (method === "POST" && path === "/v1/devices/state") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const token = text(body?.token, 4096);
+    if (token.length < 40) return json({ error: "INVALID_DEVICE_TOKEN" }, 400);
+    const device = await env.DB.prepare(
+      "SELECT 1 AS registered FROM devices WHERE uid = ? AND fcm_token = ? LIMIT 1",
+    ).bind(uid, token).first();
+    return json({ enabled: Boolean(device) });
+  }
+
   if (method === "POST" && path === "/v1/devices/unregister") {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const token = text(body?.token, 4096);
     if (!token) return json({ error: "INVALID_DEVICE_TOKEN" }, 400);
     await env.DB.batch([
       env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?").bind(uid, token),
-      env.DB.prepare("UPDATE users SET push_enabled = 0, updated_at = ? WHERE uid = ?").bind(isoNow(), uid),
+      env.DB.prepare(
+        "UPDATE users SET push_enabled = CASE WHEN EXISTS (SELECT 1 FROM devices d WHERE d.uid = users.uid) THEN 1 ELSE 0 END, updated_at = ? WHERE uid = ?",
+      ).bind(isoNow(), uid),
     ]);
-    return json({ ok: true, notificationsEnabled: false });
+    const remaining = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM devices WHERE uid = ?",
+    ).bind(uid).first<{ count: number }>();
+    return json({ ok: true, notificationsEnabled: Number(remaining?.count ?? 0) > 0 });
   }
 
   if (method === "POST" && path === "/v1/devices/register") {
