@@ -3122,18 +3122,21 @@ class _CollectionStat extends StatelessWidget {
 }
 
 class _BadgeTile extends StatelessWidget {
-  const _BadgeTile({required this.icon, required this.label});
+  const _BadgeTile({required this.icon, required this.label, required this.unlocked});
   final IconData icon;
   final String label;
+  final bool unlocked;
 
   @override
   Widget build(BuildContext context) => GlassPanel(
     padding: const EdgeInsets.all(8),
-    highlight: true,
+    highlight: unlocked,
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, color: ppGoldBright, size: 35),
+      Icon(icon, color: unlocked ? ppGoldBright : Colors.white24, size: 35),
       const SizedBox(height: 8),
-      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: unlocked ? Colors.white : Colors.white38)),
+      const SizedBox(height: 4),
+      Text(unlocked ? 'Conquistado' : 'Por conquistar', style: const TextStyle(fontSize: 9, color: Colors.white38)),
     ]),
   );
 }
