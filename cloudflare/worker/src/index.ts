@@ -308,9 +308,7 @@ async function createAirplane(
   const language = body.language === "en" ? "en" : "pt";
   const mood = text(body.mood, 32) || null;
   const requestedPlaneModel = text(body.planeModel, 16).toUpperCase() || "DART";
-  if (!["DART", "GLIDER", "SWALLOW"].includes(requestedPlaneModel)) {
-    return json({ error: "INVALID_PLANE_MODEL" }, 400);
-  }
+  if (!["DART", "GLIDER", "SWALLOW"].includes(requestedPlaneModel)) return json({ error: "INVALID_PLANE_MODEL" }, 400);
   const destination = text(body.destinationCountry, 2).toUpperCase() || null;
   const { user, response } = await ensurePilotReady(uid, env);
   if (response) return response;
@@ -325,7 +323,7 @@ async function createAirplane(
         targetUser.profile_completed !== 1) {
       return json({ error: "RECIPIENT_UNAVAILABLE" }, 403);
     }
-    directFlight = buildFlightPlan(user.country_code, targetUser.country_code);
+    directFlight = buildFlightPlan(user.country_code, targetUser.country_code, true);
     if (!directFlight) return json({ error: "ROUTE_UNAVAILABLE" }, 409);
     const blocked = await env.DB.prepare(
       "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
@@ -334,9 +332,7 @@ async function createAirplane(
   }
 
   const hourlyActivity = await env.DB.prepare(
-    `SELECT
-       (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) +
-       (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS count`,
+    "SELECT (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) + (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS count",
   ).bind(uid, uid).first<{ count: number }>();
   if (Number(hourlyActivity?.count ?? 0) >= 10) {
     return json({ error: "RATE_LIMIT_EXCEEDED", message: "You have reached the hourly sending limit." }, 429);
@@ -354,28 +350,27 @@ async function createAirplane(
   if (moderation.state === "UNSAFE") {
     return json({ error: "MESSAGE_NOT_ALLOWED", categories: moderation.categories }, 422);
   }
-  if (moderation.state === "TEMPORARY_UNAVAILABLE") {
-    return json({
-      error: "MODERATION_TEMPORARILY_UNAVAILABLE",
-      message: "Safety checks are temporarily unavailable. Your plane was not launched; please try again.",
-    }, 503);
-  }
-
+  // An outage is not a rejection: save the plane as PENDING and let the queue/cron retry safely.
+  const moderationPending = moderation.state === "TEMPORARY_UNAVAILABLE";
+  const moderationState = moderationPending ? "PENDING" : moderation.state;
   const id = uuid();
   let status: string;
-  if (moderation.state === "REVIEW") status = "HELD_REVIEW";
+  if (moderationPending) status = "QUEUED";
+  else if (moderation.state === "REVIEW") status = "HELD_REVIEW";
   else if (audience === "PUBLIC") status = "DELIVERED";
   else if (forcedRecipient) status = "FLYING";
   else status = "QUEUED";
 
   const createdAt = isoNow();
-  const expiresAt = audience === "PUBLIC"
-    ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    : status === "QUEUED"
-      ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-      : status === "HELD_REVIEW"
-        ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
-        : null;
+  const expiresAt = moderationPending
+    ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    : audience === "PUBLIC"
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      : status === "QUEUED"
+        ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        : status === "HELD_REVIEW"
+          ? new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
+          : null;
 
   try {
     await env.DB.prepare(
@@ -383,10 +378,9 @@ async function createAirplane(
     ).bind(
       id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
       user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
-      moderation.state, JSON.stringify(moderation.categories), contentHash,
-      audience === "PUBLIC" ? createdAt : null,
-      expiresAt,
-      requestedPlaneModel,
+      moderationState, JSON.stringify(moderation.categories), contentHash,
+      audience === "PUBLIC" && !moderationPending ? createdAt : null,
+      expiresAt, requestedPlaneModel,
     ).run();
   } catch (error) {
     const reason = String(error);
@@ -406,10 +400,36 @@ async function createAirplane(
       "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
     ).bind(directFlight.distanceKm, directFlight.durationSeconds, directFlight.startedAt, directFlight.arrivalAt, directFlight.routeJson, id).run();
   }
+
+  let conversationId: string | null = null;
+  if (replyToId && forcedRecipient && status === "FLYING" && moderation.state === "SAFE") {
+    conversationId = await ensureChamaForReply(id, uid, forcedRecipient, replyToId, env);
+    if (conversationId) ctx.waitUntil(notifyChatMessage(forcedRecipient, conversationId, env));
+  }
+
   if (status === "DELIVERED") {
-    await env.DB.prepare("INSERT INTO public_sky (airplane_id) VALUES (?)").bind(id).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO public_sky (airplane_id) VALUES (?)").bind(id).run();
+  } else if (moderationPending) {
+    try {
+      await env.DELIVERY_QUEUE.send({ type: "MODERATE_AIRPLANE", airplaneId: id });
+    } catch {
+      // The scheduled worker also retries persisted pending moderation rows.
+    }
   } else if (status === "QUEUED") {
-    await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
+    try {
+      await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
+    } catch {
+      // The scheduled matcher will pick up this saved plane.
+    }
+  } else if (status === "FLYING" && directFlight) {
+    try {
+      await env.DELIVERY_QUEUE.send(
+        { type: "DELIVER_AIRPLANE", airplaneId: id },
+        { delaySeconds: directFlight.durationSeconds },
+      );
+    } catch {
+      // The scheduled arrival sweep is the fallback if queue delivery is unavailable.
+    }
   }
 
   if (body.firstFlight === true) {
@@ -418,10 +438,17 @@ async function createAirplane(
     ).bind(isoNow(), uid).run();
   }
 
-  return json(
-    { airplane: { id, status, moderation: moderation.state }, message: status === "HELD_REVIEW" ? "Held for safety review." : "Plane accepted." },
-    status === "HELD_REVIEW" ? 202 : 201,
-  );
+  return json({
+    airplane: {
+      id,
+      status: moderationPending ? "PENDING_MODERATION" : status,
+      moderation: moderationPending ? "PENDING" : moderation.state,
+      ...(conversationId ? { conversationId } : {}),
+    },
+    message: moderationPending
+      ? "Your plane is saved and will be launched automatically after safety checks."
+      : status === "HELD_REVIEW" ? "Held for safety review." : "Plane accepted.",
+  }, moderationPending || status === "HELD_REVIEW" ? 202 : 201);
 }
 
 async function matchAirplane(airplaneId: string, env: Env) {
@@ -464,6 +491,14 @@ async function matchAirplane(airplaneId: string, env: Env) {
   ).bind(recipient.uid, matchedAt, route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
   if ((result.meta?.changes ?? 0) === 1) {
     await env.DB.prepare("UPDATE users SET last_received_at = ? WHERE uid = ?").bind(matchedAt, recipient.uid).run();
+    try {
+      await env.DELIVERY_QUEUE.send(
+        { type: "DELIVER_AIRPLANE", airplaneId },
+        { delaySeconds: route.durationSeconds },
+      );
+    } catch {
+      // The scheduled arrival sweep is the delivery fallback.
+    }
   }
 }
 
@@ -555,6 +590,47 @@ async function notifyChatMessage(uid: string, conversationId: string, env: Env) 
       // Chat delivery remains stored even when the push service is unavailable.
     }
   }
+}
+
+async function ensureChamaForReply(
+  replyAirplaneId: string,
+  senderUid: string,
+  recipientUid: string,
+  originalAirplaneId: string,
+  env: Env,
+): Promise<string | null> {
+  const userA = senderUid < recipientUid ? senderUid : recipientUid;
+  const userB = senderUid < recipientUid ? recipientUid : senderUid;
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO conversations(id, user_a, user_b) VALUES (?, ?, ?)",
+  ).bind(uuid(), userA, userB).run();
+  const conversation = await env.DB.prepare(
+    "SELECT id FROM conversations WHERE user_a = ? AND user_b = ? LIMIT 1",
+  ).bind(userA, userB).first<{ id: string }>();
+  if (!conversation) return null;
+
+  const planes = await env.DB.prepare(
+    "SELECT id, sender_uid, message_text, created_at FROM airplanes WHERE id IN (?, ?) AND moderation_state = 'SAFE' AND status IN ('FLYING','DELIVERED','READ','RESPONDED') ORDER BY created_at ASC",
+  ).bind(originalAirplaneId, replyAirplaneId).all<{
+    id: string; sender_uid: string; message_text: string; created_at: string;
+  }>();
+  const statements = (planes.results ?? []).map((plane) => env.DB.prepare(
+    "INSERT OR IGNORE INTO chat_messages(id, conversation_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
+  ).bind("plane:" + plane.id, conversation.id, plane.sender_uid, plane.message_text, plane.created_at));
+  const latestMessageAt = planes.results && planes.results.length
+    ? planes.results[planes.results.length - 1].created_at
+    : null;
+  if (latestMessageAt) {
+    statements.push(env.DB.prepare(
+      "UPDATE conversations SET last_message_at = ? WHERE id = ?",
+    ).bind(latestMessageAt, conversation.id));
+  }
+  if (statements.length) await env.DB.batch(statements);
+
+  await env.DB.prepare(
+    "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
+  ).bind(originalAirplaneId).run();
+  return conversation.id;
 }
 
 async function deliverAirplane(airplaneId: string, env: Env) {
