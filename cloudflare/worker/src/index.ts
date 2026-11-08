@@ -505,24 +505,24 @@ async function ageVerificationStatus(
     return json({ status: "VERIFIED", ageBand: "ADULT" });
   }
 
-  if (providerStatus === "FAIL") {
-    if (method === "AGE_ESTIMATION" && session.doc_scan_only === 0) {
-      await env.DB.prepare(
-        "UPDATE age_verification_sessions SET status = 'SUPERSEDED', method = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-      ).bind(method, isoNow(), session.id).run();
-      try {
-        const documentSession = await createYotiAgeSession(uid, session.stage, env, true);
-        return json({
-          status: "DOCUMENT_CHECK_REQUIRED",
-          stage: session.stage,
-          message: "A estimativa não foi suficiente. Confirma a idade através de um documento.",
-          nextSession: documentSession,
-        });
-      } catch {
-        return json({ error: "AGE_PROVIDER_UNAVAILABLE", message: "Não foi possível iniciar a verificação por documento." }, 502);
-      }
+  if (["FAIL", "ERROR"].includes(providerStatus) && method === "AGE_ESTIMATION" && session.doc_scan_only === 0) {
+    await env.DB.prepare(
+      "UPDATE age_verification_sessions SET status = 'SUPERSEDED', method = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+    ).bind(method, isoNow(), session.id).run();
+    try {
+      const documentSession = await createYotiAgeSession(uid, session.stage, env, true);
+      return json({
+        status: "DOCUMENT_CHECK_REQUIRED",
+        stage: session.stage,
+        message: "A estimativa não foi conclusiva. Confirma a idade através de outra forma segura.",
+        nextSession: documentSession,
+      });
+    } catch {
+      return json({ error: "AGE_PROVIDER_UNAVAILABLE", message: "Não foi possível iniciar a verificação por documento." }, 502);
     }
+  }
 
+  if (providerStatus === "FAIL") {
     if (session.stage === "AGE_BAND" && method !== null && method !== "AGE_ESTIMATION") {
       await env.DB.batch([
         env.DB.prepare(
