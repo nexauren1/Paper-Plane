@@ -148,8 +148,10 @@ def locate_block(source: str, pattern: str, start: int = 0) -> tuple[int, int]:
 locate = r"(?m)^android\s*\{"
 android_open, _ = locate_block(text, locate)
 if "keystoreProperties" not in text:
+    if kotlin and "import java.util.Properties" not in text:
+        text = "import java.util.Properties\n\n" + text
     prefix = (
-        'val keystoreProperties = java.util.Properties()\n'
+        'val keystoreProperties = Properties()\n'
         'val keystorePropertiesFile = rootProject.file("key.properties")\n'
         'if (keystorePropertiesFile.exists()) {\n'
         '    keystoreProperties.load(keystorePropertiesFile.inputStream())\n'
@@ -165,6 +167,9 @@ if "keystoreProperties" not in text:
         text = "import java.util.Properties\nimport java.io.FileInputStream\n\n" + text
     android_statement_start = re.search(locate, text).start()
     text = text[:android_statement_start] + prefix + text[android_statement_start:]
+
+if kotlin and '@Suppress("DEPRECATION")\\nandroid {' not in text:
+    text = re.sub(r"(?m)^android\\s*\\{", '@Suppress("DEPRECATION")\\nandroid {', text, count=1)
 
 signing_config = (
     '\n    signingConfigs {\n'
