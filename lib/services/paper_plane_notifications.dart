@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 
 import 'firebase_runtime.dart';
 import 'paper_plane_api.dart';
@@ -8,7 +9,71 @@ import 'paper_plane_api.dart';
 class PaperPlaneNotifications {
   PaperPlaneNotifications._();
 
+  static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+  static VoidCallback? onOpenInbox;
+  static bool _pendingInboxOpen = false;
+  static bool _handlersInitialized = false;
+  static StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  static StreamSubscription<RemoteMessage>? _openedSubscription;
   static StreamSubscription<String>? _tokenSubscription;
+
+  /// Installs app-visible handlers once. Android displays notification payloads
+  /// while the app is in the background; foreground messages use this in-app banner.
+  static Future<void> initializeMessageHandlers() async {
+    if (!FirebaseRuntime.isInitialized || _handlersInitialized) return;
+    final messaging = FirebaseMessaging.instance;
+
+    _foregroundSubscription = FirebaseMessaging.onMessage.listen((message) {
+      final notification = message.notification;
+      final title = notification?.title?.trim().isNotEmpty == true
+          ? notification!.title!
+          : 'Nova atividade no Paper Plane';
+      final body = notification?.body?.trim().isNotEmpty == true
+          ? notification!.body!
+          : 'Tens uma atualização na tua caixa de entrada.';
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 3),
+              Text(body),
+            ],
+          ),
+          action: SnackBarAction(label: 'Abrir caixa', onPressed: _requestInboxOpen),
+        ),
+      );
+    });
+
+    _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((_) {
+      _requestInboxOpen();
+    });
+
+    final initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) _pendingInboxOpen = true;
+    _handlersInitialized = true;
+  }
+
+  static void _requestInboxOpen() {
+    final callback = onOpenInbox;
+    if (callback == null) {
+      _pendingInboxOpen = true;
+    } else {
+      callback();
+    }
+  }
+
+  /// Called by the authenticated app shell after it is mounted.
+  static bool consumePendingInboxOpen() {
+    final pending = _pendingInboxOpen;
+    _pendingInboxOpen = false;
+    return pending;
+  }
 
   /// Call only after the pilot has opted into notifications in Settings.
   static Future<void> enableAndRegister() async {
@@ -36,7 +101,7 @@ class PaperPlaneNotifications {
     await PaperPlaneApi.instance.registerDevice(token);
     await _tokenSubscription?.cancel();
     _tokenSubscription = messaging.onTokenRefresh.listen((newToken) {
-      PaperPlaneApi.instance.registerDevice(newToken);
+      unawaited(PaperPlaneApi.instance.registerDevice(newToken));
     });
   }
 
@@ -55,12 +120,19 @@ class PaperPlaneNotifications {
       try {
         await PaperPlaneApi.instance.unregisterDevice(token);
       } catch (_) {
-        // Still delete the local token so this device stops receiving pushes.
         serverUpdated = false;
       }
     }
 
     await messaging.deleteToken();
     return serverUpdated;
+  }
+
+  static Future<void> disposeMessageHandlers() async {
+    await _foregroundSubscription?.cancel();
+    await _openedSubscription?.cancel();
+    _foregroundSubscription = null;
+    _openedSubscription = null;
+    _handlersInitialized = false;
   }
 }
