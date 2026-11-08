@@ -12,7 +12,9 @@ class PaperPlaneNotifications {
   static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
   static VoidCallback? onOpenInbox;
+  static ValueChanged<String>? onOpenPlane;
   static bool _pendingInboxOpen = false;
+  static String? _pendingAirplaneId;
   static bool _handlersInitialized = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedSubscription;
@@ -45,18 +47,51 @@ class PaperPlaneNotifications {
               Text(body),
             ],
           ),
-          action: SnackBarAction(label: 'Abrir caixa', onPressed: _requestInboxOpen),
+          action: SnackBarAction(
+            label: message.data['airplaneId']?.toString().isNotEmpty == true
+                ? 'Abrir carta'
+                : 'Abrir caixa',
+            onPressed: () => _routeMessage(message),
+          ),
         ),
       );
     });
 
-    _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((_) {
-      _requestInboxOpen();
-    });
+    _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(_routeMessage);
 
     final initialMessage = await messaging.getInitialMessage();
-    if (initialMessage != null) _pendingInboxOpen = true;
+    if (initialMessage != null) _rememberMessage(initialMessage);
     _handlersInitialized = true;
+  }
+
+  static void _rememberMessage(RemoteMessage message) {
+    final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
+    if (airplaneId.isNotEmpty) {
+      _pendingAirplaneId = airplaneId;
+    } else {
+      _pendingInboxOpen = true;
+    }
+  }
+
+  static void _routeMessage(RemoteMessage message) {
+    final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
+    if (airplaneId.isEmpty) {
+      _requestInboxOpen();
+      return;
+    }
+    final callback = onOpenPlane;
+    if (callback == null) {
+      _pendingAirplaneId = airplaneId;
+    } else {
+      callback(airplaneId);
+    }
+  }
+
+  /// Returns a pending airplane ID once the authenticated shell is mounted.
+  static String? consumePendingPlaneOpen() {
+    final id = _pendingAirplaneId;
+    _pendingAirplaneId = null;
+    return id;
   }
 
   static void _requestInboxOpen() {
