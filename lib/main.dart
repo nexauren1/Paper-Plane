@@ -1501,8 +1501,9 @@ class GlobeFlightPainter extends CustomPainter {
     Offset center,
     double radius,
     Color markerColor,
-    bool destination,
-  ) {
+    bool destination, {
+    String? countryName,
+  }) {
     if (point == null || point['lat'] is! num || point['lng'] is! num) return;
     final marker = _project(
       (point['lat'] as num).toDouble(),
@@ -1552,7 +1553,7 @@ class GlobeFlightPainter extends CustomPainter {
     );
 
     if (code != null && code.isNotEmpty) {
-      final label = _countryFlag(code) + ' ' + _countryName(code);
+      final label = _countryFlag(code) + ' ' + (countryName?.trim().isNotEmpty == true ? countryName! : _countryName(code));
       final textPainter = TextPainter(
         text: TextSpan(
           text: label,
@@ -1800,6 +1801,7 @@ class GlobeFlightPainter extends CustomPainter {
         radius * 0.99,
         const Color(0xFF79DBBA),
         false,
+        countryName: route?['originName']?.toString(),
       );
     }
     if (destinationMap != null) {
@@ -1813,6 +1815,7 @@ class GlobeFlightPainter extends CustomPainter {
         radius * 0.99,
         const Color(0xFFFF5C72),
         true,
+        countryName: route?['destinationName']?.toString(),
       );
     }
 
@@ -1928,6 +1931,8 @@ class _FlightScreenState extends State<FlightScreen> {
     final distance = (flight?['distanceKm'] as num?)?.toInt();
     final travelled = distance == null ? null : (distance * _progress).round();
     final destinationCode = route?['destinationCountry']?.toString();
+    final destinationName = route?['destinationName']?.toString();
+    final originName = route?['originName']?.toString();
 
     return ScreenFrame(
       title: 'O teu avião está a voar',
@@ -1940,7 +1945,7 @@ class _FlightScreenState extends State<FlightScreen> {
             _loading ? 'A contactar o servidor…' : searching
                 ? 'À procura de alguém para receber a tua carta'
                 : status == 'FLYING'
-                    ? 'Em rota para ' + _countryName(destinationCode)
+                    ? 'Em rota para ' + (destinationName?.trim().isNotEmpty == true ? destinationName! : _countryName(destinationCode))
                     : ['DELIVERED', 'READ', 'RESPONDED'].contains(status)
                         ? 'O avião chegou ao destino'
                         : status == 'HELD_REVIEW' ? 'Em revisão de segurança' : 'Estado: ' + status,
@@ -1972,7 +1977,7 @@ class _FlightScreenState extends State<FlightScreen> {
                   const Text('PARTIDA', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1)),
                   const SizedBox(height: 4),
                   Text(
-                    _countryFlag(route['originCountry']?.toString()) + ' ' + _countryName(route['originCountry']?.toString()),
+                    _countryFlag(route['originCountry']?.toString()) + ' ' + (originName?.trim().isNotEmpty == true ? originName! : _countryName(route['originCountry']?.toString())),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
@@ -1986,7 +1991,7 @@ class _FlightScreenState extends State<FlightScreen> {
                   const Text('DESTINO LOCALIZADO', style: TextStyle(color: Color(0xFFFF8393), fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
                   const SizedBox(height: 4),
                   Text(
-                    _countryFlag(route['destinationCountry']?.toString()) + ' ' + _countryName(route['destinationCountry']?.toString()),
+                    _countryFlag(route['destinationCountry']?.toString()) + ' ' + (destinationName?.trim().isNotEmpty == true ? destinationName! : _countryName(route['destinationCountry']?.toString())),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,
