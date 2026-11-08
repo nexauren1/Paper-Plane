@@ -4,6 +4,8 @@ import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
 import 'services/paper_plane_notifications.dart';
+import 'services/paper_plane_analytics.dart';
+import 'screens/account_screen.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -18,6 +20,7 @@ const Color ppPanel = Color(0xCC172844);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await FirebaseRuntime.initialize();
+  await PaperPlaneAnalytics.initialize();
   runApp(const PaperPlaneApp());
 }
 
@@ -1479,6 +1482,7 @@ class ProfilePage extends StatelessWidget {
           ]),
         ),
         const SectionTitle('Conta e preferências'),
+        _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
         _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
         _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Controla a tua privacidade', onTap: () => ppPush(context, const SafetyScreen())),
         _ProfileLink(icon: Icons.card_giftcard, title: 'Convidar amigos', subtitle: 'Partilha o Paper Plane', onTap: () => ppPush(context, const InviteScreen())),
@@ -1950,6 +1954,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ]),
         ),
         const SectionTitle('Conta'),
+        _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
         _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
         _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
         const SizedBox(height: 12),
