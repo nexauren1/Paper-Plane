@@ -105,6 +105,13 @@ class PaperPlaneApi {
         'INVALID_PILOT_HANDLE' => 'Usa 4 a 28 caracteres: letras, números, _ e um sufixo como -07.',
         'INVALID_BIRTH_YEAR' => 'Indica um ano de nascimento válido.',
         'INVALID_COUNTRY' => 'Escolhe um país válido.',
+        'INVALID_REPORT_CATEGORY' => 'Escolhe uma categoria de denúncia válida.',
+        'REPORT_ALREADY_OPEN' => 'Já existe uma denúncia tua em análise para esta mensagem.',
+        'REPORT_RATE_LIMIT' => 'Atingiste o limite diário de denúncias. Tenta novamente mais tarde.',
+        'INVALID_SUPPORT_CATEGORY' => 'Escolhe uma categoria de suporte válida.',
+        'SUPPORT_MESSAGE_TOO_SHORT' => 'Preenche o assunto e descreve o problema com mais detalhes.',
+        'SUPPORT_RATE_LIMIT' => 'Atingiste o limite diário de pedidos de suporte.',
+
         _ => payload['message']?.toString() ?? 'O pedido não pôde ser concluído.',
       };
       throw PaperPlaneApiException(code, message, statusCode: response.statusCode);
@@ -225,6 +232,20 @@ class PaperPlaneApi {
         method: 'POST',
         body: {'reason': reason, if (details != null) 'details': details},
       );
+
+  Future<Map<String, dynamic>> getSupportTickets() =>
+      _request('/v1/support/tickets');
+
+  Future<Map<String, dynamic>> createSupportTicket({
+    required String category,
+    required String subject,
+    required String details,
+  }) =>
+      _request('/v1/support/tickets', method: 'POST', body: {
+        'category': category,
+        'subject': subject,
+        'details': details,
+      });
 
   Future<Map<String, dynamic>> blockPilot(String uid) =>
       _request('/v1/users/block', method: 'POST', body: {'uid': uid});
