@@ -245,7 +245,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                     controller: _pilotHandle,
                     autocorrect: false,
                     maxLength: 28,
-                    decoration: _decoration('Nome único (@)', Icons.alternate_email_rounded, hint: 'chuva_ocidental-07'),
+                    decoration: _decoration('Nome único', Icons.alternate_email_rounded, hint: 'chuva_ocidental-07').copyWith(prefixText: '@'),
                   ),
                   const SizedBox(height: 6),
                   Row(
