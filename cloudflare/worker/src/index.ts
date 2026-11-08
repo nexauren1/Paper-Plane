@@ -483,7 +483,18 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
   if (method === "GET" && path === "/v1/health") {
-    return json({ ok: true, service: "paper-plane-api", database: "configured", ai: "configured", time: isoNow() });
+    try {
+      await env.DB.prepare("SELECT 1 AS ready").first<{ ready: number }>();
+      return json({
+        ok: true,
+        service: "paper-plane-api",
+        database: "connected",
+        ai: env.AI ? "binding_available" : "unavailable",
+        time: isoNow(),
+      });
+    } catch {
+      return json({ ok: false, service: "paper-plane-api", database: "unavailable", time: isoNow() }, 503);
+    }
   }
 
   const uid = await authenticate(request, env);
