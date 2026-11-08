@@ -52,6 +52,43 @@ jobs:
           print("Gradle wrapper will use the binary distribution from the Huawei Cloud mirror.")
           PY
 
+      - name: Configure Maven mirrors for Android build dependencies
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          settings = Path("android/settings.gradle.kts")
+          root_build = Path("android/build.gradle.kts")
+          if not settings.exists() or not root_build.exists():
+              raise SystemExit("Generated Gradle settings/build files were not found.")
+
+          def add_mirrors(path: Path, repositories_start: int):
+              content = path.read_text(encoding="utf-8")
+              if "maven.aliyun.com/repository/public" in content:
+                  return content
+              marker = "repositories {"
+              index = content.find(marker, repositories_start)
+              if index < 0:
+                  raise SystemExit(f"Could not locate repositories block in {path}.")
+              insert_at = index + len(marker)
+              mirror_lines = (
+                  '\n            maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }'
+                  '\n            maven { url = uri("https://maven.aliyun.com/repository/public") }'
+              )
+              return content[:insert_at] + "".join(mirror_lines) + content[insert_at:]
+
+          settings_text = settings.read_text(encoding="utf-8")
+          plugin_management = settings_text.find("pluginManagement {")
+          if plugin_management < 0:
+              raise SystemExit("Could not locate pluginManagement in generated settings.")
+          settings.write_text(add_mirrors(settings, plugin_management), encoding="utf-8")
+
+          root_text = root_build.read_text(encoding="utf-8")
+          root_build.write_text(add_mirrors(root_build, 0), encoding="utf-8")
+          print("Added Maven Central/Gradle Plugin Portal mirrors before default repositories.")
+          PY
+
       - name: Configure Firebase Android and build variables
         shell: bash
         run: |
