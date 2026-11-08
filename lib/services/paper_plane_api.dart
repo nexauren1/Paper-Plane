@@ -45,7 +45,14 @@ class PaperPlaneApi {
       throw const PaperPlaneApiException('AUTH_REQUIRED', 'É necessário criar uma identidade de piloto.');
     }
 
+    final uri = Uri.parse('$baseUrl$path');
+    final baseHeaders = <String, String>{
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+
     Future<http.Response> sendWithToken(String token) async {
+      final headers = {...baseHeaders, 'Authorization': 'Bearer $token'};
       if (method == 'POST') {
         return _client.post(uri, headers: headers, body: jsonEncode(body ?? const {}));
       }
@@ -56,7 +63,6 @@ class PaperPlaneApi {
     if (idToken == null || idToken.isEmpty) {
       throw const PaperPlaneApiException('AUTH_TOKEN_UNAVAILABLE', 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.');
     }
-    headers['Authorization'] = 'Bearer $idToken';
 
     late http.Response response;
     try {
@@ -65,7 +71,6 @@ class PaperPlaneApi {
         final refreshed = await user.getIdToken(true);
         if (refreshed != null && refreshed.isNotEmpty && refreshed != idToken) {
           idToken = refreshed;
-          headers['Authorization'] = 'Bearer $idToken';
           response = await sendWithToken(idToken);
         }
       }
