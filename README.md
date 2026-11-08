@@ -9,8 +9,8 @@ Paper Plane is an Android-first Flutter application written in Dart. It turns sh
 The first release concentrates on the full message journey instead of optional extras:
 
 - Firebase account creation and sign-in with email/password or Google.
-- Server-backed pilot profile with unique handle, country and birth year.
-- First-flight workshop with a saved private draft and three paper-plane designs.
+- Server-backed pilot profile with unique handle, country and self-declared date of birth (only birth year and derived age group are retained).
+- First-flight workshop with a saved server-side draft and three paper-plane designs.
 - Short paper messages (up to 200 characters), random matching and public Open Sky posts.
 - Server-side matching, delivery status, flight route and progress.
 - Real inbox, opening and reading letters, private airplane replies, hearts and public replies.
@@ -51,7 +51,7 @@ The signing secrets are:
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-Firebase build values are read from `firebase/google-services.json` by the workflow. Do not commit private signing keys, Firebase service-account JSON, Yoti API tokens or other server secrets to the repository.
+Firebase build values are read from `firebase/google-services.json` by the workflow. Do not commit private signing keys, Firebase service-account JSON or other server secrets to the repository.
 
 ## Deploy the Worker
 
@@ -63,16 +63,16 @@ The Worker deployment workflow runs when files under `cloudflare/worker/` change
 4. Applies pending migrations to the configured remote D1 database.
 5. Deploys the Worker.
 
-Cloudflare credentials are supplied through GitHub Actions secrets. Runtime integrations may also require Cloudflare Worker secrets such as `FCM_SERVICE_ACCOUNT_JSON`, `YOTI_API_TOKEN` and `YOTI_SDK_ID`. A successful Worker deployment proves that the code and migrations deployed; it does not prove that every optional provider secret is present or that a real device has received a push notification.
+Cloudflare credentials are supplied through GitHub Actions secrets. Runtime integrations may also require the Cloudflare Worker secrets `FCM_SERVICE_ACCOUNT_JSON` and `ADMIN_UIDS`. A successful Worker deployment proves that the code and migrations deployed; it does not prove that every optional provider secret is present or that a real device has received a push notification.
 
 ## Safety and release checks
 
-- Users are not matched with strangers until trusted age assurance confirms an age band. The profile birth year is not treated as proof.
-- Random matching keeps users in the same verified age band, and respects account status and block relationships.
+- Users declare their date of birth in the profile form. The Worker calculates an age group and retains only the birth year, declared group and declaration timestamp. This is self-declaration, not identity or age verification.
+- Random matching keeps users in the same self-declared age group, and respects account status, consent, and block relationships. The declared group can be inaccurate and is not proof.
 - AI moderation is not proof that a user is safe or that a message is harmless. Uncertain items go to review; reports remain available to users.
 - AI risk signals must be treated as review cues, not a conclusion that a user has lied about age.
 - User reports and support tickets are stored separately. Only authorized admin UIDs can access moderation/support administration endpoints.
-- Before public release, verify the Yoti provider secrets, FCM service-account secret, Cloudflare queue/cron configuration, Firebase OAuth SHA fingerprints and real-device behaviour.
+- Before public release, verify the FCM service-account secret, Cloudflare queue/cron configuration, Firebase OAuth SHA fingerprints, local age-related requirements and real-device behaviour.
 
 ## Development
 
