@@ -496,8 +496,8 @@ async function matchAirplane(airplaneId: string, env: Env) {
   const candidates = candidateRows.results ?? [];
   if (candidates.length === 0) return;
 
-  // Workers AI chooses only inside this server-filtered eligible set.
-  // No account identifier or message content is sent to the model.
+  // Deterministic selection from the server-filtered set keeps matching fast.
+  // The candidates are ordered by destination preference and least-recent receipt.
   const recipient = chooseEligiblePilot(candidates);
   if (!recipient) return;
   const route = buildFlightPlan(sender.country_code, recipient.country_code);
