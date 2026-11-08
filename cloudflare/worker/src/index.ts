@@ -463,12 +463,10 @@ async function ageVerificationStatus(
   }
 
   if (providerStatus === "COMPLETE") {
-    await env.DB.prepare(
-      "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-    ).bind(method, isoNow(), isoNow(), session.id).run();
-
     if (session.stage === "MINIMUM_AGE") {
       try {
+        // Creating the next stage supersedes this completed provider session.
+        // It is not marked VERIFIED because the user's age band is still unknown.
         const next = await createYotiAgeSession(uid, "AGE_BAND", env);
         return json({
           status: "NEXT_STEP",
@@ -482,6 +480,9 @@ async function ageVerificationStatus(
     }
 
     await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+      ).bind(method, isoNow(), isoNow(), session.id),
       env.DB.prepare(
         "UPDATE users SET age_band = 'ADULT', age_verified = 1, age_verified_at = ?, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'",
       ).bind(isoNow(), isoNow(), uid),
@@ -510,12 +511,11 @@ async function ageVerificationStatus(
       }
     }
 
-    await env.DB.prepare(
-      "UPDATE age_verification_sessions SET status = 'FAILED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-    ).bind(method, isoNow(), isoNow(), session.id).run();
-
     if (session.stage === "AGE_BAND" && method === "DOC_SCAN") {
       await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+        ).bind(method, isoNow(), isoNow(), session.id),
         env.DB.prepare(
           "UPDATE users SET age_band = 'UNDER_18', age_verified = 1, age_verified_at = ?, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'",
         ).bind(isoNow(), isoNow(), uid),
@@ -525,6 +525,10 @@ async function ageVerificationStatus(
       ]);
       return json({ status: "VERIFIED", ageBand: "UNDER_18" });
     }
+
+    await env.DB.prepare(
+      "UPDATE age_verification_sessions SET status = 'FAILED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+    ).bind(method, isoNow(), isoNow(), session.id).run();
 
     return json({
       status: "FAILED",
