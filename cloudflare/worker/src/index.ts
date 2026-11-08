@@ -932,28 +932,34 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ).bind(uid, target.uid, target.uid, uid).first();
     if (blocked) return json({ error: "FRIEND_UNAVAILABLE" }, 403);
 
-    const reverse = await env.DB.prepare(
-      "SELECT id FROM friendships WHERE requester_uid = ? AND addressee_uid = ? AND status = 'PENDING' LIMIT 1",
-    ).bind(target.uid, uid).first<{ id: string }>();
-    if (reverse) {
-      await env.DB.prepare("UPDATE friendships SET status = 'ACCEPTED', updated_at = ? WHERE id = ?")
-        .bind(isoNow(), reverse.id).run();
-      return json({ ok: true, status: "ACCEPTED", uid: target.uid });
+    const existingPair = await env.DB.prepare(
+      `SELECT id, requester_uid, addressee_uid, status
+       FROM friendships
+       WHERE (requester_uid = ? AND addressee_uid = ?)
+          OR (requester_uid = ? AND addressee_uid = ?)
+       LIMIT 1`,
+    ).bind(uid, target.uid, target.uid, uid).first<{
+      id: string; requester_uid: string; addressee_uid: string; status: string;
+    }>();
+
+    if (existingPair?.status === "ACCEPTED") {
+      return json({ ok: true, status: "ACCEPTED", alreadyFriends: true });
+    }
+    if (existingPair?.status === "PENDING") {
+      if (existingPair.requester_uid === target.uid) {
+        await env.DB.prepare("UPDATE friendships SET status = 'ACCEPTED', updated_at = ? WHERE id = ?")
+          .bind(isoNow(), existingPair.id).run();
+        return json({ ok: true, status: "ACCEPTED", uid: target.uid });
+      }
+      return json({ ok: true, status: "PENDING", alreadySent: true });
+    }
+    if (existingPair) {
+      await env.DB.prepare("DELETE FROM friendships WHERE id = ?").bind(existingPair.id).run();
     }
 
-    const existing = await env.DB.prepare(
-      "SELECT id, status FROM friendships WHERE requester_uid = ? AND addressee_uid = ? LIMIT 1",
-    ).bind(uid, target.uid).first<{ id: string; status: string }>();
-    if (existing?.status === "ACCEPTED") return json({ ok: true, status: "ACCEPTED", alreadyFriends: true });
-    if (existing?.status === "PENDING") return json({ ok: true, status: "PENDING", alreadySent: true });
-    if (existing) {
-      await env.DB.prepare("UPDATE friendships SET status = 'PENDING', updated_at = ? WHERE id = ?")
-        .bind(isoNow(), existing.id).run();
-    } else {
-      await env.DB.prepare(
-        "INSERT INTO friendships(id, requester_uid, addressee_uid, status, updated_at) VALUES (?, ?, ?, 'PENDING', ?)",
-      ).bind(uuid(), uid, target.uid, isoNow()).run();
-    }
+    await env.DB.prepare(
+      "INSERT INTO friendships(id, requester_uid, addressee_uid, status, updated_at) VALUES (?, ?, ?, 'PENDING', ?)",
+    ).bind(uuid(), uid, target.uid, isoNow()).run();
     return json({ ok: true, status: "PENDING", uid: target.uid }, 201);
   }
 
