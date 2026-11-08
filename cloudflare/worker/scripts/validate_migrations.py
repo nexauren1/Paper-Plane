@@ -201,4 +201,39 @@ try:
 except sqlite3.IntegrityError:
     pass
 
-print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop and global recipient fallback.")
+
+# Categorized support tickets must be private to an account and use controlled statuses.
+support_table = DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'support_tickets'"
+).fetchone()
+assert support_table is not None, "Missing support_tickets table"
+
+support_columns = {
+    row[1] for row in DB.execute("PRAGMA table_info(support_tickets)").fetchall()
+}
+assert {"uid", "category", "subject", "details", "status", "created_at", "updated_at"}.issubset(
+    support_columns
+), "Support ticket schema is incomplete"
+assert not ({"email", "phone", "birth_date", "document_image"} & support_columns), (
+    "Support tickets must not duplicate sensitive account or identity data"
+)
+
+DB.execute(
+    """INSERT INTO support_tickets(id, uid, category, subject, details)
+       VALUES ('support-1', 'pilot-a', 'TECHNICAL', 'App freezes', 'The inbox freezes after opening a new plane.')"""
+)
+support_ticket = DB.execute(
+    "SELECT uid, category, status FROM support_tickets WHERE id = 'support-1'"
+).fetchone()
+assert support_ticket == ("pilot-a", "TECHNICAL", "OPEN"), "Support ticket defaults are incorrect"
+
+try:
+    DB.execute(
+        """INSERT INTO support_tickets(id, uid, category, subject, details)
+           VALUES ('support-invalid', 'pilot-a', 'UNKNOWN', 'Invalid', 'Invalid category test')"""
+    )
+    raise AssertionError("Support ticket accepted an invalid category")
+except sqlite3.IntegrityError:
+    pass
+
+print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop and global recipient fallback, categorized support tickets.")
