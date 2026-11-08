@@ -1044,7 +1044,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
   }
 
-  const ageSessionMatch = path.match(/^\\/v1\\/age-verification\\/sessions\\/([^/]+)$/);
+  const ageSessionMatch = path.match(/^\/v1\/age-verification\/sessions\/([^/]+)$/);
   if (method === "GET" && ageSessionMatch) {
     return ageVerificationStatus(uid, ageSessionMatch[1], env);
   }
