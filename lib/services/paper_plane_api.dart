@@ -89,11 +89,9 @@ class PaperPlaneApi {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final code = payload['error']?.toString() ?? 'REQUEST_FAILED';
       final message = switch (code) {
-        'AGE_VERIFICATION_REQUIRED' => 'A entrega a desconhecidos está bloqueada até existir uma verificação de idade segura.',
-        'AGE_PROVIDER_NOT_CONFIGURED' => 'O serviço de verificação de idade ainda não foi ligado no servidor.',
-        'AGE_PROVIDER_UNAVAILABLE' => 'O serviço de verificação está temporariamente indisponível. Tenta novamente.',
-        'AGE_PROVIDER_RESULT_UNAVAILABLE' => 'Ainda não foi possível obter o resultado da verificação.',
-        'AGE_SESSION_NOT_FOUND' => 'Esta sessão de verificação já não está disponível.',
+        'AGE_DECLARATION_REQUIRED' => 'Completa a tua data de nascimento no perfil antes de enviar.',
+        'INVALID_BIRTH_DATE' => 'Indica uma data de nascimento válida.',
+        'AGE_NOT_ELIGIBLE' => 'O Paper Plane está disponível a partir dos 13 anos.',
         'AUTH_TOKEN_UNAVAILABLE' => 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.',
         'DAILY_LIMIT_REACHED' => 'Já lançaste o teu avião original de hoje.',
         'MESSAGE_NOT_ALLOWED' => 'A mensagem não passou a verificação de segurança.',
@@ -120,12 +118,6 @@ class PaperPlaneApi {
     return payload;
   }
 
-  Future<Map<String, dynamic>> startAgeVerification() =>
-      _request('/v1/age-verification/sessions', method: 'POST');
-
-  Future<Map<String, dynamic>> getAgeVerificationStatus(String sessionId) =>
-      _request('/v1/age-verification/sessions/${Uri.encodeComponent(sessionId)}');
-
   Future<Map<String, dynamic>> bootstrapPilot() =>
       _request('/v1/users/bootstrap', method: 'POST');
 
@@ -148,14 +140,14 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> savePilotProfile({
     required String pilotName,
     required String pilotHandle,
-    required int birthYear,
+    required DateTime birthDate,
     required String countryCode,
     required String language,
   }) =>
       _request('/v1/profile', method: 'POST', body: {
         'pilotName': pilotName,
         'pilotHandle': pilotHandle,
-        'birthYear': birthYear,
+        'birthDate': '${birthDate.year.toString().padLeft(4, '0')}-${birthDate.month.toString().padLeft(2, '0')}-${birthDate.day.toString().padLeft(2, '0')}',
         'countryCode': countryCode,
         'language': language,
       });
@@ -188,6 +180,7 @@ class PaperPlaneApi {
     required String? destinationCountry,
     required bool allowReply,
     String planeModel = 'DART',
+    bool firstFlight = false,
   }) {
     return _request(
       '/v1/airplanes',
@@ -200,6 +193,7 @@ class PaperPlaneApi {
         'destinationCountry': destinationCountry,
         'allowReply': allowReply,
         'planeModel': planeModel,
+        'firstFlight': firstFlight,
       },
     );
   }

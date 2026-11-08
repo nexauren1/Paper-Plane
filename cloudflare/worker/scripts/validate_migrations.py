@@ -17,6 +17,14 @@ def seed_user(uid: str):
 seed_user("pilot-a")
 seed_user("pilot-b")
 
+user_columns = {row[1] for row in DB.execute("PRAGMA table_info(users)").fetchall()}
+assert {"declared_age_band", "age_declaration_at"}.issubset(user_columns), "Missing self-declared age fields"
+assert DB.execute("SELECT declared_age_band FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "UNSET", "New accounts must start without a declared age group"
+assert "birth_date" not in user_columns, "Full birth dates must not be retained in D1"
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'age_verification_sessions'"
+).fetchone() is None, "Third-party age verification sessions must be removed"
+
 def insert_plane(plane_id: str, sender_uid: str, audience: str = "RANDOM"):
     DB.execute(
         """INSERT INTO airplanes(
@@ -85,9 +93,12 @@ except sqlite3.IntegrityError as error:
 
 # Pilot handle uniqueness is case-insensitive, and profile data is persisted.
 DB.execute(
-    "UPDATE users SET pilot_handle = ?, birth_year = ?, country_code = ?, profile_completed = 1 WHERE uid = ?",
-    ("chuva_ocidental-07", 2008, "MZ", "pilot-a"),
+    "UPDATE users SET pilot_handle = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, profile_completed = 1 WHERE uid = ?",
+    ("chuva_ocidental-07", 2008, "UNDER_18", "2026-11-08T00:00:00Z", "MZ", "pilot-a"),
 )
+assert DB.execute(
+    "SELECT birth_year, declared_age_band FROM users WHERE uid = 'pilot-a'"
+).fetchone() == (2008, "UNDER_18"), "Self-declared age cohort was not persisted"
 try:
     DB.execute("UPDATE users SET pilot_handle = ? WHERE uid = ?", ("CHUVA_OCIDENTAL-07", "pilot-b"))
     raise AssertionError("Case-insensitive pilot handle uniqueness was not enforced")
@@ -128,21 +139,23 @@ assert plane_model_column is not None, "Missing airplane plane_model column"
 seed_user("sender")
 seed_user("recipient-jp")
 seed_user("recipient-br")
-for uid, country in [
-    ("sender", "MZ"),
-    ("recipient-jp", "JP"),
-    ("recipient-br", "BR"),
+seed_user("recipient-minor")
+for uid, country, declared_band in [
+    ("sender", "MZ", "ADULT"),
+    ("recipient-jp", "JP", "ADULT"),
+    ("recipient-br", "BR", "ADULT"),
+    ("recipient-minor", "ZA", "UNDER_18"),
 ]:
     DB.execute(
-        "UPDATE users SET country_code = ?, profile_completed = 1, age_band = 'ADULT', age_verified = 1 WHERE uid = ?",
-        (country, uid),
+        "UPDATE users SET country_code = ?, profile_completed = 1, declared_age_band = ? WHERE uid = ?",
+        (country, declared_band, uid),
     )
 
 recipient_query = """
     SELECT u.uid, u.country_code, u.language
     FROM users u
     WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
-      AND u.age_verified = 1 AND u.age_band = ?
+      AND u.declared_age_band = ?
       AND u.accept_random_mail = 1 AND u.uid <> ?
       AND NOT EXISTS (
         SELECT 1 FROM blocks b
@@ -161,46 +174,12 @@ recipient_query = """
 bindings = ("ADULT", "sender", "sender", "sender", "sender", "JP", "JP")
 preferred = DB.execute(recipient_query, bindings).fetchall()
 assert preferred and preferred[0][0] == "recipient-jp", "Requested country should be preferred"
+assert all(row[0] != "recipient-minor" for row in preferred), "Random matching must never cross declared age groups"
 
 DB.execute("UPDATE users SET accept_random_mail = 0 WHERE uid = 'recipient-jp'")
 fallback = DB.execute(recipient_query, bindings).fetchall()
 assert fallback and all(row[0] != "recipient-jp" for row in fallback), "Ineligible destination pilot must be skipped"
 assert any(row[0] == "recipient-br" for row in fallback), "Plane must fall back to an eligible pilot worldwide"
-
-age_session_table = DB.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'age_verification_sessions'"
-).fetchone()
-assert age_session_table is not None, "Missing age_verification_sessions table"
-
-age_session_columns = {
-    row[1] for row in DB.execute("PRAGMA table_info(age_verification_sessions)").fetchall()
-}
-assert {"uid", "provider_session_id", "reference_id", "stage", "status", "doc_scan_only"}.issubset(
-    age_session_columns
-), "Age assurance session table is incomplete"
-assert not ({"document_image", "selfie_image", "biometric_payload", "birth_date"} & age_session_columns), (
-    "D1 must not store raw identity documents, selfies, biometric payloads, or full birth dates"
-)
-
-DB.execute(
-    """INSERT INTO age_verification_sessions(
-        id, uid, provider_session_id, reference_id, stage, status
-    ) VALUES ('age-session-1', 'pilot-a', 'provider-session-1', 'reference-1', 'MINIMUM_AGE', 'PENDING')"""
-)
-assert DB.execute(
-    "SELECT uid FROM age_verification_sessions WHERE id = 'age-session-1'"
-).fetchone()[0] == "pilot-a", "Age verification session must be bound to its Firebase UID"
-
-try:
-    DB.execute(
-        """INSERT INTO age_verification_sessions(
-            id, uid, provider_session_id, reference_id, stage, status
-        ) VALUES ('age-session-2', 'pilot-b', 'provider-session-1', 'reference-2', 'MINIMUM_AGE', 'PENDING')"""
-    )
-    raise AssertionError("Provider session IDs must be unique")
-except sqlite3.IntegrityError:
-    pass
-
 
 # Categorized support tickets must be private to an account and use controlled statuses.
 support_table = DB.execute(

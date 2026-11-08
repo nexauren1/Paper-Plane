@@ -11,6 +11,12 @@ void main() {
 
     expect(find.text('Ajuda e suporte'), findsOneWidget);
     expect(find.text('Novo pedido'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Os teus pedidos'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Os teus pedidos'), findsOneWidget);
     expect(find.text('Enviar pedido'), findsOneWidget);
 

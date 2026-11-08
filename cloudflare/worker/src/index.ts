@@ -49,8 +49,6 @@ interface Env {
   APP_ORIGINS: string;
   FCM_SERVICE_ACCOUNT_JSON?: string;
   ADMIN_UIDS?: string;
-  YOTI_API_TOKEN?: string;
-  YOTI_SDK_ID?: string;
 }
 
 const FIREBASE_JWKS = createRemoteJWKSet(
@@ -129,12 +127,12 @@ async function authenticate(request: Request, env: Env): Promise<string | null> 
 
 async function requireUser(uid: string, env: Env) {
   return env.DB.prepare(
-    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, profile_completed, language, country_code, country_visible, status, age_band, age_verified, accept_random_mail, push_enabled FROM users WHERE uid = ?",
+    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, declared_age_band, age_declaration_at, profile_completed, language, country_code, country_visible, status, accept_random_mail, push_enabled FROM users WHERE uid = ?",
   ).bind(uid).first<{
     uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null;
-    birth_year: number | null; profile_completed: number; language: string;
-    country_code: string | null; country_visible: number; status: string;
-    age_band: string; age_verified: number; accept_random_mail: number; push_enabled: number;
+    birth_year: number | null; declared_age_band: string; age_declaration_at: string | null;
+    profile_completed: number; language: string; country_code: string | null;
+    country_visible: number; status: string; accept_random_mail: number; push_enabled: number;
   }>();
 }
 
@@ -317,244 +315,17 @@ function flightProgress(startedAt: string | null, arrivalAt: string | null, stat
   return Math.max(0, Math.min(0.999, (Date.now() - start) / (arrival - start)));
 }
 
-async function ensureAgeReady(uid: string, env: Env) {
+async function ensurePilotReady(uid: string, env: Env) {
   const user = await requireUser(uid, env);
   if (!user) return { user: null, response: json({ error: "PILOT_NOT_INITIALIZED", message: "Create the pilot profile first." }, 409) };
   if (user.status !== "ACTIVE") return { user, response: json({ error: "ACCOUNT_UNAVAILABLE" }, 403) };
   if (user.profile_completed !== 1 || !user.country_code) {
     return { user, response: json({ error: "PROFILE_SETUP_REQUIRED", message: "Complete your pilot profile and choose a country before sending." }, 409) };
   }
-  if (user.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(user.age_band)) {
-    return {
-      user,
-      response: json(
-        { error: "AGE_VERIFICATION_REQUIRED", message: "Private and random delivery stay disabled until a trusted age check has established the correct age group." },
-        403,
-      ),
-    };
+  if (!["UNDER_18", "ADULT"].includes(user.declared_age_band)) {
+    return { user, response: json({ error: "AGE_DECLARATION_REQUIRED", message: "Add your date of birth to your profile before sending." }, 409) };
   }
   return { user, response: null };
-}
-
-type AgeVerificationStage = "MINIMUM_AGE" | "AGE_BAND";
-
-interface YotiSessionLink {
-  id: string;
-  stage: AgeVerificationStage;
-  verifyUrl: string;
-  expiresAt: string;
-  docScanOnly: boolean;
-}
-
-async function createYotiAgeSession(
-  uid: string,
-  stage: AgeVerificationStage,
-  env: Env,
-  docScanOnly = false,
-): Promise<YotiSessionLink> {
-  if (!env.YOTI_API_TOKEN || !env.YOTI_SDK_ID) {
-    throw new Error("AGE_PROVIDER_NOT_CONFIGURED");
-  }
-
-  const referenceId = uuid();
-  const minimumAge = stage === "MINIMUM_AGE" ? 13 : 18;
-  // Age estimation uses a deliberately higher threshold to reduce false-positive age passes.
-  // A failed estimation is never treated as proof of being underage: the user is routed to document scanning.
-  const estimateThreshold = stage === "MINIMUM_AGE" ? 16 : 21;
-  const payload = {
-    type: "OVER",
-    age_estimation: {
-      allowed: !docScanOnly,
-      threshold: estimateThreshold,
-      retry_enabled: false,
-      retry_limit: 1,
-      level: "PASSIVE",
-      authenticity: "AUTO",
-    },
-    digital_id: {
-      allowed: true,
-      threshold: minimumAge,
-      age_estimation_allowed: !docScanOnly,
-      age_estimation_threshold: estimateThreshold,
-      retry_enabled: false,
-      retry_limit: 1,
-    },
-    doc_scan: {
-      allowed: true,
-      threshold: minimumAge,
-      retry_enabled: false,
-      retry_limit: 2,
-      level: "PASSIVE",
-      authenticity: "AUTO",
-      synchronous_checks: true,
-    },
-    ttl: 1800,
-    reference_id: referenceId,
-    callback: {
-      auto: true,
-      url: "https://paper-plane.nexaurenstore.workers.dev/v1/age-verification/return",
-    },
-  };
-
-  const response = await fetch("https://age.yoti.com/api/v1/sessions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.YOTI_API_TOKEN}`,
-      "Yoti-SDK-Id": env.YOTI_SDK_ID,
-      "content-type": "application/json",
-      accept: "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error(`AGE_PROVIDER_CREATE_${response.status}`);
-
-  const created = await response.json() as { id?: unknown; expires_at?: unknown };
-  const providerSessionId = text(created.id, 64);
-  if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(providerSessionId)) {
-    throw new Error("AGE_PROVIDER_INVALID_SESSION");
-  }
-  const id = uuid();
-  const expiresAt = typeof created.expires_at === "string"
-    ? created.expires_at
-    : new Date(Date.now() + 30 * 60 * 1000).toISOString();
-
-  await env.DB.prepare(
-    "UPDATE age_verification_sessions SET status = 'SUPERSEDED', updated_at = ? WHERE uid = ? AND status = 'PENDING'",
-  ).bind(isoNow(), uid).run();
-  await env.DB.prepare(
-    "INSERT INTO age_verification_sessions(id, uid, provider_session_id, reference_id, stage, status, doc_scan_only, expires_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)",
-  ).bind(id, uid, providerSessionId, referenceId, stage, docScanOnly ? 1 : 0, expiresAt, isoNow()).run();
-
-  const verifyUrl = new URL("https://age.yoti.com/");
-  verifyUrl.searchParams.set("sessionId", providerSessionId);
-  verifyUrl.searchParams.set("sdkId", env.YOTI_SDK_ID);
-  return { id, stage, verifyUrl: verifyUrl.toString(), expiresAt, docScanOnly };
-}
-
-async function ageVerificationStatus(
-  uid: string,
-  sessionId: string,
-  env: Env,
-): Promise<Response> {
-  if (!env.YOTI_API_TOKEN || !env.YOTI_SDK_ID) {
-    return json({ error: "AGE_PROVIDER_NOT_CONFIGURED" }, 503);
-  }
-
-  const session = await env.DB.prepare(
-    "SELECT id, provider_session_id, stage, status, method, doc_scan_only, expires_at FROM age_verification_sessions WHERE id = ? AND uid = ? LIMIT 1",
-  ).bind(sessionId, uid).first<{
-    id: string; provider_session_id: string; stage: AgeVerificationStage;
-    status: string; method: string | null; doc_scan_only: number; expires_at: string | null;
-  }>();
-  if (!session) return json({ error: "AGE_SESSION_NOT_FOUND" }, 404);
-  if (session.status === "VERIFIED") {
-    const pilot = await requireUser(uid, env);
-    return json({ status: "VERIFIED", ageBand: pilot?.age_band ?? null });
-  }
-  if (session.status === "FAILED" || session.status === "ERROR" || session.status === "SUPERSEDED") {
-    return json({ status: session.status });
-  }
-
-  const response = await fetch(
-    `https://age.yoti.com/api/v1/sessions/${encodeURIComponent(session.provider_session_id)}/result`,
-    {
-      headers: {
-        authorization: `Bearer ${env.YOTI_API_TOKEN}`,
-        "Yoti-Sdk-Id": env.YOTI_SDK_ID,
-        accept: "application/json",
-      },
-    },
-  );
-  if (!response.ok) return json({ error: "AGE_PROVIDER_RESULT_UNAVAILABLE" }, 502);
-  const result = await response.json() as { status?: unknown; method?: unknown };
-  const providerStatus = text(result.status, 24).toUpperCase();
-  const method = text(result.method, 32).toUpperCase() || null;
-
-  if (["PENDING", "IN_PROGRESS", "PROCESSING"].includes(providerStatus)) {
-    return json({ status: "PENDING", stage: session.stage });
-  }
-
-  if (providerStatus === "COMPLETE") {
-    if (session.stage === "MINIMUM_AGE") {
-      try {
-        // Creating the next stage supersedes this completed provider session.
-        // It is not marked VERIFIED because the user's age band is still unknown.
-        const next = await createYotiAgeSession(uid, "AGE_BAND", env);
-        return json({
-          status: "NEXT_STEP",
-          stage: "AGE_BAND",
-          message: "Idade mínima confirmada. Falta distinguir a faixa 13–17 da faixa adulta.",
-          nextSession: next,
-        });
-      } catch {
-        return json({ error: "AGE_PROVIDER_UNAVAILABLE", message: "Não foi possível iniciar a segunda etapa. Tenta novamente." }, 502);
-      }
-    }
-
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-      ).bind(method, isoNow(), isoNow(), session.id),
-      env.DB.prepare(
-        "UPDATE users SET age_band = 'ADULT', age_verified = 1, age_verified_at = ?, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'",
-      ).bind(isoNow(), isoNow(), uid),
-      env.DB.prepare(
-        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
-      ).bind(isoNow(), uid),
-    ]);
-    return json({ status: "VERIFIED", ageBand: "ADULT" });
-  }
-
-  if (["FAIL", "ERROR"].includes(providerStatus) && method === "AGE_ESTIMATION" && session.doc_scan_only === 0) {
-    await env.DB.prepare(
-      "UPDATE age_verification_sessions SET status = 'SUPERSEDED', method = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-    ).bind(method, isoNow(), session.id).run();
-    try {
-      const documentSession = await createYotiAgeSession(uid, session.stage, env, true);
-      return json({
-        status: "DOCUMENT_CHECK_REQUIRED",
-        stage: session.stage,
-        message: "A estimativa não foi conclusiva. Confirma a idade através de outra forma segura.",
-        nextSession: documentSession,
-      });
-    } catch {
-      return json({ error: "AGE_PROVIDER_UNAVAILABLE", message: "Não foi possível iniciar a verificação por documento." }, 502);
-    }
-  }
-
-  if (providerStatus === "FAIL") {
-    if (session.stage === "AGE_BAND" && method !== null && method !== "AGE_ESTIMATION") {
-      await env.DB.batch([
-        env.DB.prepare(
-          "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-        ).bind(method, isoNow(), isoNow(), session.id),
-        env.DB.prepare(
-          "UPDATE users SET age_band = 'UNDER_18', age_verified = 1, age_verified_at = ?, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'",
-        ).bind(isoNow(), isoNow(), uid),
-        env.DB.prepare(
-          "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
-        ).bind(isoNow(), uid),
-      ]);
-      return json({ status: "VERIFIED", ageBand: "UNDER_18" });
-    }
-
-    await env.DB.prepare(
-      "UPDATE age_verification_sessions SET status = 'FAILED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-    ).bind(method, isoNow(), isoNow(), session.id).run();
-
-    return json({
-      status: "FAILED",
-      stage: session.stage,
-      message: session.stage === "MINIMUM_AGE"
-        ? "Não foi possível confirmar a idade mínima de 13 anos. A conta continua sem acesso a correspondência."
-        : "Não foi possível confirmar a faixa etária. A conta continua sem acesso a correspondência.",
-    });
-  }
-
-  await env.DB.prepare(
-    "UPDATE age_verification_sessions SET status = 'ERROR', method = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
-  ).bind(method, isoNow(), session.id).run();
-  return json({ status: "ERROR", message: "O fornecedor não conseguiu concluir a verificação. Podes tentar novamente." });
 }
 
 async function bootstrap(uid: string, env: Env) {
@@ -562,7 +333,7 @@ async function bootstrap(uid: string, env: Env) {
   if (existing) return existing;
   const pilotCode = `PP-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, age_band, age_verified, profile_completed, push_enabled) VALUES (?, ?, 'Piloto', 'UNVERIFIED', 0, 0, 0)",
+    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, profile_completed, push_enabled) VALUES (?, ?, 'Piloto', 0, 0)",
   ).bind(uid, pilotCode).run();
   return requireUser(uid, env);
 }
@@ -585,15 +356,17 @@ async function createAirplane(
     return json({ error: "INVALID_PLANE_MODEL" }, 400);
   }
   const destination = text(body.destinationCountry, 2).toUpperCase() || null;
-  const { user, response } = await ensureAgeReady(uid, env);
+  const { user, response } = await ensurePilotReady(uid, env);
   if (response) return response;
   if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
 
   let directFlight: ReturnType<typeof buildFlightPlan> = null;
   if (forcedRecipient) {
     const targetUser = await requireUser(forcedRecipient, env);
-    if (!targetUser || targetUser.status !== "ACTIVE" || targetUser.age_verified !== 1 ||
-        targetUser.age_band !== user.age_band || targetUser.profile_completed !== 1) {
+    if (!targetUser || targetUser.status !== "ACTIVE" ||
+        targetUser.declared_age_band !== user.declared_age_band ||
+        !["UNDER_18", "ADULT"].includes(targetUser.declared_age_band) ||
+        targetUser.profile_completed !== 1) {
       return json({ error: "RECIPIENT_UNAVAILABLE" }, 403);
     }
     directFlight = buildFlightPlan(user.country_code, targetUser.country_code);
@@ -685,6 +458,12 @@ async function createAirplane(
     await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
   }
 
+  if (body.firstFlight === true) {
+    await env.DB.prepare(
+      "UPDATE onboarding_first_flights SET state = 'LAUNCHED', updated_at = ? WHERE uid = ?",
+    ).bind(isoNow(), uid).run();
+  }
+
   return json(
     { airplane: { id, status, moderation: moderation.state }, message: status === "HELD_REVIEW" ? "Held for safety review." : "Plane accepted." },
     status === "HELD_REVIEW" ? 202 : 201,
@@ -699,13 +478,13 @@ async function matchAirplane(airplaneId: string, env: Env) {
 
   const sender = await requireUser(plane.sender_uid, env);
   if (!sender || sender.profile_completed !== 1 || !sender.country_code ||
-      sender.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(sender.age_band)) return;
+      !["UNDER_18", "ADULT"].includes(sender.declared_age_band)) return;
 
   const candidateRows = await env.DB.prepare(
     `SELECT u.uid, u.country_code, u.language
      FROM users u
      WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
-       AND u.age_verified = 1 AND u.age_band = ?
+       AND u.declared_age_band = ?
        AND u.accept_random_mail = 1 AND u.uid <> ?
        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid) OR (b.blocker_uid = u.uid AND b.blocked_uid = ?))
        AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.reporter_uid = u.uid AND r.reported_uid = ? AND r.status = 'OPEN')
@@ -713,7 +492,7 @@ async function matchAirplane(airplaneId: string, env: Env) {
        COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC,
        RANDOM()
      LIMIT 40`,
-  ).bind(sender.age_band, sender.uid, sender.uid, sender.uid, sender.uid, plane.destination_country, plane.destination_country)
+  ).bind(sender.declared_age_band, sender.uid, sender.uid, sender.uid, sender.uid, plane.destination_country, plane.destination_country)
     .all<{ uid: string; country_code: string; language: string }>();
   const candidates = candidateRows.results ?? [];
   if (candidates.length === 0) return;
@@ -867,7 +646,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         database: "connected",
         ai: env.AI ? "binding_available" : "unavailable",
         integrations: {
-          ageAssurance: env.YOTI_API_TOKEN && env.YOTI_SDK_ID ? "configured" : "needs_configuration",
           androidPush: env.FCM_SERVICE_ACCOUNT_JSON ? "configured" : "needs_configuration",
         },
         time: isoNow(),
@@ -996,8 +774,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     if (body.action !== "approve") return json({ error: "INVALID_ACTION" }, 400);
     const sender = await requireUser(plane.sender_uid, env);
-    if (!sender || sender.age_verified !== 1 || !["UNDER_18", "ADULT"].includes(sender.age_band)) {
-      return json({ error: "AGE_VERIFICATION_REQUIRED" }, 403);
+    if (!sender || !["UNDER_18", "ADULT"].includes(sender.declared_age_band)) {
+      return json({ error: "AGE_DECLARATION_REQUIRED" }, 403);
     }
 
     let nextStatus: "DELIVERED" | "FLYING" | "QUEUED";
@@ -1009,8 +787,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       if (
         !recipient ||
         recipient.status !== "ACTIVE" ||
-        recipient.age_verified !== 1 ||
-        recipient.age_band !== sender.age_band
+        !["UNDER_18", "ADULT"].includes(recipient.declared_age_band) ||
+        recipient.declared_age_band !== sender.declared_age_band
       ) return json({ error: "RECIPIENT_UNAVAILABLE" }, 409);
       const blocked = await env.DB.prepare(
         "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
@@ -1061,8 +839,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       return json({ ok: true, moderation: "UNSAFE" });
     }
     const replySender = await requireUser(reply.sender_uid, env);
-    if (!replySender || replySender.status !== "ACTIVE" || replySender.age_verified !== 1) {
-      return json({ error: "AGE_VERIFICATION_REQUIRED" }, 403);
+    if (!replySender || replySender.status !== "ACTIVE" ||
+        !["UNDER_18", "ADULT"].includes(replySender.declared_age_band)) {
+      return json({ error: "AGE_DECLARATION_REQUIRED" }, 403);
     }
     await env.DB.prepare("UPDATE public_replies SET moderation_state = 'SAFE' WHERE id = ?")
       .bind(reply.id).run();
@@ -1103,55 +882,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ ok: true, ticket: { id, category, subject, status: "OPEN" } }, 201);
   }
 
-  if (method === "POST" && path === "/v1/age-verification/sessions") {
-    const user = await requireUser(uid, env);
-    if (!user || user.profile_completed !== 1) return json({ error: "PROFILE_SETUP_REQUIRED" }, 409);
-    if (user.age_verified === 1) return json({ status: "VERIFIED", ageBand: user.age_band });
-    if (!env.YOTI_API_TOKEN || !env.YOTI_SDK_ID) {
-      return json({
-        error: "AGE_PROVIDER_NOT_CONFIGURED",
-        message: "A verificação segura ainda não está ligada. O serviço Yoti precisa de ser configurado no Cloudflare.",
-      }, 503);
-    }
-    const active = await env.DB.prepare(
-      "SELECT id, provider_session_id, stage, expires_at, doc_scan_only FROM age_verification_sessions WHERE uid = ? AND status = 'PENDING' AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
-    ).bind(uid, isoNow()).first<{
-      id: string; provider_session_id: string; stage: AgeVerificationStage;
-      expires_at: string | null; doc_scan_only: number;
-    }>();
-    if (active) {
-      const verifyUrl = new URL("https://age.yoti.com/");
-      verifyUrl.searchParams.set("sessionId", active.provider_session_id);
-      verifyUrl.searchParams.set("sdkId", env.YOTI_SDK_ID);
-      return json({
-        status: "PENDING",
-        session: {
-          id: active.id, stage: active.stage, verifyUrl: verifyUrl.toString(),
-          expiresAt: active.expires_at, docScanOnly: active.doc_scan_only === 1,
-        },
-      });
-    }
-    try {
-      const session = await createYotiAgeSession(uid, "MINIMUM_AGE", env);
-      return json({ status: "PENDING", session }, 201);
-    } catch (error) {
-      const reason = String(error);
-      const status = reason.includes("NOT_CONFIGURED") ? 503 : 502;
-      return json({
-        error: status === 503 ? "AGE_PROVIDER_NOT_CONFIGURED" : "AGE_PROVIDER_UNAVAILABLE",
-        message: "Não foi possível iniciar a verificação com o fornecedor de idade.",
-      }, status);
-    }
-  }
-
-  const ageSessionMatch = path.match(/^\/v1\/age-verification\/sessions\/([^/]+)$/);
-  if (method === "GET" && ageSessionMatch) {
-    return ageVerificationStatus(uid, ageSessionMatch[1], env);
-  }
-
   if (method === "POST" && path === "/v1/users/bootstrap") {
     const user = await bootstrap(uid, env);
-    return json({ pilot: user, canSend: user?.age_verified === 1 });
+    return json({ pilot: user, canSend: !!user && ["UNDER_18", "ADULT"].includes(user.declared_age_band) });
   }
 
   if (method === "GET" && path === "/v1/profile") {
@@ -1163,11 +896,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const received = await env.DB.prepare(
       "SELECT COUNT(*) AS received FROM inbox WHERE recipient_uid = ?",
     ).bind(uid).first<{ received: number }>();
-    if (user.age_verified === 1) {
-      await env.DB.prepare(
-        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
-      ).bind(isoNow(), uid).run();
-    }
     const firstFlight = await env.DB.prepare(
       "SELECT state, message_text, plane_model FROM onboarding_first_flights WHERE uid = ?",
     ).bind(uid).first<{ state: string; message_text: string; plane_model: string }>();
@@ -1246,17 +974,18 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!["DART", "GLIDER", "SWALLOW"].includes(planeModel)) {
       return json({ error: "INVALID_PLANE_MODEL" }, 400);
     }
-    const state = user.age_verified === 1 ? "READY_TO_LAUNCH" : "WAITING_FOR_AGE_VERIFICATION";
+    if (!["UNDER_18", "ADULT"].includes(user.declared_age_band)) {
+      return json({ error: "AGE_DECLARATION_REQUIRED", message: "Complete your date of birth in the pilot profile first." }, 409);
+    }
+    const state = "READY_TO_LAUNCH";
     await env.DB.prepare(
       "INSERT INTO onboarding_first_flights(uid, message_text, plane_model, state, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(uid) DO UPDATE SET message_text = excluded.message_text, plane_model = excluded.plane_model, state = excluded.state, updated_at = excluded.updated_at",
     ).bind(uid, message, planeModel, state, isoNow()).run();
     return json({
       completed: true,
       state,
-      privateOnly: state === "WAITING_FOR_AGE_VERIFICATION",
-      message: state === "WAITING_FOR_AGE_VERIFICATION"
-        ? "Your first plane is safely stored in your private hangar. Delivery to another pilot remains locked until trusted age verification is complete."
-        : "Your first plane is ready for launch.",
+      privateOnly: false,
+      message: "Your first plane is ready for launch using the age group declared in your profile.",
     }, 201);
   }
 
@@ -1282,20 +1011,38 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!body) return json({ error: "INVALID_JSON" }, 400);
     const pilotName = text(body.pilotName, 40);
     const handle = normalizePilotHandle(body.pilotHandle);
-    const birthYear = Number(body.birthYear);
+    const birthDateText = text(body.birthDate, 10);
+    const birthDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateText);
     const countryCode = text(body.countryCode, 2).toUpperCase();
     const language = body.language === "en" ? "en" : "pt";
     if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
     if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
-    const currentYear = new Date().getUTCFullYear();
-    if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > currentYear) {
-      return json({ error: "INVALID_BIRTH_YEAR" }, 400);
+    if (!birthDateMatch) return json({ error: "INVALID_BIRTH_DATE" }, 400);
+    const birthYear = Number(birthDateMatch[1]);
+    const birthMonth = Number(birthDateMatch[2]);
+    const birthDay = Number(birthDateMatch[3]);
+    const birthDate = new Date(Date.UTC(birthYear, birthMonth - 1, birthDay));
+    if (
+      !Number.isFinite(birthDate.getTime()) ||
+      birthDate.getUTCFullYear() !== birthYear ||
+      birthDate.getUTCMonth() !== birthMonth - 1 ||
+      birthDate.getUTCDate() !== birthDay
+    ) return json({ error: "INVALID_BIRTH_DATE" }, 400);
+    const today = new Date();
+    let declaredAge = today.getUTCFullYear() - birthYear;
+    if (
+      today.getUTCMonth() < birthMonth - 1 ||
+      (today.getUTCMonth() === birthMonth - 1 && today.getUTCDate() < birthDay)
+    ) declaredAge -= 1;
+    if (declaredAge < 13 || declaredAge > 120) {
+      return json({ error: "AGE_NOT_ELIGIBLE", message: "The declared date of birth must indicate an age between 13 and 120." }, 400);
     }
+    const declaredAgeBand = declaredAge < 18 ? "UNDER_18" : "ADULT";
     if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
     try {
       await env.DB.prepare(
-        "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
-      ).bind(pilotName, handle, birthYear, countryCode, language, isoNow(), uid).run();
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, birthYear, declaredAgeBand, isoNow(), countryCode, language, isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
         return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
@@ -1303,7 +1050,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       throw error;
     }
     const pilot = await requireUser(uid, env);
-    return json({ pilot, canSend: pilot?.age_verified === 1 });
+    return json({
+      pilot,
+      canSend: !!pilot && ["UNDER_18", "ADULT"].includes(pilot.declared_age_band),
+      ageDeclaration: "SELF_DECLARED",
+    });
   }
 
   if (method === "POST" && path === "/v1/airplanes") {
@@ -1564,7 +1315,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ items: rows.results ?? [] });
   }
   if (publicRepliesMatch && method === "POST") {
-    const { user, response } = await ensureAgeReady(uid, env);
+    const { user, response } = await ensurePilotReady(uid, env);
     if (response) return response;
     if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;

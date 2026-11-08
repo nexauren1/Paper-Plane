@@ -8,7 +8,7 @@ This is an implementation note for the privacy policy, not a substitute for lega
 2. The authenticated app sends the letter to the Paper Plane Cloudflare Worker over HTTPS.
 3. The Worker checks the Firebase ID token, daily-send limit, duplicate/rate checks, recipient restrictions, and moderation result.
 4. The letter is saved in Cloudflare D1 only after the application rules and safety checks have run.
-5. Random letters are matched only to a user whose age band has been independently verified and is identical to the sender's band. If no eligible user exists, the letter remains queued.
+5. Random letters are matched only to a user in the same age group derived from the sender's self-declared date of birth. This is a cohort-separation safeguard, not proof of identity or age. If no eligible user exists, the letter remains queued.
 6. A delivered unread letter is scheduled to expire after 24 hours. When opened, its expiry is changed to 48 hours from opening. These values are application rules and should be reviewed before launch.
 
 ## AI processing — internal, not a user-facing assistant
@@ -27,6 +27,7 @@ The currently selected Cloudflare AI models list zero-data-retention availabilit
 
 - Firebase UID: internal account identifier; never displayed as the pilot's public name.
 - Pilot code and fictional pilot name.
+- Self-declared date of birth is used transiently by the Worker; D1 retains only the birth year, derived age group, and declaration timestamp, not the full date.
 - Language and optional country code. Country display is opt-in; no precise GPS location is collected by this schema.
 - Letter body, delivery state, moderation state, timestamps, and optional translation.
 - FCM device token, only after a pilot opts into notifications.
@@ -44,4 +45,4 @@ Push notifications use generic text and do not include the letter body.
 - how FCM tokens are stored and how notification permission can be withdrawn;
 - how moderation reports and safety records are retained after a letter expires.
 
-Do not launch until account deletion, export, report handling, human review operations, retention schedules, and age-assurance procedures are implemented and tested.
+Do not launch until account deletion, export, report handling, human review operations, retention schedules, and the self-declared age-group safeguards are implemented and tested.

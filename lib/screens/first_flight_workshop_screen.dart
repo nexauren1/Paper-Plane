@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../services/paper_plane_api.dart';
-import 'age_verification_screen.dart';
 
 const Color _workshopNavy = Color(0xFF071225);
 const Color _workshopGold = Color(0xFFF0CE7C);
@@ -33,7 +32,6 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
   );
   String _model = 'DART';
   bool _busy = false;
-  bool _waitingForAge = false;
   String? _error;
 
   @override
@@ -71,42 +69,32 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
     });
     try {
       await _fold.forward();
-      final saved = await PaperPlaneApi.instance.saveFirstFlight(
+      await PaperPlaneApi.instance.saveFirstFlight(
         message: text,
         planeModel: _model,
       );
-      final privateOnly = saved['privateOnly'] == true;
-      if (!privateOnly) {
-        final launched = await PaperPlaneApi.instance.sendPlane(
-          message: text,
-          language: 'pt',
-          mood: 'Esperança',
-          visibility: 'Aleatório 1-para-1',
-          destinationCountry: null,
-          allowReply: true,
-          planeModel: _model,
+      final launched = await PaperPlaneApi.instance.sendPlane(
+        message: text,
+        language: 'pt',
+        mood: 'Esperança',
+        visibility: 'Aleatório 1-para-1',
+        destinationCountry: null,
+        allowReply: true,
+        planeModel: _model,
+        firstFlight: true,
+      );
+      final airplane = launched['airplane'] as Map<String, dynamic>? ?? const {};
+      final id = airplane['id']?.toString();
+      if (id == null || id.isEmpty) {
+        throw const PaperPlaneApiException(
+          'AIRPLANE_NOT_CREATED',
+          'O servidor não confirmou o lançamento do primeiro avião.',
         );
-        final airplane = launched['airplane'] as Map<String, dynamic>? ?? const {};
-        final id = airplane['id']?.toString();
-        if (id == null || id.isEmpty) {
-          throw const PaperPlaneApiException(
-            'AIRPLANE_NOT_CREATED',
-            'O servidor não confirmou o lançamento do primeiro avião.',
-          );
-        }
-        if (!mounted) return;
-        Navigator.of(context).pop({
-          'completed': true,
-          'airplaneId': id,
-          'privateOnly': false,
-        });
-        return;
       }
-
       if (!mounted) return;
-      setState(() {
-        _waitingForAge = true;
-        _busy = false;
+      Navigator.of(context).pop({
+        'completed': true,
+        'airplaneId': id,
       });
     } catch (error) {
       if (!mounted) return;
@@ -120,85 +108,8 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
     }
   }
 
-  void _continueToSky() {
-    Navigator.of(context).pop({
-      'completed': true,
-      'privateOnly': true,
-    });
-  }
-
-  Future<void> _verifyAgeAndContinue() async {
-    final verified = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AgeVerificationScreen()),
-    );
-    if (verified == true && mounted) {
-      setState(() {
-        _waitingForAge = false;
-        _error = null;
-      });
-    }
-  }
-
-
   @override
   Widget build(BuildContext context) {
-    if (_waitingForAge) {
-      return Scaffold(
-        backgroundColor: _workshopNavy,
-        body: Stack(children: [
-          const Positioned.fill(child: CustomPaint(painter: _WorkshopStarsPainter())),
-          SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(22),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.inventory_2_outlined, color: _workshopGoldBright, size: 58),
-                  const SizedBox(height: 18),
-                  const Text('O teu primeiro avião está no hangar', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Guardámos a tua carta na tua conta online. O avião ainda não foi enviado a outra pessoa: o servidor só liberta voos para desconhecidos depois da verificação de idade confiável.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, height: 1.5),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 58,
-                    child: FilledButton.icon(
-                      onPressed: _verifyAgeAndContinue,
-                      icon: const Icon(Icons.verified_user_outlined),
-                      label: const Text('Verificar idade para libertar o avião'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: _workshopGold,
-                        foregroundColor: _workshopNavy,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      onPressed: _continueToSky,
-                      icon: const Icon(Icons.flight_takeoff_rounded),
-                      label: const Text('Entrar no meu céu por agora'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _workshopGoldBright,
-                        side: BorderSide(color: _workshopGold.withOpacity(0.5)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      ),
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-          ),
-        ]),
-      );
-    }
-
     return Scaffold(
       backgroundColor: _workshopNavy,
       appBar: AppBar(
