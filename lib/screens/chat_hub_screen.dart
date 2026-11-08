@@ -649,6 +649,9 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
       if (!mounted) return;
+      final hadNewMessages = messages.length > _messages.length;
+      final wasNearBottom = !_scroll.hasClients ||
+          _scroll.position.maxScrollExtent - _scroll.position.pixels < 90;
       setState(() {
         _name = conversation['pilot_name']?.toString() ?? _name;
         _handle = conversation['pilot_handle']?.toString() ?? _handle;
@@ -658,7 +661,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         _loading = false;
         _error = null;
       });
-      if (messages.isNotEmpty && !_scroll.hasClients) {
+      if (messages.isNotEmpty && (! _scroll.hasClients || (hadNewMessages && wasNearBottom))) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToEnd());
       }
     } catch (error) {
