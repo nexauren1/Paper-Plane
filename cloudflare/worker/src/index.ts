@@ -459,6 +459,12 @@ async function createAirplane(
     await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
   }
 
+  if (body.firstFlight === true) {
+    await env.DB.prepare(
+      "UPDATE onboarding_first_flights SET state = 'LAUNCHED', updated_at = ? WHERE uid = ?",
+    ).bind(isoNow(), uid).run();
+  }
+
   return json(
     { airplane: { id, status, moderation: moderation.state }, message: status === "HELD_REVIEW" ? "Held for safety review." : "Plane accepted." },
     status === "HELD_REVIEW" ? 202 : 201,
