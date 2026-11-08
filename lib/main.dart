@@ -3076,6 +3076,20 @@ class _LetterScreenState extends State<LetterScreen> {
             ),
             const SizedBox(height: 12),
             GoldButton(label: _busy ? 'A enviar…' : 'Responder com avião', icon: Icons.send_rounded, onPressed: _busy ? () {} : _sendReply),
+            const SizedBox(height: 8),
+            const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.local_fire_department_rounded, color: ppGoldBright, size: 17),
+                SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Quando a resposta passar na segurança, a Chama acende e a conversa abre automaticamente.',
+                    style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 10),
           ] else
             const GlassPanel(child: Text('O remetente desativou as respostas para esta carta.', style: TextStyle(color: Colors.white70))),
