@@ -56,6 +56,9 @@ There is deliberately no self-declared-age endpoint and no shortcut in the app. 
 4. The Android app package is com.nexauren.paper_plane. The supplied client configuration is stored at firebase/google-services.json and copied into android/app/google-services.json by the Android build workflow.
 5. The workflow reads the Firebase API key, Android App ID, project number, Project ID, and Web OAuth client ID from that file. It configures the Google Services Gradle plugin and passes the values into the Flutter build. No manual Dart defines are needed for GitHub Actions.
 6. Google sign-in uses the Web OAuth client (oauth_client client_type 3) from the Firebase file. Add the SHA-1 and SHA-256 fingerprints for the certificate used to sign the APK in Firebase Project settings → Your apps → Android app, then download a fresh google-services.json and replace firebase/google-services.json. The current uploaded file has the Web OAuth client, but no Android OAuth client entry yet; Google sign-in can fail until the signing fingerprint is registered.
+   - Permanent upload-key SHA-1: `F4:5F:3C:66:21:1A:38:23:59:34:DF:C8:07:16:A2:E1:2D:4B:3A:7F`.
+   - Permanent upload-key SHA-256: `6E:9B:24:0E:19:3B:53:E1:92:FB:3C:11:D4:06:EC:E4:77:EC:E8:CA:50:15:93:07:21:05:A6:39:74:79:10:6B`.
+   - These fingerprints belong to the permanent `paper-plane-upload` keystore used by the release workflow. Do not replace the keystore after publishing this APK package.
 7. Analytics collection is enabled after Firebase initializes. The app records app_open, sign_up, login, and logout events; it does not send message text or passwords to Analytics.
 8. Notification registration remains an explicit opt-in in Settings. The Firebase service registers the FCM token with the Worker only after the user enables notifications.
 
@@ -105,6 +108,18 @@ A manual-only deployment workflow is included at .github/workflows/deploy-worker
 The D1 database and Queue resources must already exist, and wrangler.jsonc must contain the real D1 database ID and Firebase Project ID. The Worker secrets FCM_SERVICE_ACCOUNT_JSON and ADMIN_UIDS are configured in Cloudflare, not GitHub. Then run the "Deploy Paper Plane Worker" workflow manually from the platform-integration branch.
 
 The automatic Cloudflare CI checks also validate both SQL migrations in an in-memory SQLite database and typecheck the Worker code. They do not deploy anything.
+
+## Permanent Android release signing
+
+The Android workflow supports four repository Actions secrets:
+- `ANDROID_KEYSTORE_BASE64`: Base64 contents of the permanent upload keystore.
+- `ANDROID_KEYSTORE_PASSWORD`: keystore password.
+- `ANDROID_KEY_ALIAS`: `paper-plane-upload`.
+- `ANDROID_KEY_PASSWORD`: private-key password.
+
+When all four secrets exist, `tool/prepare_android_signing.py` decodes the keystore, creates the temporary Gradle signing properties, and configures the release build to use that key. The keystore and passwords must never be committed to the repository. Keep a secure backup: replacing or losing this signing key prevents normal in-place updates for APK distributors that require the same signing certificate.
+
+The actual secret values are supplied privately to the repository owner in the generated signing-secrets file and are not stored in this repository. Until all four secrets have been added to GitHub Actions, CI warns and continues with the default Flutter signing configuration; Google sign-in is not expected to work in that unsigned/debug-signed APK.
 
 ## Flutter build
 
