@@ -769,7 +769,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
      JOIN users s ON s.uid = a.sender_uid
      LEFT JOIN users r ON r.uid = a.recipient_uid
      WHERE a.status = 'HELD_REVIEW'
-       AND a.moderation_categories IN (?, ?, ?, ?)
+       AND a.moderation_categories IN (?, ?, ?, ?, ?, ?)
      ORDER BY a.created_at ASC LIMIT 30`,
   ).bind(
     JSON.stringify(["RISK_CLASSIFIER_UNCERTAIN"]),
@@ -784,8 +784,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
   }>();
 
   for (const plane of rows.results ?? []) {
-    // Re-run Llama Guard. The greeting rule is never allowed to override an
-    // uncertain or unavailable primary moderation result.
+    // Re-run the primary safety guard before releasing any prior technical hold.
     const moderation = await moderate(env, plane.message_text);
     if (moderation.state === "TEMPORARY_UNAVAILABLE" || moderation.state === "REVIEW") continue;
     if (moderation.state === "UNSAFE") {
@@ -793,7 +792,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
         "UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE', moderation_categories = ? WHERE id = ? AND status = 'HELD_REVIEW'",
       ).bind(JSON.stringify(moderation.categories), plane.id).run();
       await env.DB.prepare(
-        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'HELD_GREETING_REJECTED_AFTER_RECHECK', ?, ?)",
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'TECHNICAL_HOLD_REJECTED_AFTER_RECHECK', ?, ?)",
       ).bind(uuid(), plane.id, JSON.stringify({ categories: moderation.categories })).run();
       continue;
     }
@@ -846,8 +845,8 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
     }
     if (changed) {
       await env.DB.prepare(
-        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'KNOWN_SAFE_GREETING_AUTO_RELEASED', ?, ?)",
-      ).bind(uuid(), plane.id, JSON.stringify({ rule: "primary_guard_safe_exact_greeting" })).run();
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'TECHNICAL_HOLD_RELEASED_AFTER_RECHECK', ?, ?)",
+      ).bind(uuid(), plane.id, JSON.stringify({ rule: "fresh_primary_guard_safe" })).run();
     }
   }
 }
@@ -1656,7 +1655,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       eligibleRecipients: number;
       reason: string;
     } | null = null;
-    if (plane.status === "QUEUED" && plane.sender_uid === uid) {
+    if (plane.status === "QUEUED" && plane.moderation_state === "SAFE" && plane.sender_uid === uid) {
       const sender = await requireUser(uid, env);
       if (sender && ["UNDER_18", "ADULT"].includes(sender.declared_age_band)) {
         const counts = await env.DB.prepare(
