@@ -19,7 +19,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
-    expect(find.text('Olá, Piloto'), findsOneWidget);
-    expect(find.text('Escrever Avião'), findsOneWidget);
+    // Home now loads the pilot profile and counts from the live Worker API.
+    // Widget tests verify navigation only and must not expect demo/offline data.
+    expect(find.byType(HomePage), findsOneWidget);
   });
 }
