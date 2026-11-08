@@ -1018,7 +1018,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const pilotName = text(body.pilotName, 40);
     const handle = normalizePilotHandle(body.pilotHandle);
     const birthDateText = text(body.birthDate, 10);
-    const birthDateMatch = /^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(birthDateText);
+    const birthDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateText);
     const countryCode = text(body.countryCode, 2).toUpperCase();
     const language = body.language === "en" ? "en" : "pt";
     if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
