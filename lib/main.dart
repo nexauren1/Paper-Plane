@@ -1475,6 +1475,50 @@ class GlobeFlightPainter extends CustomPainter {
     return Offset(center.dx + x * radius, center.dy - y * radius);
   }
 
+  double _visibilityDepth(
+    Offset point,
+    double centerLat,
+    double centerLng,
+  ) {
+    const radians = math.pi / 180;
+    final latitude = point.dy * radians;
+    final longitude = point.dx * radians;
+    final centerLatitude = centerLat * radians;
+    final centerLongitude = centerLng * radians;
+    final delta = longitude - centerLongitude;
+    return math.sin(latitude) * math.sin(centerLatitude) +
+        math.cos(latitude) * math.cos(delta) * math.cos(centerLatitude);
+  }
+
+  Offset _horizonIntersection(
+    Offset first,
+    Offset second,
+    double centerLat,
+    double centerLng,
+  ) {
+    var low = 0.0;
+    var high = 1.0;
+    final firstVisible = _visibilityDepth(first, centerLat, centerLng) >= 0;
+    for (var i = 0; i < 18; i++) {
+      final middle = (low + high) / 2;
+      final candidate = Offset(
+        first.dx + (second.dx - first.dx) * middle,
+        first.dy + (second.dy - first.dy) * middle,
+      );
+      final candidateVisible = _visibilityDepth(candidate, centerLat, centerLng) >= 0;
+      if (candidateVisible == firstVisible) {
+        low = middle;
+      } else {
+        high = middle;
+      }
+    }
+    final t = (low + high) / 2;
+    return Offset(
+      first.dx + (second.dx - first.dx) * t,
+      first.dy + (second.dy - first.dy) * t,
+    );
+  }
+
   List<double> _midpoint(Map<String, dynamic> origin, Map<String, dynamic> destination) {
     const radians = math.pi / 180;
     List<double> vector(Map<String, dynamic> point) {
@@ -1501,11 +1545,23 @@ class GlobeFlightPainter extends CustomPainter {
     Offset center,
     double radius,
   ) {
+    if (polygon.length < 3) return;
+    final visibleOutline = <Offset>[];
+    for (var i = 0; i < polygon.length; i++) {
+      final first = polygon[i];
+      final second = polygon[(i + 1) % polygon.length];
+      final firstVisible = _visibilityDepth(first, centerLat, centerLng) >= 0;
+      final secondVisible = _visibilityDepth(second, centerLat, centerLng) >= 0;
+      if (firstVisible) visibleOutline.add(first);
+      if (firstVisible != secondVisible) {
+        visibleOutline.add(_horizonIntersection(first, second, centerLat, centerLng));
+      }
+    }
+    if (visibleOutline.length < 3) return;
     final projected = <Offset>[];
-    for (final point in polygon) {
+    for (final point in visibleOutline) {
       final value = _project(point.dy, point.dx, centerLat, centerLng, center, radius);
-      if (value == null) return;
-      projected.add(value);
+      if (value != null) projected.add(value);
     }
     if (projected.length < 3) return;
     final path = Path()..moveTo(projected.first.dx, projected.first.dy);
