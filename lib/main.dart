@@ -1,0 +1,2056 @@
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'services/firebase_runtime.dart';
+import 'services/paper_plane_api.dart';
+import 'services/paper_plane_auth.dart';
+import 'services/paper_plane_notifications.dart';
+
+const Color ppNavy = Color(0xFF071225);
+const Color ppNavyDeep = Color(0xFF040A15);
+const Color ppBlue = Color(0xFF243F70);
+const Color ppBlueLight = Color(0xFF83B8FF);
+const Color ppGold = Color(0xFFF0CE7C);
+const Color ppGoldBright = Color(0xFFFFE7A8);
+const Color ppPaper = Color(0xFFF4F0E7);
+const Color ppInk = Color(0xFF242735);
+const Color ppPanel = Color(0xCC172844);
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FirebaseRuntime.initialize();
+  runApp(const PaperPlaneApp());
+}
+
+class PaperPlaneApp extends StatelessWidget {
+  const PaperPlaneApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Paper Plane',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: ppNavy,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: ppGold,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primary: ppGold,
+          secondary: ppBlueLight,
+          surface: ppNavy,
+        ),
+        textTheme: const TextTheme(
+          headlineLarge: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, letterSpacing: -0.7),
+          headlineMedium: TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
+          titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          bodyLarge: TextStyle(fontSize: 16, height: 1.45),
+          bodyMedium: TextStyle(fontSize: 14, height: 1.4),
+        ),
+      ),
+      home: const SplashScreen(),
+    );
+  }
+}
+
+void ppPush(BuildContext context, Widget page) {
+  Navigator.of(context).push(
+    PageRouteBuilder(
+      pageBuilder: (_, animation, secondaryAnimation) => page,
+      transitionsBuilder: (_, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(0.035, 0), end: Offset.zero).animate(curved),
+            child: child,
+          ),
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 420),
+    ),
+  );
+}
+
+class SpaceBackground extends StatelessWidget {
+  const SpaceBackground({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF08172E), Color(0xFF081329), Color(0xFF040A15)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          const Positioned.fill(child: CustomPaint(painter: StarFieldPainter())),
+          Positioned(
+            top: -115,
+            right: -110,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ppBlue.withOpacity(0.10),
+                boxShadow: [BoxShadow(color: ppBlue.withOpacity(0.15), blurRadius: 100, spreadRadius: 30)],
+              ),
+            ),
+          ),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class StarFieldPainter extends CustomPainter {
+  const StarFieldPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = math.Random(21);
+    for (var i = 0; i < 125; i++) {
+      final dx = random.nextDouble() * size.width;
+      final dy = random.nextDouble() * size.height;
+      final radius = random.nextDouble() * 1.15 + 0.2;
+      final opacity = random.nextDouble() * 0.47 + 0.12;
+      final color = i % 11 == 0 ? ppGoldBright : Colors.white;
+      canvas.drawCircle(Offset(dx, dy), radius, Paint()..color = color.withOpacity(opacity));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class PlanePainter extends CustomPainter {
+  const PlanePainter({this.color = ppGoldBright, this.glow = true, this.fill = true});
+  final Color color;
+  final bool glow;
+  final bool fill;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final plane = Path()
+      ..moveTo(size.width * 0.05, size.height * 0.42)
+      ..lineTo(size.width * 0.95, size.height * 0.05)
+      ..lineTo(size.width * 0.61, size.height * 0.95)
+      ..lineTo(size.width * 0.43, size.height * 0.63)
+      ..lineTo(size.width * 0.27, size.height * 0.81)
+      ..lineTo(size.width * 0.30, size.height * 0.53)
+      ..close();
+
+    final fold = Path()
+      ..moveTo(size.width * 0.30, size.height * 0.53)
+      ..lineTo(size.width * 0.95, size.height * 0.05)
+      ..lineTo(size.width * 0.43, size.height * 0.63);
+
+    if (glow) {
+      canvas.drawPath(
+        plane,
+        Paint()
+          ..color = color.withOpacity(0.26)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 9
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 13),
+      );
+    }
+    if (fill) {
+      canvas.drawPath(plane, Paint()..color = color.withOpacity(0.12));
+    }
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawPath(
+      fold,
+      Paint()
+        ..color = color.withOpacity(0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant PlanePainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.glow != glow || oldDelegate.fill != fill;
+}
+
+class PlaneMark extends StatelessWidget {
+  const PlaneMark({super.key, this.width = 112, this.color = ppGoldBright});
+  final double width;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: width,
+        height: width * 0.68,
+        child: CustomPaint(painter: PlanePainter(color: color)),
+      );
+}
+
+
+class AnimatedPlane extends StatefulWidget {
+  const AnimatedPlane({super.key, this.width = 112, this.color = ppGoldBright});
+  final double width;
+  final Color color;
+
+  @override
+  State<AnimatedPlane> createState() => _AnimatedPlaneState();
+}
+
+class _AnimatedPlaneState extends State<AnimatedPlane> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2300),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final phase = _controller.value * math.pi * 2;
+        return SizedBox(
+          width: widget.width,
+          height: widget.width * 0.78,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: PlaneTrailPainter(color: widget.color, phase: _controller.value),
+                ),
+              ),
+              Transform.translate(
+                offset: Offset(math.sin(phase) * 3.5, -math.cos(phase * 0.8) * 5.5),
+                child: Transform.rotate(
+                  angle: math.sin(phase) * 0.025,
+                  child: PlaneMark(width: widget.width * 0.82, color: widget.color),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PlaneTrailPainter extends CustomPainter {
+  const PlaneTrailPainter({required this.color, required this.phase});
+  final Color color;
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(size.width * 0.08, size.height * 0.87)
+      ..cubicTo(
+        size.width * 0.28,
+        size.height * 0.78,
+        size.width * 0.28,
+        size.height * 0.40,
+        size.width * 0.58,
+        size.height * 0.28,
+      );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withOpacity(0.34)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+    for (var i = 0; i < 19; i++) {
+      final t = i / 19;
+      final x = size.width * (0.09 + t * 0.49);
+      final y = size.height * (0.86 - 0.58 * t + 0.08 * math.sin(t * math.pi * 2 + phase));
+      final radius = 0.7 + (1 - t) * 1.1;
+      canvas.drawCircle(
+        Offset(x, y),
+        radius,
+        Paint()..color = color.withOpacity((1 - t) * 0.55),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant PlaneTrailPainter oldDelegate) => oldDelegate.phase != phase || oldDelegate.color != color;
+}
+
+class GlassPanel extends StatelessWidget {
+  const GlassPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+    this.radius = 22,
+    this.highlight = false,
+    this.color,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+  final bool highlight;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        color: color ?? ppPanel,
+        border: Border.all(
+          color: highlight ? ppGold.withOpacity(0.58) : Colors.white.withOpacity(0.13),
+        ),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.22), blurRadius: 18, offset: const Offset(0, 8)),
+          if (highlight) BoxShadow(color: ppGold.withOpacity(0.11), blurRadius: 18, spreadRadius: 1),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(radius),
+        child: child,
+      ),
+    );
+  }
+}
+
+class GoldButton extends StatelessWidget {
+  const GoldButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.height = 58,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final IconData? icon;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: height,
+      child: FilledButton(
+        onPressed: onPressed,
+        style: FilledButton.styleFrom(
+          foregroundColor: ppInk,
+          backgroundColor: ppGold,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(19)),
+          elevation: 5,
+          shadowColor: ppGold.withOpacity(0.24),
+          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[Icon(icon, size: 22), const SizedBox(width: 10)],
+            Text(label),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SoftButton extends StatelessWidget {
+  const SoftButton({super.key, required this.label, required this.onPressed, this.icon});
+  final String label;
+  final VoidCallback onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 55,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon ?? Icons.arrow_forward_rounded, size: 19),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: ppGoldBright,
+          side: BorderSide(color: ppGold.withOpacity(0.48)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+class SectionTitle extends StatelessWidget {
+  const SectionTitle(this.text, {super.key, this.trailing});
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 12, top: 18),
+        child: Row(
+          children: [
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800))),
+            if (trailing != null) trailing!,
+          ],
+        ),
+      );
+}
+
+class ScreenFrame extends StatelessWidget {
+  const ScreenFrame({super.key, required this.title, required this.child, this.action});
+  final String title;
+  final Widget child;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: ppNavy,
+      body: SpaceBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(7, 7, 13, 9),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: ppGoldBright, size: 20),
+                    ),
+                    Expanded(
+                      child: Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                    ),
+                    SizedBox(width: 44, child: action ?? const SizedBox.shrink()),
+                  ],
+                ),
+              ),
+              Expanded(child: child),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  )..forward();
+
+  late final Animation<double> _appear = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+  late final Animation<double> _rise = Tween<double>(begin: 24, end: 0).animate(
+    CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _start() {
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const MainShell(),
+        transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 650),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SpaceBackground(
+        child: SafeArea(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => Opacity(
+              opacity: _appear.value,
+              child: Transform.translate(
+                offset: Offset(0, _rise.value),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 18, 28, 34),
+                  child: Column(
+                    children: [
+                      const Spacer(flex: 2),
+                      const AnimatedPlane(width: 245, color: Colors.white),
+                      const SizedBox(height: 36),
+                      const Text(
+                        'PAPER PLANE',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 34, letterSpacing: 3.5, fontWeight: FontWeight.w400),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Send a message to a stranger',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 17, color: Colors.white70),
+                      ),
+                      const Spacer(flex: 3),
+                      GoldButton(label: 'Start Flying', icon: Icons.flight_takeoff_rounded, onPressed: _start, height: 66),
+                      const SizedBox(height: 18),
+                      const Text('Um pensamento. Um avião. O mundo inteiro.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class MainShell extends StatefulWidget {
+  const MainShell({super.key});
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
+  int _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final pages = [
+      HomePage(onWrite: () => ppPush(context, const WritePlaneScreen()), onOpenInbox: () => setState(() => _index = 1)),
+      const InboxPage(),
+      const OpenSkyPage(),
+      const ProfilePage(),
+    ];
+
+    return Scaffold(
+      backgroundColor: ppNavy,
+      body: SpaceBackground(
+        child: SafeArea(
+          child: IndexedStack(index: _index, children: pages),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xEE101D33),
+          border: Border(top: BorderSide(color: ppGold.withOpacity(0.22))),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 16, offset: const Offset(0, -4))],
+        ),
+        child: SafeArea(
+          top: false,
+          child: NavigationBar(
+            height: 70,
+            backgroundColor: Colors.transparent,
+            indicatorColor: ppGold.withOpacity(0.13),
+            selectedIndex: _index,
+            onDestinationSelected: (value) => setState(() => _index = value),
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded, color: ppGold), label: 'Home'),
+              NavigationDestination(icon: Icon(Icons.inbox_outlined), selectedIcon: Icon(Icons.inbox_rounded, color: ppGold), label: 'Caixa'),
+              NavigationDestination(icon: Icon(Icons.public_outlined), selectedIcon: Icon(Icons.public, color: ppGold), label: 'Open Sky'),
+              NavigationDestination(icon: Icon(Icons.person_outline_rounded), selectedIcon: Icon(Icons.person_rounded, color: ppGold), label: 'Perfil'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key, required this.onWrite, required this.onOpenInbox});
+  final VoidCallback onWrite;
+  final VoidCallback onOpenInbox;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 15, 20, 24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              Row(
+                children: [
+                  const Icon(Icons.send_rounded, color: ppGold, size: 22),
+                  const SizedBox(width: 8),
+                  const Text('PAPER PLANE', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.w800, color: ppGoldBright)),
+                  const Spacer(),
+                  IconButton(onPressed: () => ppPush(context, const InviteScreen()), icon: const Icon(Icons.notifications_none_rounded, color: ppGoldBright)),
+                  IconButton(onPressed: () => ppPush(context, const ProfilePage()), icon: const Icon(Icons.account_circle_outlined, color: ppGoldBright)),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text('Boa noite, Piloto', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 5),
+              const Text('Os teus aviões estão a voar agora', style: TextStyle(color: Color(0xFFB8C8E5), fontSize: 15)),
+              const SizedBox(height: 20),
+              GlassPanel(
+                highlight: true,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 4),
+                    const AnimatedPlane(width: 168),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: _homeStat(Icons.public, 'Países alcançados', '24', '+3 este mês')),
+                        Container(width: 1, height: 65, color: Colors.white24),
+                        Expanded(child: _homeStat(Icons.send_outlined, 'Aviões enviados', '128', '+12 esta semana')),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 17),
+              GoldButton(label: 'Escrever Avião', icon: Icons.edit_outlined, onPressed: onWrite, height: 66),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 60,
+                child: OutlinedButton.icon(
+                  onPressed: onOpenInbox,
+                  icon: const Icon(Icons.markunread_mailbox_outlined),
+                  label: const Text('Abrir Avião de Hoje'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: ppGoldBright,
+                    side: BorderSide(color: ppGold.withOpacity(0.58)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    backgroundColor: Colors.white.withOpacity(0.05),
+                  ),
+                ),
+              ),
+              const SectionTitle('O teu correio'),
+              GlassPanel(
+                child: Row(
+                  children: [
+                    const CircleAvatar(backgroundColor: Color(0x332F79D8), child: Icon(Icons.mark_email_unread_outlined, color: ppGoldBright)),
+                    const SizedBox(width: 13),
+                    const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Tens 1 novo avião', style: TextStyle(fontWeight: FontWeight.w800)),
+                      SizedBox(height: 3),
+                      Text('Uma mensagem espera por ti.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    ])),
+                    IconButton(onPressed: onOpenInbox, icon: const Icon(Icons.arrow_forward_ios, color: ppGold, size: 18)),
+                  ],
+                ),
+              ),
+              const SectionTitle('Explora o mundo'),
+              InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => ppPush(context, const WeeklyCountryScreen()),
+                child: GlassPanel(
+                  highlight: true,
+                  child: Row(
+                    children: [
+                      const Text('🇯🇵', style: TextStyle(fontSize: 34)),
+                      const SizedBox(width: 14),
+                      const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('País da semana: Japão', style: TextStyle(fontWeight: FontWeight.w800)),
+                        SizedBox(height: 3),
+                        Text('Descobre mensagens e lugares novos', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      ])),
+                      const Icon(Icons.chevron_right, color: ppGold),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _homeStat(IconData icon, String label, String value, String foot) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Column(
+          children: [
+            Icon(icon, color: ppGoldBright),
+            const SizedBox(height: 5),
+            Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+            const SizedBox(height: 1),
+            Text(value, style: const TextStyle(fontSize: 30, color: ppGoldBright, fontWeight: FontWeight.w800)),
+            Text(foot, style: const TextStyle(fontSize: 10, color: Colors.white54)),
+          ],
+        ),
+      );
+}
+
+class WritePlaneScreen extends StatefulWidget {
+  const WritePlaneScreen({super.key});
+  @override
+  State<WritePlaneScreen> createState() => _WritePlaneScreenState();
+}
+
+class _WritePlaneScreenState extends State<WritePlaneScreen> {
+  final TextEditingController _message = TextEditingController();
+  String _mood = 'Esperança';
+  String _visibility = 'Aleatório 1-para-1';
+  bool _allowReply = true;
+  String _destination = 'Qualquer lugar do mundo';
+
+  @override
+  void dispose() {
+    _message.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    if (_message.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Escreve uma mensagem antes de lançar o avião.')));
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const LaunchDialog(),
+    );
+
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 650));
+
+      if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Modo de demonstração: configura Firebase e o endereço da API para enviar aviões reais.')),
+        );
+        ppPush(context, const FlightScreen());
+        return;
+      }
+
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      final result = await PaperPlaneApi.instance.sendPlane(
+        message: _message.text.trim(),
+        language: 'pt',
+        mood: _mood,
+        visibility: _visibility,
+        destinationCountry: switch (_destination) {
+          'Japão' => 'JP',
+          'Portugal' => 'PT',
+          'Brasil' => 'BR',
+          _ => null,
+        },
+        allowReply: _allowReply,
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final airplane = result['airplane'] as Map<String, dynamic>? ?? const {};
+      final status = airplane['status']?.toString() ?? 'QUEUED';
+      ppPush(context, FlightScreen(status: status, isDemo: false));
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final message = error is PaperPlaneApiException
+          ? error.message
+          : 'Não foi possível lançar o avião. Tenta novamente.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Escrever Avião',
+      action: IconButton(onPressed: _send, icon: const Icon(Icons.send_rounded, color: ppGoldBright)),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+        children: [
+          Container(
+            height: 250,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: ppPaper,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: ppGold.withOpacity(0.13), blurRadius: 18)],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _message,
+                    maxLength: 200,
+                    maxLines: null,
+                    expands: true,
+                    style: const TextStyle(color: ppInk, fontSize: 18, height: 1.45),
+                    decoration: const InputDecoration(
+                      hintText: 'Escreve algo gentil...',
+                      hintStyle: TextStyle(color: Color(0xFF77736B)),
+                      border: InputBorder.none,
+                      counterText: '',
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _message,
+                    builder: (_, value, __) => Text(
+                      value.text.length.toString() + '/200',
+                      style: const TextStyle(color: Color(0xFF8A7856), fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SectionTitle('Escolhe o sentimento'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: ['Felicidade', 'Tristeza', 'Esperança', 'Carinho'].map((mood) {
+              final selected = _mood == mood;
+              return ChoiceChip(
+                selected: selected,
+                label: Text(mood),
+                avatar: Icon(_moodIcon(mood), size: 17),
+                onSelected: (_) => setState(() => _mood = mood),
+                selectedColor: ppGold.withOpacity(0.22),
+                side: BorderSide(color: selected ? ppGold : Colors.white24),
+                labelStyle: TextStyle(color: selected ? ppGoldBright : Colors.white70),
+              );
+            }).toList(),
+          ),
+          const SectionTitle('Visibilidade'),
+          GlassPanel(
+            padding: const EdgeInsets.all(8),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'Público', label: Text('Público'), icon: Icon(Icons.public)),
+                ButtonSegment(value: 'Aleatório 1-para-1', label: Text('Aleatório'), icon: Icon(Icons.person_outline)),
+              ],
+              selected: {_visibility},
+              onSelectionChanged: (value) => setState(() => _visibility = value.first),
+              showSelectedIcon: false,
+              style: ButtonStyle(
+                foregroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? ppInk : Colors.white70),
+                backgroundColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? ppGold : Colors.transparent),
+              ),
+            ),
+          ),
+          const SectionTitle('Destino'),
+          GlassPanel(
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.public, color: ppGoldBright, size: 30),
+              title: const Text('Destino'),
+              subtitle: Text(_destination, style: const TextStyle(color: Colors.white70)),
+              trailing: const Icon(Icons.chevron_right, color: ppGold),
+              onTap: _chooseDestination,
+            ),
+          ),
+          const SizedBox(height: 12),
+          GlassPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 7),
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeColor: ppGold,
+              title: const Text('Permitir resposta'),
+              subtitle: const Text('A pessoa poderá responder com outro avião.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              value: _allowReply,
+              onChanged: (value) => setState(() => _allowReply = value),
+            ),
+          ),
+          const SizedBox(height: 18),
+          GoldButton(label: 'Lançar avião', icon: Icons.send_rounded, onPressed: _send, height: 64),
+          const SizedBox(height: 9),
+          const Text('Máximo de 200 caracteres. O lançamento real será ativado com a ligação ao servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  IconData _moodIcon(String mood) {
+    switch (mood) {
+      case 'Felicidade': return Icons.wb_sunny_outlined;
+      case 'Tristeza': return Icons.cloud_outlined;
+      case 'Carinho': return Icons.favorite_border;
+      default: return Icons.auto_awesome;
+    }
+  }
+
+  Future<void> _chooseDestination() async {
+    final destination = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF142542),
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ListTile(title: Text('Escolher destino', style: TextStyle(fontWeight: FontWeight.w800))),
+          ListTile(leading: const Icon(Icons.public, color: ppGold), title: const Text('Qualquer lugar do mundo'), onTap: () => Navigator.pop(context, 'Qualquer lugar do mundo')),
+          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const Text('Japão'), onTap: () => Navigator.pop(context, 'Japão')),
+          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const Text('Portugal'), onTap: () => Navigator.pop(context, 'Portugal')),
+          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const Text('Brasil'), onTap: () => Navigator.pop(context, 'Brasil')),
+        ]),
+      ),
+    );
+    if (destination != null) setState(() => _destination = destination);
+  }
+}
+
+class LaunchDialog extends StatefulWidget {
+  const LaunchDialog({super.key});
+  @override
+  State<LaunchDialog> createState() => _LaunchDialogState();
+}
+
+class _LaunchDialogState extends State<LaunchDialog> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+
+  @override
+  void dispose() { _controller.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF142542),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (_, __) => Transform.translate(
+              offset: Offset(_controller.value * 12, -_controller.value * 8),
+              child: const AnimatedPlane(width: 115),
+            ),
+          ),
+          const SizedBox(height: 22),
+          const Text('A preparar o teu avião...', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          const SizedBox(height: 8),
+          const Text('A dobrar a mensagem e preparar o voo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 22),
+          const LinearProgressIndicator(color: ppGold, backgroundColor: Colors.white12),
+        ]),
+      ),
+    );
+  }
+}
+
+class FlightScreen extends StatelessWidget {
+  const FlightScreen({super.key, this.status = 'QUEUED', this.isDemo = true});
+
+  final String status;
+  final bool isDemo;
+
+  String get _statusLabel => switch (status) {
+    'QUEUED' => 'À espera de um destinatário elegível',
+    'FLYING' => 'A encaminhar a mensagem',
+    'DELIVERED' => 'Mensagem publicada / entregue',
+    'HELD_REVIEW' => 'Retido para revisão de segurança',
+    'READ' => 'Mensagem aberta',
+    _ => 'Estado: $status',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: isDemo ? 'O teu avião está a voar' : 'Estado do avião',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+        children: [
+          const SizedBox(height: 5),
+          Text(
+            isDemo ? 'A caminho do Japão' : _statusLabel,
+            style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          GlassPanel(
+            padding: const EdgeInsets.all(10),
+            highlight: true,
+            child: SizedBox(height: 250, child: CustomPaint(painter: FlightMapPainter(), child: const Center(child: AnimatedPlane(width: 68)))),
+          ),
+          const SizedBox(height: 14),
+          GlassPanel(
+            child: isDemo
+                ? Row(children: [
+                    Expanded(child: _flightMetric('DISTÂNCIA PERCORRIDA', '2 340 km', Icons.route)),
+                    Container(width: 1, height: 65, color: Colors.white24),
+                    Expanded(child: _flightMetric('PROGRESSO', '62%', Icons.trending_up)),
+                  ])
+                : Row(children: [
+                    Expanded(child: _flightMetric('ESTADO DO SERVIDOR', status, Icons.cloud_done_outlined)),
+                    Container(width: 1, height: 65, color: Colors.white24),
+                    Expanded(child: _flightMetric('ENTREGA', status == 'QUEUED' ? 'Na fila' : 'Em processo', Icons.mark_email_unread_outlined)),
+                  ]),
+          ),
+          if (isDemo) ...[
+            const SectionTitle('Países atravessados'),
+            const GlassPanel(
+              child: Column(children: [
+                _CountryFlightRow(flag: '🇲🇿', country: 'Moçambique', status: 'Partida'),
+                Divider(color: Colors.white12),
+                _CountryFlightRow(flag: '🇮🇳', country: 'Índia', status: 'Passado'),
+                Divider(color: Colors.white12),
+                _CountryFlightRow(flag: '🇹🇭', country: 'Tailândia', status: 'Passado'),
+                Divider(color: Colors.white12),
+                _CountryFlightRow(flag: '🇯🇵', country: 'Japão', status: 'Destino'),
+              ]),
+            ),
+            const SizedBox(height: 17),
+            const Text('Demonstração visual do percurso', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+            const SizedBox(height: 14),
+            GoldButton(label: 'Ver chegada da carta', icon: Icons.mark_email_read_outlined, onPressed: () => ppPush(context, const ArrivalScreen())),
+          ] else ...[
+            const SizedBox(height: 14),
+            const GlassPanel(
+              child: Text(
+                'O mapa representa a viagem simbólica do avião. O Paper Plane não usa GPS nem inventa quilómetros ou horas de chegada. A entrega só será confirmada quando o servidor encontrar um destinatário elegível.',
+                style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          SoftButton(label: 'Voltar ao início', icon: Icons.home_outlined, onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
+        ],
+      ),
+    );
+  }
+
+  Widget _flightMetric(String label, String value, IconData icon) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, color: ppGoldBright),
+          const SizedBox(height: 5),
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+          Text(value, style: const TextStyle(color: ppGoldBright, fontSize: 24, fontWeight: FontWeight.w800)),
+        ]),
+      );
+}
+
+class CountryFlightRow extends StatelessWidget {
+  const CountryFlightRow({super.key, required this.flag, required this.country, required this.status});
+  final String flag;
+  final String country;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) => Row(children: [
+    Text(flag, style: const TextStyle(fontSize: 21)),
+    const SizedBox(width: 12),
+    Expanded(child: Text(country, style: const TextStyle(fontWeight: FontWeight.w600))),
+    Text(status, style: const TextStyle(color: ppGoldBright, fontSize: 12)),
+  ]);
+}
+
+class _CountryFlightRow extends StatelessWidget {
+  const _CountryFlightRow({required this.flag, required this.country, required this.status});
+  final String flag;
+  final String country;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    child: CountryFlightRow(flag: flag, country: country, status: status),
+  );
+}
+
+class FlightMapPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mapPaint = Paint()..color = const Color(0xFF42618F).withOpacity(0.32);
+    final linePaint = Paint()
+      ..color = ppGold.withOpacity(0.76)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+    final route = Path()
+      ..moveTo(size.width * 0.12, size.height * 0.70)
+      ..cubicTo(size.width * 0.27, size.height * 0.07, size.width * 0.62, size.height * 0.05, size.width * 0.84, size.height * 0.40);
+    for (var i = 0; i < 6; i++) {
+      final rect = Rect.fromLTWH(size.width * (0.06 + i * 0.16), size.height * (0.23 + (i.isEven ? 0.11 : 0.02)), size.width * 0.12, size.height * 0.23);
+      canvas.drawOval(rect, mapPaint);
+    }
+    canvas.drawPath(route, linePaint);
+    for (final point in [Offset(size.width * 0.12, size.height * 0.70), Offset(size.width * 0.84, size.height * 0.40)]) {
+      canvas.drawCircle(point, 4, Paint()..color = ppGoldBright);
+      canvas.drawCircle(point, 9, Paint()..color = ppGold.withOpacity(0.15));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+
+class ArrivalScreen extends StatelessWidget {
+  const ArrivalScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Carta chegou!',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+        children: [
+          const SizedBox(height: 8),
+          const Text('O teu avião pousou agora', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          const Text('Uma mensagem chegou ao seu destino.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 16),
+          GlassPanel(
+            highlight: true,
+            padding: const EdgeInsets.all(12),
+            child: SizedBox(
+              height: 190,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned.fill(child: CustomPaint(painter: FlightMapPainter())),
+                  const Icon(Icons.location_on_rounded, color: ppGoldBright, size: 24),
+                  const Positioned(
+                    bottom: 9,
+                    left: 8,
+                    child: Text('Moçambique', style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                  ),
+                  const Positioned(
+                    top: 8,
+                    right: 7,
+                    child: Text('Brasil', style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                  ),
+                  const Align(alignment: Alignment.bottomRight, child: PlaneMark(width: 48)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 13),
+          Row(children: const [
+            Expanded(child: _CollectionStat(value: '9 840 km', label: 'Distância percorrida')),
+            SizedBox(width: 10),
+            Expanded(child: _CollectionStat(value: '12h 34min', label: 'Tempo de voo')),
+          ]),
+          const SizedBox(height: 15),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE9F0FA),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: ppBlueLight.withOpacity(0.12), blurRadius: 15)],
+            ),
+            child: Column(children: const [
+              Icon(Icons.mail_rounded, color: Color(0xFF45618D), size: 44),
+              SizedBox(height: 8),
+              Text('Conteúdo da carta', style: TextStyle(color: Color(0xFF52647F), fontWeight: FontWeight.w800)),
+              SizedBox(height: 12),
+              Text('De: Maputo, Moçambique', style: TextStyle(color: Color(0xFF59677B))),
+              Text('Para: Destino internacional', style: TextStyle(color: Color(0xFF59677B))),
+              SizedBox(height: 6),
+              Text('Chegada registada nesta demonstração', style: TextStyle(color: Color(0xFF8792A2), fontSize: 11)),
+            ]),
+          ),
+          const SizedBox(height: 18),
+          GoldButton(
+            label: 'Abrir carta',
+            icon: Icons.mark_email_read_outlined,
+            onPressed: () => ppPush(
+              context,
+              const LetterScreen(
+                from: 'Alguém no Brasil',
+                flag: '🇧🇷',
+                message: 'Que esta mensagem te encontre num bom momento. Mesmo longe, podemos partilhar gentileza.',
+              ),
+            ),
+          ),
+          const SizedBox(height: 11),
+          SoftButton(label: 'Voltar à caixa', icon: Icons.inbox_outlined, onPressed: () => Navigator.pop(context)),
+          const SizedBox(height: 13),
+          const Text('Percurso ilustrativo. A entrega real será controlada pelo servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+class InboxPage extends StatelessWidget {
+  const InboxPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 21, 20, 24),
+      children: [
+        const Text('A tua caixa', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        const Text('Aviões que chegaram até ti', style: TextStyle(color: Colors.white70)),
+        const SizedBox(height: 19),
+        const _InboxCard(flag: '🇯🇵', from: 'Alguém no Japão', preview: 'Hoje passei no meu exame. Espero que também tenhas boas notícias.', time: 'Hoje · 18:32', fresh: true),
+        const SizedBox(height: 12),
+        const _InboxCard(flag: '🇧🇷', from: 'Alguém no Brasil', preview: 'Que o teu dia tenha um pouco de luz e tranquilidade.', time: 'Ontem · 21:05'),
+        const SizedBox(height: 12),
+        const _InboxCard(flag: '🇵🇹', from: 'Alguém em Portugal', preview: 'Um pequeno pensamento pode viajar muito longe.', time: 'Há 2 dias'),
+        const SectionTitle('A sair'),
+        GlassPanel(
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.flight_takeoff, color: ppGoldBright, size: 30),
+            title: const Text('O teu avião para o Japão'),
+            subtitle: const Text('Em voo · Demonstração', style: TextStyle(color: Colors.white60)),
+            trailing: const Icon(Icons.chevron_right, color: ppGold),
+            onTap: () => ppPush(context, const FlightScreen()),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InboxCard extends StatelessWidget {
+  const _InboxCard({required this.flag, required this.from, required this.preview, required this.time, this.fresh = false});
+  final String flag;
+  final String from;
+  final String preview;
+  final String time;
+  final bool fresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => ppPush(context, IncomingPlaneScreen(from: from, flag: flag, preview: preview)),
+      child: GlassPanel(
+        highlight: fresh,
+        child: Row(children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(color: ppBlue.withOpacity(0.35), borderRadius: BorderRadius.circular(15)),
+            child: const Icon(Icons.mail_outline_rounded, color: ppGoldBright, size: 29),
+          ),
+          const SizedBox(width: 13),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(from, style: const TextStyle(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(preview, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 5),
+            Text(time, style: const TextStyle(color: ppGold, fontSize: 11)),
+          ])),
+          if (fresh) const Padding(padding: EdgeInsets.only(left: 7), child: CircleAvatar(radius: 4, backgroundColor: ppGold)),
+        ]),
+      ),
+    );
+  }
+}
+
+class IncomingPlaneScreen extends StatelessWidget {
+  const IncomingPlaneScreen({super.key, required this.from, required this.flag, required this.preview});
+  final String from;
+  final String flag;
+  final String preview;
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Avião recebido',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 12, 22, 26),
+        child: Column(
+          children: [
+            const Spacer(),
+            const Icon(Icons.mark_email_unread_rounded, color: ppGoldBright, size: 125),
+            const SizedBox(height: 25),
+            const Text('Recebeste um novo avião', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 10),
+            Text('De: ' + from + ' ' + flag, style: const TextStyle(color: ppGoldBright, fontSize: 16)),
+            const SizedBox(height: 22),
+            GlassPanel(child: Row(children: [
+              const Icon(Icons.lock_outline_rounded, color: ppGold, size: 31),
+              const SizedBox(width: 13),
+              const Expanded(child: Text('Mensagem selada · Chegou agora', style: TextStyle(color: Colors.white70))),
+            ])),
+            const Spacer(),
+            GoldButton(label: 'Abrir devagar', icon: Icons.mail_outline, onPressed: () => ppPush(context, LetterScreen(from: from, flag: flag, message: preview))),
+            const SizedBox(height: 12),
+            SoftButton(label: 'Deixar voar', icon: Icons.air, onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A opção de libertar será ligada ao servidor.')));
+            }),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () => showReportDialog(context),
+              icon: const Icon(Icons.shield_outlined, color: Colors.white54),
+              label: const Text('Denunciar', style: TextStyle(color: Colors.white54)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class LetterScreen extends StatelessWidget {
+  const LetterScreen({super.key, required this.from, required this.flag, required this.message});
+  final String from;
+  final String flag;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'A tua carta',
+      action: IconButton(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Partilha ainda não ligada.'))), icon: const Icon(Icons.share_outlined, color: ppGold)),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(19, 10, 19, 25),
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(22, 24, 22, 22),
+            decoration: BoxDecoration(
+              color: ppPaper,
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: [BoxShadow(color: ppGold.withOpacity(0.16), blurRadius: 19)],
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('De: ' + from + ' ' + flag, style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
+              const SizedBox(height: 24),
+              Text(message, style: const TextStyle(color: ppInk, fontSize: 22, height: 1.6, fontStyle: FontStyle.italic)),
+              const SizedBox(height: 26),
+              const Divider(color: Color(0x338B806F)),
+              const Text('Recebido hoje · 18:32', style: TextStyle(color: Color(0xFF82745A), fontSize: 12)),
+            ]),
+          ),
+          const SizedBox(height: 27),
+          GoldButton(label: 'Responder com avião', icon: Icons.send_rounded, onPressed: () => ppPush(context, const WritePlaneScreen())),
+          const SizedBox(height: 12),
+          SoftButton(label: 'Enviar coração', icon: Icons.favorite_border, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coração guardado localmente nesta demonstração.')))),
+          const SizedBox(height: 12),
+          Center(child: TextButton.icon(onPressed: () => showReportDialog(context), icon: const Icon(Icons.shield_outlined), label: const Text('Denunciar'))),
+        ],
+      ),
+    );
+  }
+}
+
+class OpenSkyPage extends StatelessWidget {
+  const OpenSkyPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final messages = [
+      ('🇧🇷', 'Brasil', 'A quem precisa de ouvir isto hoje: não estás sozinho.'),
+      ('🇵🇹', 'Portugal', 'Hoje é um novo começo. Que encontres algo bonito.'),
+      ('🇯🇵', 'Japão', 'Que a tua noite seja tranquila e cheia de paz.'),
+      ('🇮🇳', 'Índia', 'Continua. O céu é grande e cheio de esperança.'),
+    ];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      children: [
+        const Text('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        const Text('Mensagens públicas de todo o mundo', style: TextStyle(color: Colors.white70)),
+        const SizedBox(height: 17),
+        GlassPanel(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          child: const Row(children: [
+            Icon(Icons.tune_rounded, color: ppGold),
+            SizedBox(width: 10),
+            Text('Filtrar por país · idioma', style: TextStyle(fontWeight: FontWeight.w600)),
+            Spacer(),
+            Icon(Icons.expand_more, color: ppGold),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        Wrap(spacing: 8, children: const [
+          _CountryChip(label: '🇧🇷 Brasil'),
+          _CountryChip(label: '🇵🇹 Portugal'),
+          _CountryChip(label: '🇯🇵 Japão'),
+          _CountryChip(label: '🇮🇳 Índia'),
+        ]),
+        for (final message in messages) ...[
+          const SizedBox(height: 12),
+          GlassPanel(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(message.$1, style: const TextStyle(fontSize: 25)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(message.$2, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17))),
+                const Text('agora', style: TextStyle(color: Colors.white54, fontSize: 11)),
+              ]),
+              const SizedBox(height: 12),
+              Text(message.$3, style: const TextStyle(fontSize: 15, height: 1.45)),
+              const SizedBox(height: 13),
+              Row(children: [
+                const Icon(Icons.favorite_border, size: 18, color: ppGold),
+                const SizedBox(width: 5),
+                const Text('24', style: TextStyle(color: Colors.white70)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Partilha pública será ligada ao backend.'))),
+                  icon: const Icon(Icons.send_outlined, size: 16),
+                  label: const Text('Partilhar'),
+                ),
+              ]),
+            ]),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _CountryChip extends StatelessWidget {
+  const _CountryChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Chip(
+        label: Text(label),
+        backgroundColor: ppBlue.withOpacity(0.38),
+        side: BorderSide(color: Colors.white.withOpacity(0.12)),
+        labelStyle: const TextStyle(color: Colors.white),
+      );
+}
+
+class ProfilePage extends StatelessWidget {
+  const ProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      children: [
+        Row(children: [
+          const Expanded(child: Text('Perfil & Convidar', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
+          IconButton(onPressed: () => ppPush(context, const SettingsScreen()), icon: const Icon(Icons.settings_outlined, color: ppGold)),
+        ]),
+        const SizedBox(height: 9),
+        GlassPanel(
+          highlight: true,
+          child: Row(children: [
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: ppBlue.withOpacity(0.38), border: Border.all(color: ppGold.withOpacity(0.45))),
+              child: const Icon(Icons.flight_outlined, color: ppGoldBright, size: 42),
+            ),
+            const SizedBox(width: 15),
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Piloto', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              SizedBox(height: 5),
+              Text('✈  Piloto nível 2', style: TextStyle(color: ppGoldBright)),
+              SizedBox(height: 5),
+              Text('🌐  Português · English', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ])),
+          ]),
+        ),
+        const SectionTitle('A tua coleção'),
+        GlassPanel(
+          child: Row(children: [
+            const Expanded(child: _ProfileNumber(number: '128', label: 'Voos')),
+            Container(width: 1, height: 55, color: Colors.white24),
+            const Expanded(child: _ProfileNumber(number: '24', label: 'Países')),
+            Container(width: 1, height: 55, color: Colors.white24),
+            const Expanded(child: _ProfileNumber(number: '9', label: 'Recebidos')),
+          ]),
+        ),
+        const SectionTitle('Conta e preferências'),
+        _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
+        _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Controla a tua privacidade', onTap: () => ppPush(context, const SafetyScreen())),
+        _ProfileLink(icon: Icons.card_giftcard, title: 'Convidar amigos', subtitle: 'Partilha o Paper Plane', onTap: () => ppPush(context, const InviteScreen())),
+        _ProfileLink(icon: Icons.collections_bookmark_outlined, title: 'A minha coleção', subtitle: 'Selos, países e conquistas', onTap: () => ppPush(context, const CollectionScreen())),
+        _ProfileLink(icon: Icons.local_fire_department_outlined, title: 'Chama do Deserto', subtitle: 'Pré-visualização · depende de consentimento mútuo', onTap: () => ppPush(context, const ChamaScreen())),
+        _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Perguntas e contacto', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
+      ],
+    );
+  }
+}
+
+class _ProfileNumber extends StatelessWidget {
+  const _ProfileNumber({required this.number, required this.label});
+  final String number;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+    Text(number, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: ppGoldBright)),
+    Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+  ]);
+}
+
+class _ProfileLink extends StatelessWidget {
+  const _ProfileLink({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: onTap,
+      child: GlassPanel(
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
+        child: Row(children: [
+          Icon(icon, color: ppGoldBright, size: 25),
+          const SizedBox(width: 13),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          ])),
+          const Icon(Icons.chevron_right, color: Colors.white54),
+        ]),
+      ),
+    ),
+  );
+}
+
+
+class ChamaScreen extends StatelessWidget {
+  const ChamaScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Chama do Deserto',
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(17, 0, 17, 12),
+            child: GlassPanel(
+              highlight: true,
+              child: Row(children: [
+                const CircleAvatar(
+                  radius: 27,
+                  backgroundColor: Color(0xFF344C77),
+                  child: Icon(Icons.person_rounded, color: ppGoldBright, size: 31),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Piloto associado', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  Text('Ligação privada de demonstração', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                ])),
+                const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFA15A), size: 29),
+              ]),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 17),
+            child: GlassPanel(
+              color: const Color(0xFF263D66),
+              child: const Row(children: [
+                Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFAA65), size: 30),
+                SizedBox(width: 10),
+                Expanded(child: Text('Uma chama precisa de respeito, cuidado e consentimento dos dois pilotos.', style: TextStyle(fontWeight: FontWeight.w700))),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              children: const [
+                _FlameBubble(text: 'Olá! Como está o teu dia? Espero que o deserto esteja mais calmo hoje ✨', time: 'ontem · 22:12', mine: false),
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Text('A conversa só continua com a escolha livre dos dois.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                  ),
+                ),
+                _FlameBubble(text: 'Consegui ver as estrelas aqui esta noite. Foi muito bonito!', time: 'hoje · 09:34', mine: true),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(15, 8, 15, 17),
+            child: GlassPanel(
+              padding: const EdgeInsets.all(12),
+              child: Column(children: [
+                const Text('Pré-visualização — mensagens privadas ainda desativadas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
+                const SizedBox(height: 10),
+                Row(children: [
+                  const Expanded(
+                    child: TextField(
+                      enabled: false,
+                      decoration: InputDecoration(
+                        hintText: 'Enviar mensagem em papel...',
+                        filled: true,
+                        fillColor: Color(0x3310182A),
+                        border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.all(Radius.circular(18))),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(onPressed: null, icon: const Icon(Icons.send_rounded, color: ppGold)),
+                ]),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 7,
+                  children: [
+                    TextButton.icon(onPressed: () => showReportDialog(context), icon: const Icon(Icons.flag_outlined), label: const Text('Denunciar')),
+                    TextButton.icon(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O bloqueio será ligado à conta.'))), icon: const Icon(Icons.shield_outlined), label: const Text('Bloquear')),
+                    TextButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded), label: const Text('Sair')),
+                  ],
+                ),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FlameBubble extends StatelessWidget {
+  const _FlameBubble({required this.text, required this.time, required this.mine});
+  final String text;
+  final String time;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 300),
+        margin: const EdgeInsets.symmetric(vertical: 7),
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: mine ? const Color(0xFF385C9A) : const Color(0xFF1A2B49),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(18),
+            topRight: const Radius.circular(18),
+            bottomLeft: Radius.circular(mine ? 18 : 4),
+            bottomRight: Radius.circular(mine ? 4 : 18),
+          ),
+          border: Border.all(color: Colors.white.withOpacity(0.10)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text(text, style: const TextStyle(fontSize: 15, height: 1.4)),
+          const SizedBox(height: 6),
+          Text(time, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+        ]),
+      ),
+    );
+  }
+}
+
+class InviteScreen extends StatelessWidget {
+  const InviteScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Convidar e partilhar',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 25),
+        children: [
+          const SizedBox(height: 8),
+          const Center(child: PlaneMark(width: 120)),
+          const SizedBox(height: 20),
+          const Text('Convida amigos para voar', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 7),
+          const Text('Partilha o teu convite e espalha palavras gentis.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 24),
+          GlassPanel(
+            highlight: true,
+            child: Column(children: [
+              const Text('O teu link de convite', style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 9),
+              Row(children: [
+                const Expanded(child: SelectableText('paperplane.app/invite/P7X9K2', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700))),
+                IconButton(
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O link será disponibilizado após configurar os convites.'))),
+                  icon: const Icon(Icons.copy_rounded, color: ppGold),
+                ),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 22),
+          Center(
+            child: GlassPanel(
+              padding: const EdgeInsets.all(18),
+              child: SizedBox(
+                width: 155,
+                height: 155,
+                child: CustomPaint(painter: QrPlaceholderPainter()),
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          const Text('Código QR de convite (pré-visualização)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+          const SizedBox(height: 22),
+          GoldButton(label: 'Partilhar convite', icon: Icons.ios_share_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A partilha será ligada quando o link estiver ativo.')))),
+          const SizedBox(height: 12),
+          SoftButton(label: 'Copiar link', icon: Icons.copy_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link de demonstração — ainda não ativo.')))),
+          const SizedBox(height: 15),
+          const Text('Os convites e recompensas serão ativados após a configuração da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+class QrPlaceholderPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cell = size.width / 21;
+    final bg = Paint()..color = Colors.white;
+    final dark = Paint()..color = const Color(0xFF13203A);
+    canvas.drawRect(Offset.zero & size, bg);
+    final random = math.Random(42);
+    for (var y = 0; y < 21; y++) {
+      for (var x = 0; x < 21; x++) {
+        final inFinder = _finder(x, y, 0, 0) || _finder(x, y, 14, 0) || _finder(x, y, 0, 14);
+        if (inFinder) continue;
+        if (random.nextBool()) canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, cell, cell), dark);
+      }
+    }
+    _drawFinder(canvas, cell, 0, 0, dark, bg);
+    _drawFinder(canvas, cell, 14, 0, dark, bg);
+    _drawFinder(canvas, cell, 0, 14, dark, bg);
+  }
+
+  bool _finder(int x, int y, int fx, int fy) => x >= fx && x < fx + 7 && y >= fy && y < fy + 7;
+
+  void _drawFinder(Canvas canvas, double cell, int x, int y, Paint dark, Paint bg) {
+    canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, 7 * cell, 7 * cell), dark);
+    canvas.drawRect(Rect.fromLTWH((x + 1) * cell, (y + 1) * cell, 5 * cell, 5 * cell), bg);
+    canvas.drawRect(Rect.fromLTWH((x + 2) * cell, (y + 2) * cell, 3 * cell, 3 * cell), dark);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class CollectionScreen extends StatelessWidget {
+  const CollectionScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'A minha coleção',
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+        children: [
+          Row(children: const [
+            Expanded(child: _CollectionStat(value: '128', label: 'Voos totais')),
+            SizedBox(width: 9),
+            Expanded(child: _CollectionStat(value: '24', label: 'Países')),
+            SizedBox(width: 9),
+            Expanded(child: _CollectionStat(value: '12 400', label: 'km de voo')),
+          ]),
+          const SectionTitle('Emblemas'),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 3,
+            mainAxisSpacing: 9,
+            crossAxisSpacing: 9,
+            childAspectRatio: 0.92,
+            children: const [
+              _BadgeTile(icon: Icons.military_tech, label: 'Primeiro voo'),
+              _BadgeTile(icon: Icons.public, label: 'Viajante do mundo'),
+              _BadgeTile(icon: Icons.favorite, label: 'Alma gentil'),
+            ],
+          ),
+          const SectionTitle('Aviões colecionados'),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 3,
+            mainAxisSpacing: 9,
+            crossAxisSpacing: 9,
+            childAspectRatio: 0.86,
+            children: const [
+              _PlaneStamp(flag: '🇯🇵', country: 'Japão'),
+              _PlaneStamp(flag: '🇵🇹', country: 'Portugal'),
+              _PlaneStamp(flag: '🇧🇷', country: 'Brasil'),
+              _PlaneStamp(flag: '🇮🇳', country: 'Índia'),
+              _PlaneStamp(flag: '🇮🇹', country: 'Itália'),
+              _PlaneStamp(flag: '🇨🇦', country: 'Canadá'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollectionStat extends StatelessWidget {
+  const _CollectionStat({required this.value, required this.label});
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => GlassPanel(
+    padding: const EdgeInsets.symmetric(vertical: 17, horizontal: 7),
+    highlight: true,
+    child: Column(children: [
+      FittedBox(child: Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: ppGoldBright))),
+      const SizedBox(height: 5),
+      Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+    ]),
+  );
+}
+
+class _BadgeTile extends StatelessWidget {
+  const _BadgeTile({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => GlassPanel(
+    padding: const EdgeInsets.all(8),
+    highlight: true,
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(icon, color: ppGoldBright, size: 35),
+      const SizedBox(height: 8),
+      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+    ]),
+  );
+}
+
+class _PlaneStamp extends StatelessWidget {
+  const _PlaneStamp({required this.flag, required this.country});
+  final String flag;
+  final String country;
+
+  @override
+  Widget build(BuildContext context) => GlassPanel(
+    padding: const EdgeInsets.all(9),
+    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const PlaneMark(width: 40),
+      const SizedBox(height: 8),
+      Text(flag + ' ' + country, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+    ]),
+  );
+}
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool notifications = false;
+  bool darkMode = true;
+  String language = 'Português';
+
+  Future<void> _setNotifications(bool enabled) async {
+    if (!enabled) {
+      try {
+        final serverUpdated = await PaperPlaneNotifications.disableAndUnregister();
+        if (!mounted) return;
+        setState(() => notifications = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              serverUpdated
+                  ? 'Notificações desativadas neste dispositivo.'
+                  : 'Notificações desativadas localmente. O servidor ainda precisa de sincronizar esta alteração.',
+            ),
+          ),
+        );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Não foi possível concluir a desativação das notificações.')),
+          );
+        }
+      }
+      return;
+    }
+    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Configura Firebase e Cloudflare antes de ativar notificações.')),
+      );
+      return;
+    }
+    try {
+      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneNotifications.enableAndRegister();
+      if (mounted) setState(() => notifications = true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Notificações ativadas neste dispositivo.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) setState(() => notifications = false);
+      if (mounted) {
+        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível ativar notificações.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Configurações',
+      child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
+        const SectionTitle('Preferências'),
+        GlassPanel(
+          child: Column(children: [
+            DropdownButtonFormField<String>(
+              value: language,
+              decoration: const InputDecoration(labelText: 'Idioma', prefixIcon: Icon(Icons.language, color: ppGold)),
+              dropdownColor: const Color(0xFF152541),
+              items: const [
+                DropdownMenuItem(value: 'Português', child: Text('Português')),
+                DropdownMenuItem(value: 'English', child: Text('English')),
+              ],
+              onChanged: (value) => setState(() => language = value ?? language),
+            ),
+            const SizedBox(height: 9),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeColor: ppGold,
+              title: const Text('Notificações'),
+              value: notifications,
+              onChanged: _setNotifications,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              activeColor: ppGold,
+              title: const Text('Modo escuro'),
+              value: darkMode,
+              onChanged: (value) => setState(() => darkMode = value),
+            ),
+          ]),
+        ),
+        const SectionTitle('Conta'),
+        _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
+        _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
+        const SizedBox(height: 12),
+        const Text('As preferências desta versão são locais e ainda não estão sincronizadas com uma conta.', style: TextStyle(color: Colors.white38, fontSize: 11)),
+      ]),
+    );
+  }
+}
+
+class SafetyScreen extends StatelessWidget {
+  const SafetyScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'Segurança e privacidade',
+      child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
+        const GlassPanel(
+          highlight: true,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(Icons.shield_moon_outlined, color: ppGoldBright, size: 38),
+            SizedBox(height: 12),
+            Text('A tua segurança importa', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+            SizedBox(height: 7),
+            Text('Não partilhes dados pessoais, morada, palavras-passe ou informações que te identifiquem com desconhecidos.', style: TextStyle(color: Colors.white70)),
+          ]),
+        ),
+        const SectionTitle('Controlos'),
+        _ProfileLink(icon: Icons.block, title: 'Pessoas bloqueadas', subtitle: 'A lista ficará disponível com a conta', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A lista de bloqueios será ligada ao servidor.')))),
+        _ProfileLink(icon: Icons.flag_outlined, title: 'As minhas denúncias', subtitle: 'Acompanhamento de segurança', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O centro de denúncias será ligado ao servidor.')))),
+        _ProfileLink(icon: Icons.visibility_off_outlined, title: 'Privacidade', subtitle: 'Controlar o que outras pessoas veem', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Controlos de privacidade em preparação.')))),
+      ]),
+    );
+  }
+}
+
+class WeeklyCountryScreen extends StatelessWidget {
+  const WeeklyCountryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'País da semana',
+      child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
+        GlassPanel(
+          padding: const EdgeInsets.all(24),
+          highlight: true,
+          child: const Column(children: [
+            Text('🇯🇵', style: TextStyle(fontSize: 74)),
+            SizedBox(height: 10),
+            Text('Japão', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+            Text('Uma viagem de palavras até ao Japão', style: TextStyle(color: Colors.white70)),
+          ]),
+        ),
+        const SizedBox(height: 15),
+        GlassPanel(
+          color: const Color(0xFF6D5325).withOpacity(0.42),
+          child: const Row(children: [
+            Icon(Icons.star_rounded, color: ppGoldBright, size: 35),
+            SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Bónus especial', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w900)),
+              Text('Recompensas temáticas serão ativadas numa fase futura.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ])),
+          ]),
+        ),
+        const SectionTitle('Mensagens do país'),
+        const _SimpleMessage(country: 'Tóquio, Japão', flag: '🇯🇵', text: 'Que a tua noite seja tranquila e cheia de pequenas descobertas.'),
+        const SizedBox(height: 10),
+        const _SimpleMessage(country: 'Quioto, Japão', flag: '🇯🇵', text: 'Mesmo uma pequena palavra pode iluminar o dia de alguém.'),
+        const SizedBox(height: 15),
+        GoldButton(label: 'Escrever avião', icon: Icons.send_rounded, onPressed: () => ppPush(context, const WritePlaneScreen())),
+      ]),
+    );
+  }
+}
+
+class _SimpleMessage extends StatelessWidget {
+  const _SimpleMessage({required this.country, required this.flag, required this.text});
+  final String country;
+  final String flag;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => GlassPanel(
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(flag + '  ' + country, style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      Text(text, style: const TextStyle(height: 1.5)),
+    ]),
+  );
+}
+
+Future<void> showReportDialog(BuildContext context) async {
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: const Color(0xFF172844),
+      title: const Text('Denunciar mensagem'),
+      content: const Text('A ferramenta de denúncias será ligada ao sistema de segurança. Não respondas a mensagens que te deixem desconfortável.'),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
+    ),
+  );
+}
