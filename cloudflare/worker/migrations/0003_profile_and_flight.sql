@@ -17,3 +17,10 @@ ALTER TABLE airplanes ADD COLUMN route_json TEXT;
 CREATE INDEX IF NOT EXISTS idx_airplanes_flight_arrival
   ON airplanes(status, estimated_arrival_at)
   WHERE status = 'FLYING';
+
+CREATE TABLE IF NOT EXISTS airplane_hearts (
+  airplane_id TEXT NOT NULL REFERENCES airplanes(id) ON DELETE CASCADE,
+  uid TEXT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY (airplane_id, uid)
+);
