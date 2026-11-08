@@ -1878,7 +1878,7 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
           const Spacer(),
           GoldButton(label: _busy ? 'A abrir…' : 'Abrir devagar', icon: Icons.mail_outline, onPressed: _busy ? () {} : _open),
           const SizedBox(height: 12),
-          SoftButton(label: 'Libertar avião', icon: Icons.air_rounded, onPressed: _busy ? () {} : _release),
+          SoftButton(label: 'Libertar avião', icon: Icons.airplanemode_active_rounded, onPressed: _busy ? () {} : _release),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: false), icon: const Icon(Icons.flag_outlined, color: Colors.white54), label: const Text('Denunciar', style: TextStyle(color: Colors.white54))),
@@ -2665,8 +2665,8 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
               GlassPanel(
                 child: Row(children: [
                   Expanded(child: _modelStat('Dardo', (_models['DART'] ?? 0).toString(), Icons.bolt_rounded)),
-                  Expanded(child: _modelStat('Planador', (_models['GLIDER'] ?? 0).toString(), Icons.air_rounded)),
-                  Expanded(child: _modelStat('Andorinha', (_models['SWALLOW'] ?? 0).toString(), Icons.flutter_dash_rounded)),
+                  Expanded(child: _modelStat('Planador', (_models['GLIDER'] ?? 0).toString(), Icons.airplanemode_active_rounded)),
+                  Expanded(child: _modelStat('Andorinha', (_models['SWALLOW'] ?? 0).toString(), Icons.airplanemode_active_rounded)),
                 ]),
               ),
               const SizedBox(height: 10),
