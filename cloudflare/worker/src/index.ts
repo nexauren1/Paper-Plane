@@ -282,12 +282,7 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     });
   }
   // Symbolic app journey, not GPS or physical-aircraft telemetry.
-  // Keep long-distance flights exciting and short: 90 seconds minimum,
-  // scaling gently with distance, capped at five minutes worldwide.
-  const durationSeconds = Math.max(
-    90,
-    Math.min(300, Math.round(60 + Math.sqrt(distanceKm) * 2)),
-  );
+  const durationSeconds = flightDurationForDistance(distanceKm);
   const startedAt = isoNow();
   return {
     distanceKm,
@@ -305,6 +300,12 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     }),
   };
 }
+function flightDurationForDistance(distanceKm: number): number {
+  // Keep long-distance flights exciting and short: 90 seconds minimum,
+  // scaling gently with distance, capped at five minutes worldwide.
+  return Math.max(90, Math.min(300, Math.round(60 + Math.sqrt(distanceKm) * 2)));
+}
+
 function chooseEligiblePilot(
   candidates: Array<{ uid: string; country_code: string; language: string }>,
 ) {
@@ -1481,6 +1482,30 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }>();
     let plane = await loadFlightPlane();
     if (!plane) return json({ error: "NOT_FOUND" }, 404);
+
+    // Shorten legacy long-duration flights without resetting their visible progress.
+    if (
+      plane.status === "FLYING" &&
+      plane.flight_distance_km != null &&
+      plane.flight_started_at &&
+      plane.flight_duration_seconds != null &&
+      plane.flight_duration_seconds > 300
+    ) {
+      const progressBeforeUpdate = flightProgress(
+        plane.flight_started_at,
+        plane.estimated_arrival_at,
+        plane.status,
+      );
+      const durationSeconds = flightDurationForDistance(plane.flight_distance_km);
+      const startedAt = new Date(Date.now() - progressBeforeUpdate * durationSeconds * 1000).toISOString();
+      const estimatedArrivalAt = new Date(Date.parse(startedAt) + durationSeconds * 1000).toISOString();
+      await env.DB.prepare(
+        "UPDATE airplanes SET flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ? WHERE id = ? AND status = 'FLYING'",
+      ).bind(durationSeconds, startedAt, estimatedArrivalAt, plane.id).run();
+      plane.flight_duration_seconds = durationSeconds;
+      plane.flight_started_at = startedAt;
+      plane.estimated_arrival_at = estimatedArrivalAt;
+    }
 
     // The sender's live tracker also nudges matching. Queue + cron remain the
     // background retry paths, but an open flight screen no longer waits for cron.
