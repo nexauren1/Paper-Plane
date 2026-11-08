@@ -834,6 +834,221 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   const isAdmin = admins.includes(uid);
 
+  if (method === "GET" && path === "/v1/friends") {
+    const [friends, requests] = await Promise.all([
+      env.DB.prepare(
+        `SELECT f.id, f.created_at,
+                CASE WHEN f.requester_uid = ? THEN f.addressee_uid ELSE f.requester_uid END AS uid,
+                u.pilot_name, u.pilot_handle,
+                CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
+         FROM friendships f
+         JOIN users u ON u.uid = CASE WHEN f.requester_uid = ? THEN f.addressee_uid ELSE f.requester_uid END
+         WHERE (f.requester_uid = ? OR f.addressee_uid = ?) AND f.status = 'ACCEPTED'
+         ORDER BY u.pilot_name COLLATE NOCASE ASC LIMIT 500`,
+      ).bind(uid, uid, uid, uid).all(),
+      env.DB.prepare(
+        `SELECT f.id, f.requester_uid, f.addressee_uid, f.created_at,
+                u.pilot_name, u.pilot_handle,
+                CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
+         FROM friendships f
+         JOIN users u ON u.uid = f.requester_uid
+         WHERE f.addressee_uid = ? AND f.status = 'PENDING'
+         ORDER BY f.created_at ASC LIMIT 100`,
+      ).bind(uid).all(),
+    ]);
+    return json({ items: friends.results ?? [], incomingRequests: requests.results ?? [] });
+  }
+
+  if (method === "GET" && path === "/v1/friends/requests") {
+    const [incoming, outgoing] = await Promise.all([
+      env.DB.prepare(
+        `SELECT f.id, f.requester_uid AS uid, u.pilot_name, u.pilot_handle,
+                CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+                f.created_at
+         FROM friendships f JOIN users u ON u.uid = f.requester_uid
+         WHERE f.addressee_uid = ? AND f.status = 'PENDING'
+         ORDER BY f.created_at ASC LIMIT 100`,
+      ).bind(uid).all(),
+      env.DB.prepare(
+        `SELECT f.id, f.addressee_uid AS uid, u.pilot_name, u.pilot_handle,
+                CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+                f.created_at
+         FROM friendships f JOIN users u ON u.uid = f.addressee_uid
+         WHERE f.requester_uid = ? AND f.status = 'PENDING'
+         ORDER BY f.created_at DESC LIMIT 100`,
+      ).bind(uid).all(),
+    ]);
+    return json({ incoming: incoming.results ?? [], outgoing: outgoing.results ?? [] });
+  }
+
+  if (method === "GET" && path === "/v1/friends/search") {
+    const query = normalizePilotHandle(url.searchParams.get("q"));
+    if (query.length < 2) return json({ items: [] });
+    const people = await env.DB.prepare(
+      `SELECT uid, pilot_name, pilot_handle,
+              CASE WHEN country_visible = 1 THEN country_code ELSE NULL END AS country_code
+       FROM users
+       WHERE status = 'ACTIVE' AND profile_completed = 1
+         AND declared_age_band = (SELECT declared_age_band FROM users WHERE uid = ?)
+         AND uid <> ? AND lower(pilot_handle) LIKE ?
+         AND NOT EXISTS (
+           SELECT 1 FROM blocks b
+           WHERE (b.blocker_uid = ? AND b.blocked_uid = users.uid)
+              OR (b.blocker_uid = users.uid AND b.blocked_uid = ?)
+         )
+       ORDER BY CASE WHEN lower(pilot_handle) = ? THEN 0 ELSE 1 END,
+                pilot_name COLLATE NOCASE ASC LIMIT 30`,
+    ).bind(uid, uid, `%${query}%`, uid, uid, query).all();
+    return json({ items: people.results ?? [] });
+  }
+
+  if (method === "POST" && path === "/v1/friends/requests") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const handle = normalizePilotHandle(body?.handle);
+    if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
+    const target = await env.DB.prepare(
+      "SELECT uid, declared_age_band, status, profile_completed FROM users WHERE lower(pilot_handle) = ? LIMIT 1",
+    ).bind(handle).first<{ uid: string; declared_age_band: string; status: string; profile_completed: number }>();
+    if (!target || target.status !== "ACTIVE" || target.profile_completed !== 1) {
+      return json({ error: "PILOT_NOT_FOUND", message: "Não encontrámos um copiloto ativo com esse @nome." }, 404);
+    }
+    if (target.uid === uid) return json({ error: "CANNOT_ADD_SELF" }, 400);
+    const currentUser = await requireUser(uid, env);
+    if (!currentUser || target.declared_age_band !== currentUser.declared_age_band) {
+      return json({ error: "FRIEND_AGE_GROUP_MISMATCH", message: "Por segurança, só podes adicionar pessoas da mesma faixa etária declarada." }, 403);
+    }
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, target.uid, target.uid, uid).first();
+    if (blocked) return json({ error: "FRIEND_UNAVAILABLE" }, 403);
+
+    const reverse = await env.DB.prepare(
+      "SELECT id FROM friendships WHERE requester_uid = ? AND addressee_uid = ? AND status = 'PENDING' LIMIT 1",
+    ).bind(target.uid, uid).first<{ id: string }>();
+    if (reverse) {
+      await env.DB.prepare("UPDATE friendships SET status = 'ACCEPTED', updated_at = ? WHERE id = ?")
+        .bind(isoNow(), reverse.id).run();
+      return json({ ok: true, status: "ACCEPTED", uid: target.uid });
+    }
+
+    const existing = await env.DB.prepare(
+      "SELECT id, status FROM friendships WHERE requester_uid = ? AND addressee_uid = ? LIMIT 1",
+    ).bind(uid, target.uid).first<{ id: string; status: string }>();
+    if (existing?.status === "ACCEPTED") return json({ ok: true, status: "ACCEPTED", alreadyFriends: true });
+    if (existing?.status === "PENDING") return json({ ok: true, status: "PENDING", alreadySent: true });
+    if (existing) {
+      await env.DB.prepare("UPDATE friendships SET status = 'PENDING', updated_at = ? WHERE id = ?")
+        .bind(isoNow(), existing.id).run();
+    } else {
+      await env.DB.prepare(
+        "INSERT INTO friendships(id, requester_uid, addressee_uid, status, updated_at) VALUES (?, ?, ?, 'PENDING', ?)",
+      ).bind(uuid(), uid, target.uid, isoNow()).run();
+    }
+    return json({ ok: true, status: "PENDING", uid: target.uid }, 201);
+  }
+
+  const friendRequestMatch = path.match(/^\/v1\/friends\/requests\/([^/]+)$/);
+  if (method === "POST" && friendRequestMatch) {
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.action !== "accept" && body.action !== "decline") return json({ error: "INVALID_ACTION" }, 400);
+    const status = body.action === "accept" ? "ACCEPTED" : "DECLINED";
+    const result = await env.DB.prepare(
+      "UPDATE friendships SET status = ?, updated_at = ? WHERE id = ? AND addressee_uid = ? AND status = 'PENDING'",
+    ).bind(status, isoNow(), friendRequestMatch[1], uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "REQUEST_NOT_FOUND" }, 404);
+    return json({ ok: true, status });
+  }
+
+  if (method === "POST" && path === "/v1/friends/remove") {
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const friendUid = text(body.uid, 128);
+    if (!friendUid || friendUid === uid) return json({ error: "INVALID_USER" }, 400);
+    await env.DB.prepare(
+      "DELETE FROM friendships WHERE status = 'ACCEPTED' AND ((requester_uid = ? AND addressee_uid = ?) OR (requester_uid = ? AND addressee_uid = ?))",
+    ).bind(uid, friendUid, friendUid, uid).run();
+    return json({ ok: true });
+  }
+
+  if (method === "GET" && path === "/v1/chats") {
+    const rows = await env.DB.prepare(
+      `SELECT c.id AS conversation_id,
+              CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
+              u.pilot_name, u.pilot_handle,
+              CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+              (SELECT m.message_text FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+              (SELECT m.created_at FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at,
+              c.created_at
+       FROM conversations c
+       JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
+       WHERE c.user_a = ? OR c.user_b = ?
+       ORDER BY COALESCE(c.last_message_at, c.created_at) DESC LIMIT 100`,
+    ).bind(uid, uid, uid, uid).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  const chatMessagesMatch = path.match(/^\/v1\/chats\/([^/]+)\/messages$/);
+  if (method === "POST" && chatMessagesMatch) {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const message = text(body.message, 1000);
+    if (!message) return json({ error: "MESSAGE_LENGTH" }, 400);
+    const conversation = await env.DB.prepare(
+      "SELECT id, user_a, user_b FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
+    ).bind(chatMessagesMatch[1], uid, uid).first<{ id: string; user_a: string; user_b: string }>();
+    if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    const otherUid = conversation.user_a === uid ? conversation.user_b : conversation.user_a;
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, otherUid, otherUid, uid).first();
+    if (blocked) return json({ error: "CHAT_UNAVAILABLE" }, 403);
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM chat_messages WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(recent?.count ?? 0) >= 40) return json({ error: "CHAT_RATE_LIMIT" }, 429);
+
+    const moderation = await moderate(env, message);
+    if (moderation.state === "UNSAFE" || moderation.state === "REVIEW") {
+      return json({ error: "MESSAGE_NOT_ALLOWED", message: "Esta mensagem precisa de ser alterada antes de ser enviada." }, 422);
+    }
+    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
+      return json({ error: "MODERATION_TEMPORARILY_UNAVAILABLE", message: "A verificação de segurança está temporariamente indisponível. Tenta novamente." }, 503);
+    }
+    const id = uuid();
+    const createdAt = isoNow();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
+      ).bind(id, conversation.id, uid, message, createdAt),
+      env.DB.prepare("UPDATE conversations SET last_message_at = ? WHERE id = ?")
+        .bind(createdAt, conversation.id),
+    ]);
+    ctx.waitUntil(notifyChatMessage(otherUid, conversation.id, env));
+    return json({
+      message: { id, conversation_id: conversation.id, sender_uid: uid, message_text: message, created_at: createdAt },
+    }, 201);
+  }
+
+  const chatMatch = path.match(/^\/v1\/chats\/([^/]+)$/);
+  if (method === "GET" && chatMatch) {
+    const conversation = await env.DB.prepare(
+      `SELECT c.id, c.user_a, c.user_b,
+              CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
+              u.pilot_name, u.pilot_handle,
+              CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
+       FROM conversations c
+       JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
+       WHERE c.id = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1`,
+    ).bind(uid, uid, chatMatch[1], uid, uid).first();
+    if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    const messages = await env.DB.prepare(
+      "SELECT id, sender_uid, message_text, created_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 150",
+    ).bind(chatMatch[1]).all();
+    return json({
+      conversation,
+      items: (messages.results ?? []).reverse(),
+    });
+  }
+
   if (path === "/v1/admin/reports" && method === "GET") {
     if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
     const rows = await env.DB.prepare(
@@ -1350,6 +1565,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       await env.DB.prepare(
         "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
       ).bind(privateReplyMatch[1]).run();
+      const userA = uid < original.sender_uid ? uid : original.sender_uid;
+      const userB = uid < original.sender_uid ? original.sender_uid : uid;
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO conversations(id, user_a, user_b) VALUES (?, ?, ?)",
+      ).bind(uuid(), userA, userB).run();
     }
     return replyResponse;
   }
