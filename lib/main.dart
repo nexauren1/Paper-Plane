@@ -1381,11 +1381,33 @@ class GlobeFlightPainter extends CustomPainter {
           centerLat, centerLng, center, radius * 0.985,
         );
         if (marker != null) {
-          canvas.drawCircle(marker, 9, Paint()
-            ..color = ppGold.withOpacity(0.24)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
-          canvas.drawCircle(marker, 4.2, Paint()..color = Colors.white);
-          canvas.drawCircle(marker, 2.3, Paint()..color = ppGold);
+          final previous = _project(lat1, lng1, centerLat, centerLng, center, radius * 0.985);
+          final next = _project(lat2, lng2, centerLat, centerLng, center, radius * 0.985);
+          final heading = previous != null && next != null
+              ? math.atan2(next.dy - previous.dy, next.dx - previous.dx)
+              : 0.0;
+          canvas.drawCircle(marker, 18, Paint()
+            ..color = ppGold.withOpacity(0.17)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+          canvas.save();
+          canvas.translate(marker.dx, marker.dy);
+          canvas.rotate(heading + math.pi / 2);
+          final paperPlane = Path()
+            ..moveTo(0, -14)
+            ..lineTo(7, 10)
+            ..lineTo(0, 6)
+            ..lineTo(-7, 10)
+            ..close();
+          canvas.drawPath(paperPlane, Paint()
+            ..color = ppGold.withOpacity(0.35)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+          canvas.drawPath(paperPlane, Paint()..color = ppPaper);
+          canvas.drawPath(paperPlane, Paint()
+            ..color = ppGoldBright
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..strokeJoin = StrokeJoin.round);
+          canvas.restore();
         }
       }
       if (origin is Map) {
@@ -1916,18 +1938,17 @@ class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
           const SizedBox(height: 20),
           AnimatedBuilder(
             animation: _arrival,
-            builder: (_, child) => AnimatedOpacity(
+            builder: (_, __) => AnimatedOpacity(
               opacity: _arrival.value >= 0.78 ? 1 : 0.35,
               duration: const Duration(milliseconds: 260),
-              child: child,
-            ),
-            child: GoldButton(
-              label: 'Abrir carta',
-              icon: Icons.mark_email_read_outlined,
-              onPressed: _arrival.value < 0.78
-                  ? () {}
-                  : () => ppPush(context, LetterScreen(airplane: widget.airplane)),
-              height: 62,
+              child: GoldButton(
+                label: _arrival.value >= 0.78 ? 'Abrir carta' : 'A chegar à tua porta…',
+                icon: Icons.mark_email_read_outlined,
+                onPressed: _arrival.value < 0.78
+                    ? () {}
+                    : () => ppPush(context, LetterScreen(airplane: widget.airplane)),
+                height: 62,
+              ),
             ),
           ),
         ]),
