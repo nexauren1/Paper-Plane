@@ -219,6 +219,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> registerDevice(String token, {String platform = 'android'}) =>
       _request('/v1/devices/register', method: 'POST', body: {'token': token, 'platform': platform});
 
+  Future<Map<String, dynamic>> getDeviceNotificationState(String token) =>
+      _request('/v1/devices/state', method: 'POST', body: {'token': token});
+
   Future<Map<String, dynamic>> unregisterDevice(String token) =>
       _request('/v1/devices/unregister', method: 'POST', body: {'token': token});
 
