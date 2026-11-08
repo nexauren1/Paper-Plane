@@ -1509,7 +1509,7 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Recover old exact greetings held only by the secondary classifier after the primary guard passed.
+    // Recheck old exact greetings held by uncertain/failed moderation; only a fresh SAFE result is released.
     await releasePreviouslyHeldSafeGreetings(env);
 
     // Keep searching until an eligible pilot is found. There is no fake delivery timer.
