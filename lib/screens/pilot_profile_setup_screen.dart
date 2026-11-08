@@ -20,6 +20,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
   final _pilotName = TextEditingController();
   final _pilotHandle = TextEditingController(text: 'chuva_ocidental-07');
   DateTime? _selectedBirthDate;
+  final _birthDateDisplay = TextEditingController();
   Timer? _handleDebounce;
 
   List<Map<String, String>> _countries = [];
@@ -44,6 +45,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
     _pilotHandle.removeListener(_onHandleChanged);
     _pilotName.dispose();
     _pilotHandle.dispose();
+    _birthDateDisplay.dispose();
     super.dispose();
   }
 
@@ -161,7 +163,10 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
       ),
     );
     if (picked != null && mounted) {
-      setState(() => _selectedBirthDate = DateTime(picked.year, picked.month, picked.day));
+      setState(() {
+        _selectedBirthDate = DateTime(picked.year, picked.month, picked.day);
+        _birthDateDisplay.text = _formatBirthDate(_selectedBirthDate!);
+      });
     }
   }
 
@@ -313,9 +318,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   const SizedBox(height: 18),
                   TextFormField(
                     readOnly: true,
-                    controller: TextEditingController(
-                      text: _selectedBirthDate == null ? '' : _formatBirthDate(_selectedBirthDate!),
-                    ),
+                    controller: _birthDateDisplay,
                     onTap: _saving ? null : _pickBirthDate,
                     validator: (_) => _selectedBirthDate == null
                         ? 'Seleciona a tua data de nascimento.'
