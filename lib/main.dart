@@ -9,6 +9,8 @@ import 'services/paper_plane_notifications.dart';
 import 'services/paper_plane_analytics.dart';
 import 'screens/account_screen.dart';
 import 'screens/pilot_profile_setup_screen.dart';
+import 'screens/age_verification_screen.dart';
+import 'screens/first_flight_workshop_screen.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -645,6 +647,7 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _sent = [];
   int _unread = 0;
   String? _firstFlightState;
+  Map<String, dynamic> _firstFlight = {};
   bool _loading = true;
   String? _error;
 
@@ -685,6 +688,7 @@ class _HomePageState extends State<HomePage> {
         _sent = sent;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
         _firstFlightState = results[0]['firstFlightState']?.toString();
+        _firstFlight = results[0]['firstFlight'] as Map<String, dynamic>? ?? {};
         _loading = false;
       });
     } catch (error) {
@@ -693,6 +697,31 @@ class _HomePageState extends State<HomePage> {
         _loading = false;
         _error = error is PaperPlaneApiException ? error.message : 'Não foi possível sincronizar o painel do piloto.';
       });
+    }
+  }
+
+  Future<void> _openAgeVerification() async {
+    final verified = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const AgeVerificationScreen()),
+    );
+    if (verified == true) await _refresh();
+  }
+
+  Future<void> _launchSavedFirstFlight() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => FirstFlightWorkshopScreen(
+          initialMessage: _firstFlight['message']?.toString() ?? '',
+          initialPlaneModel: _firstFlight['planeModel']?.toString() ?? 'DART',
+        ),
+      ),
+    );
+    if (result?['completed'] == true) {
+      final airplaneId = result?['airplaneId']?.toString();
+      await _refresh();
+      if (mounted && airplaneId != null && airplaneId.isNotEmpty) {
+        ppPush(context, FlightScreen(airplaneId: airplaneId));
+      }
     }
   }
 
@@ -743,14 +772,24 @@ class _HomePageState extends State<HomePage> {
             )
           else ...[
             if (profileReady && _profile['age_verified'] != 1)
-              const GlassPanel(
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Icon(Icons.verified_user_outlined, color: ppGoldBright, size: 24),
-                  SizedBox(width: 12),
-                  Expanded(child: Text(
-                    'A segurança está ativa. O envio e a correspondência com desconhecidos só serão liberados após uma verificação de idade confiável. O ano indicado no perfil não substitui essa verificação.',
-                    style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45),
-                  )),
+              GlassPanel(
+                highlight: true,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(Icons.verified_user_outlined, color: ppGoldBright, size: 24),
+                    SizedBox(width: 12),
+                    Expanded(child: Text(
+                      'A segurança está ativa. A correspondência só é libertada depois de confirmar a idade e separar pilotos adolescentes de adultos.',
+                      style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45),
+                    )),
+                  ]),
+                  const SizedBox(height: 12),
+                  GoldButton(
+                    label: 'Verificar a minha idade',
+                    icon: Icons.shield_outlined,
+                    onPressed: _openAgeVerification,
+                    height: 52,
+                  ),
                 ]),
               ),
             if (!profileReady)
@@ -782,8 +821,28 @@ class _HomePageState extends State<HomePage> {
                   const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text('O teu primeiro avião está no hangar privado', style: TextStyle(fontWeight: FontWeight.w800)),
                     SizedBox(height: 5),
-                    Text('A carta está guardada online. O servidor vai permitir o voo para outra pessoa quando a verificação de idade confiável estiver concluída.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                    Text('A carta está guardada online. Assim que a idade estiver confirmada, poderás lançar o avião para a faixa de pilotos compatível.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
                   ])),
+                ]),
+              ),
+            if (_firstFlightState == 'READY_TO_LAUNCH')
+              GlassPanel(
+                highlight: true,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Row(children: [
+                    Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 26),
+                    SizedBox(width: 10),
+                    Expanded(child: Text('O teu primeiro avião está pronto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+                  ]),
+                  const SizedBox(height: 6),
+                  const Text('A verificação terminou. Retoma a oficina, vê o papel transformar-se em avião e lança a tua primeira viagem online.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  const SizedBox(height: 12),
+                  GoldButton(
+                    label: 'Lançar o primeiro avião',
+                    icon: Icons.rocket_launch_rounded,
+                    onPressed: _launchSavedFirstFlight,
+                    height: 54,
+                  ),
                 ]),
               ),
             GlassPanel(
@@ -2963,58 +3022,145 @@ class QrPlaceholderPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class CollectionScreen extends StatelessWidget {
+class CollectionScreen extends StatefulWidget {
   const CollectionScreen({super.key});
 
   @override
+  State<CollectionScreen> createState() => _CollectionScreenState();
+}
+
+class _CollectionScreenState extends State<CollectionScreen> {
+  Map<String, dynamic> _stats = {};
+  List<Map<String, dynamic>> _countries = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.requireSignedInPilot();
+      final data = await PaperPlaneApi.instance.getSkyAtlas();
+      final raw = data['countries'] as List<dynamic>? ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _stats = data['stats'] as Map<String, dynamic>? ?? {};
+        _countries = raw.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e is PaperPlaneApiException ? e.message : 'Não foi possível atualizar a coleção online.';
+      });
+    }
+  }
+
+  int _number(String key) => int.tryParse(_stats[key]?.toString() ?? '') ?? 0;
+
+  @override
   Widget build(BuildContext context) {
+    final flights = _number('totalFlights');
+    final countries = _number('countriesCount');
+    final distance = _number('totalDistanceKm');
+    final completed = _number('completedFlights');
+    final active = _number('activeFlights');
+
     return ScreenFrame(
       title: 'A minha coleção',
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-        children: [
-          Row(children: const [
-            Expanded(child: _CollectionStat(value: '128', label: 'Voos totais')),
-            SizedBox(width: 9),
-            Expanded(child: _CollectionStat(value: '24', label: 'Países')),
-            SizedBox(width: 9),
-            Expanded(child: _CollectionStat(value: '12 400', label: 'km de voo')),
-          ]),
-          const SectionTitle('Emblemas'),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            mainAxisSpacing: 9,
-            crossAxisSpacing: 9,
-            childAspectRatio: 0.92,
-            children: const [
-              _BadgeTile(icon: Icons.military_tech, label: 'Primeiro voo'),
-              _BadgeTile(icon: Icons.public, label: 'Viajante do mundo'),
-              _BadgeTile(icon: Icons.favorite, label: 'Alma gentil'),
+      action: IconButton(
+        onPressed: _load,
+        tooltip: 'Atualizar coleção',
+        icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
+      ),
+      child: RefreshIndicator(
+        color: ppGold,
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+          children: [
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(36),
+                child: Center(child: CircularProgressIndicator(color: ppGold)),
+              )
+            else if (_error != null)
+              GlassPanel(child: Column(children: [
+                const Icon(Icons.cloud_off_rounded, color: Colors.orangeAccent, size: 32),
+                const SizedBox(height: 8),
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+              ]))
+            else ...[
+              Row(children: [
+                Expanded(child: _CollectionStat(value: flights.toString(), label: 'Voos totais')),
+                const SizedBox(width: 9),
+                Expanded(child: _CollectionStat(value: countries.toString(), label: 'Países')),
+                const SizedBox(width: 9),
+                Expanded(child: _CollectionStat(value: distance.toString(), label: 'km de voo')),
+              ]),
+              const SizedBox(height: 14),
+              GlassPanel(
+                child: Row(children: [
+                  Expanded(child: _collectionMetric('Concluídos', completed, Icons.mark_email_read_outlined)),
+                  Expanded(child: _collectionMetric('No ar', active, Icons.flight_takeoff_rounded)),
+                ]),
+              ),
+              const SectionTitle('Emblemas conquistados'),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 9,
+                crossAxisSpacing: 9,
+                childAspectRatio: 0.92,
+                children: [
+                  _BadgeTile(icon: Icons.military_tech, label: 'Primeiro voo', unlocked: flights >= 1),
+                  _BadgeTile(icon: Icons.public, label: 'Viajante do mundo', unlocked: countries >= 3),
+                  _BadgeTile(icon: Icons.favorite, label: 'Voo concluído', unlocked: completed >= 1),
+                ],
+              ),
+              const SectionTitle('Países visitados'),
+              if (_countries.isEmpty)
+                const GlassPanel(
+                  child: Text('Ainda não há países registados nos teus voos. Quando uma rota real for concluída, os países aparecem aqui.',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.5)),
+                )
+              else
+                for (final country in _countries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GlassPanel(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(children: [
+                        Text(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(country['name']?.toString() ?? 'País', style: const TextStyle(fontWeight: FontWeight.w800))),
+                        const Icon(Icons.verified_rounded, color: ppGoldBright, size: 19),
+                      ]),
+                    ),
+                  ),
             ],
-          ),
-          const SectionTitle('Aviões colecionados'),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            mainAxisSpacing: 9,
-            crossAxisSpacing: 9,
-            childAspectRatio: 0.86,
-            children: const [
-              _PlaneStamp(flag: '🇯🇵', country: 'Japão'),
-              _PlaneStamp(flag: '🇵🇹', country: 'Portugal'),
-              _PlaneStamp(flag: '🇧🇷', country: 'Brasil'),
-              _PlaneStamp(flag: '🇮🇳', country: 'Índia'),
-              _PlaneStamp(flag: '🇮🇹', country: 'Itália'),
-              _PlaneStamp(flag: '🇨🇦', country: 'Canadá'),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  Widget _collectionMetric(String label, int value, IconData icon) => Column(children: [
+    Icon(icon, color: ppGoldBright, size: 22),
+    const SizedBox(height: 5),
+    Text(value.toString(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+    Text(label, style: const TextStyle(fontSize: 11, color: Colors.white60)),
+  ]);
 }
 
 class _CollectionStat extends StatelessWidget {
@@ -3035,18 +3181,21 @@ class _CollectionStat extends StatelessWidget {
 }
 
 class _BadgeTile extends StatelessWidget {
-  const _BadgeTile({required this.icon, required this.label});
+  const _BadgeTile({required this.icon, required this.label, required this.unlocked});
   final IconData icon;
   final String label;
+  final bool unlocked;
 
   @override
   Widget build(BuildContext context) => GlassPanel(
     padding: const EdgeInsets.all(8),
-    highlight: true,
+    highlight: unlocked,
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(icon, color: ppGoldBright, size: 35),
+      Icon(icon, color: unlocked ? ppGoldBright : Colors.white24, size: 35),
       const SizedBox(height: 8),
-      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: unlocked ? Colors.white : Colors.white38)),
+      const SizedBox(height: 4),
+      Text(unlocked ? 'Conquistado' : 'Por conquistar', style: const TextStyle(fontSize: 9, color: Colors.white38)),
     ]),
   );
 }

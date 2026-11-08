@@ -5,7 +5,7 @@ This branch prepares the production architecture without committing private cred
 ## Responsibility split
 
 - Flutter / Dart: mobile interface and client-side animations.
-- Firebase Authentication: anonymous Firebase identity for a pilot; the Worker verifies each Firebase ID token.
+- Firebase Authentication: Email/Password or Google account identity; the Worker verifies every Firebase ID token and uses its immutable UID as the D1 `users.uid` primary key. No separate `identity` table is required.
 - Firebase Cloud Messaging: device push notifications. FCM is opt-in and notification text deliberately does not include the letter itself.
 - Cloudflare Worker: authenticated API, business rules, matching, safety gates, delivery state, and AI orchestration.
 - Cloudflare D1: primary relational database. Message data is not duplicated into Firestore.
@@ -17,7 +17,7 @@ This branch prepares the production architecture without committing private cred
 
 ### Firebase client
 - Firebase is initialized from build-time --dart-define values.
-- Firebase Anonymous Auth creates a stable pilot UID.
+- Firebase Authentication creates a stable UID for each account. The app bootstraps the matching D1 pilot row after sign-in; the Worker rejects API calls whose Firebase token cannot be verified.
 - The Firebase ID token is attached to Worker API requests.
 - A notification registration service requests permission only when explicitly called from Settings.
 - The app composer calls the Worker when both Firebase and the API URL are configured; otherwise it clearly stays in preview/demo mode.
@@ -42,12 +42,23 @@ This branch prepares the production architecture without committing private cred
 - The models never compose a letter on behalf of a pilot.
 - AI is a screening aid, not a safety guarantee. It can miss harmful content or flag harmless content. Human review, reporting, blocking, rate limits, and clear community rules remain necessary.
 
-## Important safety gate — do not remove casually
+## Age assurance and child-safety gate
 
-Every new pilot starts with age_band = UNVERIFIED and age_verified = 0. Sending and matching are blocked until a trusted age-assurance process has verified the band as UNDER_18 or ADULT. Matching is same-band only. This protects minors from being randomly paired with adults, but it is not sufficient by itself: the chosen age-assurance provider, parental/guardian requirements where applicable, human moderation coverage, and launch jurisdiction rules still need to be reviewed before opening the service.
+Every pilot begins with `age_band = UNVERIFIED` and `age_verified = 0`. The profile's self-declared birth year is not proof and never unlocks messaging.
 
-There is deliberately no self-declared-age endpoint and no shortcut in the app. A trusted age-assurance provider and a signed provider callback still need to be selected and integrated. Do not set age_verified=1 manually for production users.
+The selected provider adapter is **Yoti Age Verification**:
+- Stage 1 verifies the minimum age of 13. Age estimation uses a conservative threshold; an inconclusive estimate is followed by a document-only session. An unsuccessful minimum-age check leaves the pilot unverified and unable to send or receive stranger mail.
+- Stage 2 distinguishes `UNDER_18` from `ADULT`. A successful over-18 check assigns `ADULT`; a completed document check that does not meet 18 assigns `UNDER_18`.
+- Matching is restricted to the exact same verified band. The matching query also enforces account status, consent, blocks, and open reports.
+- If a provider result is pending, uncertain, expired, or unavailable, the pilot remains unverified. No client-supplied value can set `age_verified`.
 
+The Worker creates Yoti sessions and fetches results server-to-server. Configure the provider credentials as Cloudflare Worker secrets named `YOTI_API_TOKEN` and `YOTI_SDK_ID`; never put them in Dart, GitHub source, or chat. Yoti's API requires a Yoti Hub API key and SDK ID. Confirm that the required Age Verification methods and document types are enabled for Mozambique and each launch country before public release.
+
+D1 stores only the provider session reference, method, state, and final age band. It does not store document images, selfies, biometric payloads, full dates of birth, or raw provider result bodies. The external provider processes any verification evidence according to its own contract and privacy terms; review those terms and the local legal requirements before launch.
+
+Official provider flow: create a session, open `https://age.yoti.com?sessionId=…&sdkId=…`, then fetch `/api/v1/sessions/{sessionId}/result`. The app can resume and query the result; the API key stays exclusively on the Worker. See [Yoti Age Verification quick start](https://developers.yoti.com/age-verification/quick-start), [API reference](https://developers.yoti.com/age-verification-api), and [result states](https://developers.yoti.com/age-verification/results).
+
+This gate is necessary but not sufficient by itself. Same-band matching does not eliminate grooming or abuse risks. Human review, reporting, blocking, rate limits, parental/guardian requirements where applicable, privacy notice, data deletion, and launch-jurisdiction rules must be reviewed before opening the service.
 ## Firebase setup
 
 1. Open the existing Firebase project.
@@ -89,6 +100,8 @@ npm run db:remote
 npm run typecheck
 npx wrangler secret put FCM_SERVICE_ACCOUNT_JSON
 npx wrangler secret put ADMIN_UIDS
+npx wrangler secret put YOTI_API_TOKEN
+npx wrangler secret put YOTI_SDK_ID
 npm run deploy
 ~~~~
 
@@ -105,7 +118,7 @@ A manual-only deployment workflow is included at .github/workflows/deploy-worker
 - CLOUDFLARE_API_TOKEN — a scoped token that can deploy Workers and apply D1 migrations.
 - CLOUDFLARE_ACCOUNT_ID — the Cloudflare account ID.
 
-The D1 database and Queue resources must already exist, and wrangler.jsonc must contain the real D1 database ID and Firebase Project ID. The Worker secrets FCM_SERVICE_ACCOUNT_JSON and ADMIN_UIDS are configured in Cloudflare, not GitHub. Then run the "Deploy Paper Plane Worker" workflow manually from the platform-integration branch.
+The D1 database and Queue resources must already exist, and wrangler.jsonc must contain the real D1 database ID and Firebase Project ID. The Worker secrets FCM_SERVICE_ACCOUNT_JSON, ADMIN_UIDS, and YOTI_API_TOKEN plus YOTI_SDK_ID are configured in Cloudflare, not GitHub. Then run the "Deploy Paper Plane Worker" workflow manually from the platform-integration branch.
 
 The automatic Cloudflare CI checks also validate both SQL migrations in an in-memory SQLite database and typecheck the Worker code. They do not deploy anything.
 
@@ -135,7 +148,7 @@ Pages remains the public website. Use a Worker custom domain such as api.yourdom
 
 - Add the signing certificate SHA-1 and SHA-256 fingerprints to Firebase and refresh firebase/google-services.json before validating Google sign-in on the signed release APK.
 - Create the D1 database and Queue resources in the correct Cloudflare account.
-- Select and integrate a trusted age-assurance provider and signed callback. This is currently a hard release blocker: all new users are UNVERIFIED and cannot send or receive random mail until this is complete.
+- Complete Yoti Hub onboarding, configure the YOTI_API_TOKEN and YOTI_SDK_ID Worker secrets, and verify real test sessions. The adapter uses authenticated result polling; no unsigned callback is trusted. Until provider credentials are configured, new users remain UNVERIFIED and cannot send or receive stranger mail.
 - Build the human moderation dashboard/workflow on top of the admin endpoints and define response coverage and escalation procedures.
 - Verify local laws, privacy notice, data-retention and deletion process, and child-safety requirements for each launch region.
 - Connect live API data to every visual screen; the composer, auth, notification registration, and API clients are prepared, but inbox, Open Sky, profile, collection, and some other visual screens still show illustrative content.

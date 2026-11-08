@@ -45,20 +45,34 @@ class PaperPlaneApi {
       throw const PaperPlaneApiException('AUTH_REQUIRED', 'É necessário criar uma identidade de piloto.');
     }
 
-    final idToken = await user.getIdToken();
     final uri = Uri.parse('$baseUrl$path');
-    final headers = <String, String>{
+    final baseHeaders = <String, String>{
       'Accept': 'application/json',
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer $idToken',
     };
+
+    Future<http.Response> sendWithToken(String token) async {
+      final headers = {...baseHeaders, 'Authorization': 'Bearer $token'};
+      if (method == 'POST') {
+        return _client.post(uri, headers: headers, body: jsonEncode(body ?? const {}));
+      }
+      return _client.get(uri, headers: headers);
+    }
+
+    var idToken = await user.getIdToken();
+    if (idToken == null || idToken.isEmpty) {
+      throw const PaperPlaneApiException('AUTH_TOKEN_UNAVAILABLE', 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.');
+    }
 
     late http.Response response;
     try {
-      if (method == 'POST') {
-        response = await _client.post(uri, headers: headers, body: jsonEncode(body ?? const {}));
-      } else {
-        response = await _client.get(uri, headers: headers);
+      response = await sendWithToken(idToken);
+      if (response.statusCode == 401) {
+        final refreshed = await user.getIdToken(true);
+        if (refreshed != null && refreshed.isNotEmpty && refreshed != idToken) {
+          idToken = refreshed;
+          response = await sendWithToken(idToken);
+        }
       }
     } catch (_) {
       throw const PaperPlaneApiException('NETWORK_ERROR', 'Não foi possível contactar o servidor. Verifica a ligação à internet.');
@@ -76,6 +90,11 @@ class PaperPlaneApi {
       final code = payload['error']?.toString() ?? 'REQUEST_FAILED';
       final message = switch (code) {
         'AGE_VERIFICATION_REQUIRED' => 'A entrega a desconhecidos está bloqueada até existir uma verificação de idade segura.',
+        'AGE_PROVIDER_NOT_CONFIGURED' => 'O serviço de verificação de idade ainda não foi ligado no servidor.',
+        'AGE_PROVIDER_UNAVAILABLE' => 'O serviço de verificação está temporariamente indisponível. Tenta novamente.',
+        'AGE_PROVIDER_RESULT_UNAVAILABLE' => 'Ainda não foi possível obter o resultado da verificação.',
+        'AGE_SESSION_NOT_FOUND' => 'Esta sessão de verificação já não está disponível.',
+        'AUTH_TOKEN_UNAVAILABLE' => 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.',
         'DAILY_LIMIT_REACHED' => 'Já lançaste o teu avião original de hoje.',
         'MESSAGE_NOT_ALLOWED' => 'A mensagem não passou a verificação de segurança.',
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
@@ -93,6 +112,12 @@ class PaperPlaneApi {
 
     return payload;
   }
+
+  Future<Map<String, dynamic>> startAgeVerification() =>
+      _request('/v1/age-verification/sessions', method: 'POST');
+
+  Future<Map<String, dynamic>> getAgeVerificationStatus(String sessionId) =>
+      _request('/v1/age-verification/sessions/${Uri.encodeComponent(sessionId)}');
 
   Future<Map<String, dynamic>> bootstrapPilot() =>
       _request('/v1/users/bootstrap', method: 'POST');

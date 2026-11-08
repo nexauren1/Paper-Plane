@@ -49,6 +49,8 @@ interface Env {
   APP_ORIGINS: string;
   FCM_SERVICE_ACCOUNT_JSON?: string;
   ADMIN_UIDS?: string;
+  YOTI_API_TOKEN?: string;
+  YOTI_SDK_ID?: string;
 }
 
 const FIREBASE_JWKS = createRemoteJWKSet(
@@ -334,6 +336,227 @@ async function ensureAgeReady(uid: string, env: Env) {
   return { user, response: null };
 }
 
+type AgeVerificationStage = "MINIMUM_AGE" | "AGE_BAND";
+
+interface YotiSessionLink {
+  id: string;
+  stage: AgeVerificationStage;
+  verifyUrl: string;
+  expiresAt: string;
+  docScanOnly: boolean;
+}
+
+async function createYotiAgeSession(
+  uid: string,
+  stage: AgeVerificationStage,
+  env: Env,
+  docScanOnly = false,
+): Promise<YotiSessionLink> {
+  if (!env.YOTI_API_TOKEN || !env.YOTI_SDK_ID) {
+    throw new Error("AGE_PROVIDER_NOT_CONFIGURED");
+  }
+
+  const referenceId = uuid();
+  const minimumAge = stage === "MINIMUM_AGE" ? 13 : 18;
+  // Age estimation uses a deliberately higher threshold to reduce false-positive age passes.
+  // A failed estimation is never treated as proof of being underage: the user is routed to document scanning.
+  const estimateThreshold = stage === "MINIMUM_AGE" ? 16 : 21;
+  const payload = {
+    type: "OVER",
+    age_estimation: {
+      allowed: !docScanOnly,
+      threshold: estimateThreshold,
+      retry_enabled: false,
+      retry_limit: 1,
+      level: "PASSIVE",
+      authenticity: "AUTO",
+    },
+    digital_id: {
+      allowed: true,
+      threshold: minimumAge,
+      age_estimation_allowed: !docScanOnly,
+      age_estimation_threshold: estimateThreshold,
+      retry_enabled: false,
+      retry_limit: 1,
+    },
+    doc_scan: {
+      allowed: true,
+      threshold: minimumAge,
+      retry_enabled: false,
+      retry_limit: 2,
+      level: "PASSIVE",
+      authenticity: "AUTO",
+      synchronous_checks: true,
+    },
+    ttl: 1800,
+    reference_id: referenceId,
+    callback: {
+      auto: true,
+      url: "https://paper-plane.nexaurenstore.workers.dev/v1/age-verification/return",
+    },
+  };
+
+  const response = await fetch("https://age.yoti.com/api/v1/sessions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.YOTI_API_TOKEN}`,
+      "Yoti-SDK-Id": env.YOTI_SDK_ID,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`AGE_PROVIDER_CREATE_${response.status}`);
+
+  const created = await response.json() as { id?: unknown; expires_at?: unknown };
+  const providerSessionId = text(created.id, 64);
+  if (!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(providerSessionId)) {
+    throw new Error("AGE_PROVIDER_INVALID_SESSION");
+  }
+  const id = uuid();
+  const expiresAt = typeof created.expires_at === "string"
+    ? created.expires_at
+    : new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+  await env.DB.prepare(
+    "UPDATE age_verification_sessions SET status = 'SUPERSEDED', updated_at = ? WHERE uid = ? AND status = 'PENDING'",
+  ).bind(isoNow(), uid).run();
+  await env.DB.prepare(
+    "INSERT INTO age_verification_sessions(id, uid, provider_session_id, reference_id, stage, status, doc_scan_only, expires_at, updated_at) VALUES (?, ?, ?, ?, ?, 'PENDING', ?, ?, ?)",
+  ).bind(id, uid, providerSessionId, referenceId, stage, docScanOnly ? 1 : 0, expiresAt, isoNow()).run();
+
+  const verifyUrl = new URL("https://age.yoti.com/");
+  verifyUrl.searchParams.set("sessionId", providerSessionId);
+  verifyUrl.searchParams.set("sdkId", env.YOTI_SDK_ID);
+  return { id, stage, verifyUrl: verifyUrl.toString(), expiresAt, docScanOnly };
+}
+
+async function ageVerificationStatus(
+  uid: string,
+  sessionId: string,
+  env: Env,
+): Promise<Response> {
+  if (!env.YOTI_API_TOKEN || !env.YOTI_SDK_ID) {
+    return json({ error: "AGE_PROVIDER_NOT_CONFIGURED" }, 503);
+  }
+
+  const session = await env.DB.prepare(
+    "SELECT id, provider_session_id, stage, status, method, doc_scan_only, expires_at FROM age_verification_sessions WHERE id = ? AND uid = ? LIMIT 1",
+  ).bind(sessionId, uid).first<{
+    id: string; provider_session_id: string; stage: AgeVerificationStage;
+    status: string; method: string | null; doc_scan_only: number; expires_at: string | null;
+  }>();
+  if (!session) return json({ error: "AGE_SESSION_NOT_FOUND" }, 404);
+  if (session.status === "VERIFIED") {
+    const pilot = await requireUser(uid, env);
+    return json({ status: "VERIFIED", ageBand: pilot?.age_band ?? null });
+  }
+  if (session.status === "FAILED" || session.status === "ERROR" || session.status === "SUPERSEDED") {
+    return json({ status: session.status });
+  }
+
+  const response = await fetch(
+    `https://age.yoti.com/api/v1/sessions/${encodeURIComponent(session.provider_session_id)}/result`,
+    {
+      headers: {
+        authorization: `Bearer ${env.YOTI_API_TOKEN}`,
+        "Yoti-Sdk-Id": env.YOTI_SDK_ID,
+        accept: "application/json",
+      },
+    },
+  );
+  if (!response.ok) return json({ error: "AGE_PROVIDER_RESULT_UNAVAILABLE" }, 502);
+  const result = await response.json() as { status?: unknown; method?: unknown };
+  const providerStatus = text(result.status, 24).toUpperCase();
+  const method = text(result.method, 32).toUpperCase() || null;
+
+  if (["PENDING", "IN_PROGRESS", "PROCESSING"].includes(providerStatus)) {
+    return json({ status: "PENDING", stage: session.stage });
+  }
+
+  if (providerStatus === "COMPLETE") {
+    if (session.stage === "MINIMUM_AGE") {
+      try {
+        // Creating the next stage supersedes this completed provider session.
+        // It is not marked VERIFIED because the user's age band is still unknown.
+        const next = await createYotiAgeSession(uid, "AGE_BAND", env);
+        return json({
+          status: "NEXT_STEP",
+          stage: "AGE_BAND",
+          message: "Idade mínima confirmada. Falta distinguir a faixa 13–17 da faixa adulta.",
+          nextSession: next,
+        });
+      } catch {
+        return json({ error: "AGE_PROVIDER_UNAVAILABLE", message: "Não foi possível iniciar a segunda etapa. Tenta novamente." }, 502);
+      }
+    }
+
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+      ).bind(method, isoNow(), isoNow(), session.id),
+      env.DB.prepare(
+        "UPDATE users SET age_band = 'ADULT', age_verified = 1, age_verified_at = ?, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'",
+      ).bind(isoNow(), isoNow(), uid),
+      env.DB.prepare(
+        "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
+      ).bind(isoNow(), uid),
+    ]);
+    return json({ status: "VERIFIED", ageBand: "ADULT" });
+  }
+
+  if (["FAIL", "ERROR"].includes(providerStatus) && method === "AGE_ESTIMATION" && session.doc_scan_only === 0) {
+    await env.DB.prepare(
+      "UPDATE age_verification_sessions SET status = 'SUPERSEDED', method = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+    ).bind(method, isoNow(), session.id).run();
+    try {
+      const documentSession = await createYotiAgeSession(uid, session.stage, env, true);
+      return json({
+        status: "DOCUMENT_CHECK_REQUIRED",
+        stage: session.stage,
+        message: "A estimativa não foi conclusiva. Confirma a idade através de outra forma segura.",
+        nextSession: documentSession,
+      });
+    } catch {
+      return json({ error: "AGE_PROVIDER_UNAVAILABLE", message: "Não foi possível iniciar a verificação por documento." }, 502);
+    }
+  }
+
+  if (providerStatus === "FAIL") {
+    if (session.stage === "AGE_BAND" && method !== null && method !== "AGE_ESTIMATION") {
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE age_verification_sessions SET status = 'VERIFIED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+        ).bind(method, isoNow(), isoNow(), session.id),
+        env.DB.prepare(
+          "UPDATE users SET age_band = 'UNDER_18', age_verified = 1, age_verified_at = ?, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'",
+        ).bind(isoNow(), isoNow(), uid),
+        env.DB.prepare(
+          "UPDATE onboarding_first_flights SET state = 'READY_TO_LAUNCH', updated_at = ? WHERE uid = ? AND state = 'WAITING_FOR_AGE_VERIFICATION'",
+        ).bind(isoNow(), uid),
+      ]);
+      return json({ status: "VERIFIED", ageBand: "UNDER_18" });
+    }
+
+    await env.DB.prepare(
+      "UPDATE age_verification_sessions SET status = 'FAILED', method = ?, completed_at = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+    ).bind(method, isoNow(), isoNow(), session.id).run();
+
+    return json({
+      status: "FAILED",
+      stage: session.stage,
+      message: session.stage === "MINIMUM_AGE"
+        ? "Não foi possível confirmar a idade mínima de 13 anos. A conta continua sem acesso a correspondência."
+        : "Não foi possível confirmar a faixa etária. A conta continua sem acesso a correspondência.",
+    });
+  }
+
+  await env.DB.prepare(
+    "UPDATE age_verification_sessions SET status = 'ERROR', method = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'",
+  ).bind(method, isoNow(), session.id).run();
+  return json({ status: "ERROR", message: "O fornecedor não conseguiu concluir a verificação. Podes tentar novamente." });
+}
+
 async function bootstrap(uid: string, env: Env) {
   const existing = await requireUser(uid, env);
   if (existing) return existing;
@@ -484,12 +707,13 @@ async function matchAirplane(airplaneId: string, env: Env) {
      WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
        AND u.age_verified = 1 AND u.age_band = ?
        AND u.accept_random_mail = 1 AND u.uid <> ?
-       AND (? IS NULL OR u.country_code = ?)
        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid) OR (b.blocker_uid = u.uid AND b.blocked_uid = ?))
        AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.reporter_uid = u.uid AND r.reported_uid = ? AND r.status = 'OPEN')
-     ORDER BY COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC, RANDOM()
+     ORDER BY CASE WHEN ? IS NOT NULL AND u.country_code = ? THEN 0 ELSE 1 END,
+       COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC,
+       RANDOM()
      LIMIT 40`,
-  ).bind(sender.age_band, sender.uid, plane.destination_country, plane.destination_country, sender.uid, sender.uid, sender.uid)
+  ).bind(sender.age_band, sender.uid, sender.uid, sender.uid, sender.uid, plane.destination_country, plane.destination_country)
     .all<{ uid: string; country_code: string; language: string }>();
   const candidates = candidateRows.results ?? [];
   if (candidates.length === 0) return;
@@ -619,6 +843,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   const path = url.pathname.replace(/\/+$/, "") || "/";
+
+  if (method === "GET" && path === "/v1/age-verification/return") {
+    return new Response(
+      `<!doctype html><html lang="pt"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Paper Plane · Verificação concluída</title>
+      <body style="margin:0;background:#071225;color:#f4f0e7;font:16px system-ui;display:grid;min-height:100vh;place-items:center">
+      <main style="max-width:420px;padding:32px;text-align:center">
+      <div style="font-size:52px">✈️</div><h1 style="color:#ffe7a8">Etapa concluída</h1>
+      <p style="line-height:1.6;color:#c6d2e5">Regressa ao Paper Plane. A aplicação vai consultar o resultado diretamente no servidor.</p>
+      <p style="font-size:13px;color:#94a3b8">Não feches a sessão da tua conta. Podes voltar ao aplicativo agora.</p>
+      </main></body></html>`,
+      { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
+    );
+  }
 
   if (method === "GET" && path === "/v1/health") {
     try {
@@ -793,6 +1031,52 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     await env.DB.prepare("UPDATE public_replies SET moderation_state = 'SAFE' WHERE id = ?")
       .bind(reply.id).run();
     return json({ ok: true, moderation: "SAFE" });
+  }
+
+  if (method === "POST" && path === "/v1/age-verification/sessions") {
+    const user = await requireUser(uid, env);
+    if (!user || user.profile_completed !== 1) return json({ error: "PROFILE_SETUP_REQUIRED" }, 409);
+    if (user.age_verified === 1) return json({ status: "VERIFIED", ageBand: user.age_band });
+    if (!env.YOTI_API_TOKEN || !env.YOTI_SDK_ID) {
+      return json({
+        error: "AGE_PROVIDER_NOT_CONFIGURED",
+        message: "A verificação segura ainda não está ligada. O serviço Yoti precisa de ser configurado no Cloudflare.",
+      }, 503);
+    }
+    const active = await env.DB.prepare(
+      "SELECT id, provider_session_id, stage, expires_at, doc_scan_only FROM age_verification_sessions WHERE uid = ? AND status = 'PENDING' AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+    ).bind(uid, isoNow()).first<{
+      id: string; provider_session_id: string; stage: AgeVerificationStage;
+      expires_at: string | null; doc_scan_only: number;
+    }>();
+    if (active) {
+      const verifyUrl = new URL("https://age.yoti.com/");
+      verifyUrl.searchParams.set("sessionId", active.provider_session_id);
+      verifyUrl.searchParams.set("sdkId", env.YOTI_SDK_ID);
+      return json({
+        status: "PENDING",
+        session: {
+          id: active.id, stage: active.stage, verifyUrl: verifyUrl.toString(),
+          expiresAt: active.expires_at, docScanOnly: active.doc_scan_only === 1,
+        },
+      });
+    }
+    try {
+      const session = await createYotiAgeSession(uid, "MINIMUM_AGE", env);
+      return json({ status: "PENDING", session }, 201);
+    } catch (error) {
+      const reason = String(error);
+      const status = reason.includes("NOT_CONFIGURED") ? 503 : 502;
+      return json({
+        error: status === 503 ? "AGE_PROVIDER_NOT_CONFIGURED" : "AGE_PROVIDER_UNAVAILABLE",
+        message: "Não foi possível iniciar a verificação com o fornecedor de idade.",
+      }, status);
+    }
+  }
+
+  const ageSessionMatch = path.match(/^\/v1\/age-verification\/sessions\/([^/]+)$/);
+  if (method === "GET" && ageSessionMatch) {
+    return ageVerificationStatus(uid, ageSessionMatch[1], env);
   }
 
   if (method === "POST" && path === "/v1/users/bootstrap") {

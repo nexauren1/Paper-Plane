@@ -123,4 +123,82 @@ plane_model_column = DB.execute(
 assert plane_model_column is not None, "Missing airplane plane_model column"
 
 
-print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop.")
+
+# Random flight matching prefers the requested country but must fall back globally.
+seed_user("sender")
+seed_user("recipient-jp")
+seed_user("recipient-br")
+for uid, country in [
+    ("sender", "MZ"),
+    ("recipient-jp", "JP"),
+    ("recipient-br", "BR"),
+]:
+    DB.execute(
+        "UPDATE users SET country_code = ?, profile_completed = 1, age_band = 'ADULT', age_verified = 1 WHERE uid = ?",
+        (country, uid),
+    )
+
+recipient_query = """
+    SELECT u.uid, u.country_code, u.language
+    FROM users u
+    WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
+      AND u.age_verified = 1 AND u.age_band = ?
+      AND u.accept_random_mail = 1 AND u.uid <> ?
+      AND NOT EXISTS (
+        SELECT 1 FROM blocks b
+        WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid)
+           OR (b.blocker_uid = u.uid AND b.blocked_uid = ?)
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM reports r
+        WHERE r.reporter_uid = u.uid AND r.reported_uid = ? AND r.status = 'OPEN'
+      )
+    ORDER BY CASE WHEN ? IS NOT NULL AND u.country_code = ? THEN 0 ELSE 1 END,
+      COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC,
+      u.uid ASC
+    LIMIT 40
+"""
+bindings = ("ADULT", "sender", "sender", "sender", "sender", "JP", "JP")
+preferred = DB.execute(recipient_query, bindings).fetchall()
+assert preferred and preferred[0][0] == "recipient-jp", "Requested country should be preferred"
+
+DB.execute("UPDATE users SET accept_random_mail = 0 WHERE uid = 'recipient-jp'")
+fallback = DB.execute(recipient_query, bindings).fetchall()
+assert fallback and all(row[0] != "recipient-jp" for row in fallback), "Ineligible destination pilot must be skipped"
+assert any(row[0] == "recipient-br" for row in fallback), "Plane must fall back to an eligible pilot worldwide"
+
+age_session_table = DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'age_verification_sessions'"
+).fetchone()
+assert age_session_table is not None, "Missing age_verification_sessions table"
+
+age_session_columns = {
+    row[1] for row in DB.execute("PRAGMA table_info(age_verification_sessions)").fetchall()
+}
+assert {"uid", "provider_session_id", "reference_id", "stage", "status", "doc_scan_only"}.issubset(
+    age_session_columns
+), "Age assurance session table is incomplete"
+assert not ({"document_image", "selfie_image", "biometric_payload", "birth_date"} & age_session_columns), (
+    "D1 must not store raw identity documents, selfies, biometric payloads, or full birth dates"
+)
+
+DB.execute(
+    """INSERT INTO age_verification_sessions(
+        id, uid, provider_session_id, reference_id, stage, status
+    ) VALUES ('age-session-1', 'pilot-a', 'provider-session-1', 'reference-1', 'MINIMUM_AGE', 'PENDING')"""
+)
+assert DB.execute(
+    "SELECT uid FROM age_verification_sessions WHERE id = 'age-session-1'"
+).fetchone()[0] == "pilot-a", "Age verification session must be bound to its Firebase UID"
+
+try:
+    DB.execute(
+        """INSERT INTO age_verification_sessions(
+            id, uid, provider_session_id, reference_id, stage, status
+        ) VALUES ('age-session-2', 'pilot-b', 'provider-session-1', 'reference-2', 'MINIMUM_AGE', 'PENDING')"""
+    )
+    raise AssertionError("Provider session IDs must be unique")
+except sqlite3.IntegrityError:
+    pass
+
+print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop and global recipient fallback.")
