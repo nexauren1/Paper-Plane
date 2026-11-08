@@ -62,8 +62,11 @@ The Firebase Flutter plugins currently used by the repository are firebase_core 
 
 ## Cloudflare setup
 
-From cloudflare/worker:
+### Cloudflare Workers Builds settings
 
+For the Git-connected Worker build in Cloudflare, set the repository root directory to `cloudflare/worker`. Keep the build command empty for this TypeScript Worker and set the deploy command to `npm run deploy` (the script invokes the repository-pinned Wrangler dependency). The Wrangler configuration is `wrangler.jsonc` in that directory and its entry point is `src/index.ts`. A build launched before this root-directory setting is saved may run from the repository root and fail to locate the Worker configuration; rerun the build after saving the setting.
+
+From cloudflare/worker:
 ~~~~bash
 npm install
 npx wrangler login
@@ -78,7 +81,6 @@ npx wrangler queues create paper-plane-delivery-dlq
 The supplied D1 database ID and name are already recorded in wrangler.jsonc. Do not create a second D1 database. Replace FIREBASE_PROJECT_ID with the Firebase project's exact Project ID and APP_ORIGINS with the exact Pages website origin(s), comma-separated. The Worker name is set to paper-plane to match the supplied workers.dev address.
 
 Then apply the schema and deploy:
-
 ~~~~bash
 npm run db:remote
 npm run typecheck
@@ -107,7 +109,6 @@ The automatic Cloudflare CI checks also validate both SQL migrations in an in-me
 ## Flutter build
 
 From the repository root:
-
 ~~~~bash
 flutter pub get
 flutter run \
