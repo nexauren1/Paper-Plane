@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
@@ -32,6 +33,13 @@ class PaperPlaneApp extends StatelessWidget {
     return MaterialApp(
       title: 'Paper Plane',
       debugShowCheckedModeBanner: false,
+      navigatorObservers: [
+        if (FirebaseRuntime.isInitialized)
+          FirebaseAnalyticsObserver(
+            analytics: FirebaseAnalytics.instance,
+            nameExtractor: (settings) => settings.name ?? 'PaperPlaneScreen',
+          ),
+      ],
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
@@ -61,6 +69,7 @@ class PaperPlaneApp extends StatelessWidget {
 void ppPush(BuildContext context, Widget page) {
   Navigator.of(context).push(
     PageRouteBuilder(
+      settings: RouteSettings(name: page.runtimeType.toString()),
       pageBuilder: (_, animation, secondaryAnimation) => page,
       transitionsBuilder: (_, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
@@ -488,6 +497,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   void _start() {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
+        settings: const RouteSettings(name: 'MainShell'),
         pageBuilder: (_, __, ___) => const MainShell(),
         transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 650),
