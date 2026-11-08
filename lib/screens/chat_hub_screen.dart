@@ -36,7 +36,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   void initState() {
     super.initState();
     _refresh();
-    _poller = Timer.periodic(const Duration(seconds: 25), (_) => _refresh(silent: true));
+    _poller = Timer.periodic(const Duration(seconds: 10), (_) => _refresh(silent: true));
   }
 
   @override
@@ -294,7 +294,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       _infoPanel(
         icon: Icons.local_fire_department_rounded,
         title: 'A Chama do Deserto',
-        body: 'A Chama só começa quando alguém recebe um dos teus aviões e te responde com outro avião. Depois disso, a conversa privada fica disponível para os dois.',
+        body: 'Quando a tua resposta passa na segurança, a Chama acende logo. Os dois aviões ficam guardados no início da conversa e podem continuar a falar aqui, sem esperar por outra viagem.',
         highlight: true,
       ),
       const SizedBox(height: 15),
@@ -303,7 +303,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         _emptyPanel(
           icon: Icons.flight_takeoff_rounded,
           title: 'Ainda não tens uma Chama acesa',
-          body: 'Envia um avião, recebe uma resposta e abre a ligação que nasce entre os dois copilotos. Não é preciso adicionar a pessoa primeiro.',
+          body: 'Envia um avião, recebe uma resposta e a Chama abre automaticamente. Não é preciso adicionar a pessoa primeiro.',
         )
       else
         for (final chat in _chats) ...[
@@ -314,7 +314,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       _infoPanel(
         icon: Icons.public_rounded,
         title: 'Amigos pelo mundo',
-        body: 'Podes adicionar amigos por @nome ou enviar o teu link de convite. A amizade não abre a conversa automaticamente: a Chama continua a depender da troca de aviões.',
+        body: 'Podes adicionar amigos por @nome ou enviar o teu link de convite. A Chama nasce da troca de aviões; depois disso, a conversa fica sempre disponível nesta lista.',
       ),
       const SizedBox(height: 10),
       OutlinedButton.icon(
@@ -628,7 +628,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     _handle = widget.fallbackHandle;
     _countryCode = widget.fallbackCountry;
     _refresh();
-    _poller = Timer.periodic(const Duration(seconds: 8), (_) => _refresh(silent: true));
+    _poller = Timer.periodic(const Duration(seconds: 4), (_) => _refresh(silent: true));
   }
 
   @override
@@ -858,6 +858,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
 
   Widget _messageBubble(Map<String, dynamic> message) {
     final isOwn = message['sender_uid']?.toString() == FirebaseAuth.instance.currentUser?.uid;
+    final isOpeningPlane = message['id']?.toString().startsWith('plane:') == true;
     final content = message['message_text']?.toString() ?? '';
     final date = DateTime.tryParse(message['created_at']?.toString() ?? '');
     final time = date == null
@@ -877,9 +878,18 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             bottomLeft: Radius.circular(isOwn ? 17 : 4),
             bottomRight: Radius.circular(isOwn ? 4 : 17),
           ),
-          border: Border.all(color: Colors.white.withOpacity(0.1)),
+          border: Border.all(color: isOpeningPlane ? _chatGold.withOpacity(0.55) : Colors.white.withOpacity(0.1)),
+          boxShadow: isOpeningPlane ? [BoxShadow(color: _chatGold.withOpacity(0.08), blurRadius: 12)] : const [],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          if (isOpeningPlane) ...[
+            Row(mainAxisSize: MainAxisSize.min, children: const [
+              Icon(Icons.local_fire_department_rounded, color: _chatGoldBright, size: 13),
+              SizedBox(width: 5),
+              Text('INÍCIO DA CHAMA', style: TextStyle(color: _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+            ]),
+            const SizedBox(height: 6),
+          ],
           Text(content, style: const TextStyle(fontSize: 14, height: 1.42)),
           const SizedBox(height: 5),
           Text(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
