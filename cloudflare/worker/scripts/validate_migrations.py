@@ -17,6 +17,11 @@ def seed_user(uid: str):
 seed_user("pilot-a")
 seed_user("pilot-b")
 
+# Daily sending is unlimited; anti-spam remains a rolling hourly safeguard.
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'daily_limits'"
+).fetchone() is None, "The obsolete one-plane-per-day counter must be removed"
+
 user_columns = {row[1] for row in DB.execute("PRAGMA table_info(users)").fetchall()}
 assert {"declared_age_band", "age_declaration_at"}.issubset(user_columns), "Missing self-declared age fields"
 assert DB.execute("SELECT declared_age_band FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "UNSET", "New accounts must start without a declared age group"
@@ -215,4 +220,45 @@ try:
 except sqlite3.IntegrityError:
     pass
 
-print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop and global recipient fallback, categorized support tickets.")
+
+# Social graph and Chama chat are separate: adding a friend does not create a conversation.
+social_tables = {
+    row[0] for row in DB.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    ).fetchall()
+}
+assert {"friendships", "conversations", "chat_messages"}.issubset(social_tables), "Missing social/Chama tables"
+
+DB.execute(
+    "UPDATE users SET declared_age_band = 'UNDER_18', profile_completed = 1 WHERE uid IN ('pilot-a','pilot-b')"
+)
+DB.execute(
+    """INSERT INTO friendships(id, requester_uid, addressee_uid, status)
+       VALUES ('friend-1', 'pilot-a', 'pilot-b', 'ACCEPTED')"""
+)
+assert DB.execute(
+    "SELECT status FROM friendships WHERE id = 'friend-1'"
+).fetchone()[0] == "ACCEPTED", "Friendship request state was not persisted"
+
+DB.execute(
+    """INSERT INTO conversations(id, user_a, user_b)
+       VALUES ('chama-1', 'pilot-a', 'pilot-b')"""
+)
+DB.execute(
+    """INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text)
+       VALUES ('chat-1', 'chama-1', 'pilot-a', 'Olá, tudo bem?')"""
+)
+assert DB.execute(
+    "SELECT message_text FROM chat_messages WHERE id = 'chat-1'"
+).fetchone()[0] == "Olá, tudo bem?", "Chama message was not persisted"
+
+try:
+    DB.execute(
+        """INSERT INTO conversations(id, user_a, user_b)
+           VALUES ('chama-invalid', 'pilot-b', 'pilot-a')"""
+    )
+    raise AssertionError("Conversation user order must be canonical")
+except sqlite3.IntegrityError:
+    pass
+
+print("D1 migration checks passed: unlimited daily sends with hourly abuse controls, expiry metadata, friendships, delivered-reply Chama tables, route data, matching, reporting and support.")
