@@ -621,10 +621,19 @@ class _HomePageState extends State<HomePage> {
   bool _loading = true;
   String? _error;
 
+  Timer? _syncTimer;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    _syncTimer = Timer.periodic(const Duration(seconds: 45), (_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -1457,10 +1466,19 @@ class _InboxPageState extends State<InboxPage> {
   bool _loading = true;
   String? _error;
 
+  Timer? _syncTimer;
+
   @override
   void initState() {
     super.initState();
     _refresh();
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
