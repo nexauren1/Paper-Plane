@@ -484,12 +484,13 @@ async function matchAirplane(airplaneId: string, env: Env) {
      WHERE u.status = 'ACTIVE' AND u.profile_completed = 1 AND u.country_code IS NOT NULL
        AND u.age_verified = 1 AND u.age_band = ?
        AND u.accept_random_mail = 1 AND u.uid <> ?
-       AND (? IS NULL OR u.country_code = ?)
        AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_uid = ? AND b.blocked_uid = u.uid) OR (b.blocker_uid = u.uid AND b.blocked_uid = ?))
        AND NOT EXISTS (SELECT 1 FROM reports r WHERE r.reporter_uid = u.uid AND r.reported_uid = ? AND r.status = 'OPEN')
-     ORDER BY COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC, RANDOM()
+     ORDER BY CASE WHEN ? IS NOT NULL AND u.country_code = ? THEN 0 ELSE 1 END,
+       COALESCE(u.last_received_at, '1970-01-01T00:00:00.000Z') ASC,
+       RANDOM()
      LIMIT 40`,
-  ).bind(sender.age_band, sender.uid, plane.destination_country, plane.destination_country, sender.uid, sender.uid, sender.uid)
+  ).bind(sender.age_band, sender.uid, sender.uid, sender.uid, sender.uid, plane.destination_country, plane.destination_country)
     .all<{ uid: string; country_code: string; language: string }>();
   const candidates = candidateRows.results ?? [];
   if (candidates.length === 0) return;
