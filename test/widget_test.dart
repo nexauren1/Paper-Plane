@@ -19,7 +19,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
-    expect(find.text('Boa noite, Piloto'), findsOneWidget);
+    expect(find.text('Olá, Piloto'), findsOneWidget);
     expect(find.text('Escrever Avião'), findsOneWidget);
   });
 }
