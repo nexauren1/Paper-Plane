@@ -635,9 +635,20 @@ async function ensureChamaForReply(
 
 async function deliverAirplane(airplaneId: string, env: Env) {
   const plane = await env.DB.prepare(
-    "SELECT id, sender_uid, recipient_uid, reply_to_id FROM airplanes WHERE id = ? AND status = 'FLYING' AND recipient_uid IS NOT NULL",
-  ).bind(airplaneId).first<{ id: string; sender_uid: string; recipient_uid: string; reply_to_id: string | null }>();
+    "SELECT id, sender_uid, recipient_uid, reply_to_id, estimated_arrival_at FROM airplanes WHERE id = ? AND status = 'FLYING' AND recipient_uid IS NOT NULL",
+  ).bind(airplaneId).first<{
+    id: string; sender_uid: string; recipient_uid: string; reply_to_id: string | null; estimated_arrival_at: string | null;
+  }>();
   if (!plane) return;
+  const arrivalTime = plane.estimated_arrival_at ? Date.parse(plane.estimated_arrival_at) : 0;
+  if (arrivalTime > Date.now()) {
+    await env.DELIVERY_QUEUE.send(
+      { type: "DELIVER_AIRPLANE", airplaneId },
+      { delaySeconds: Math.max(1, Math.ceil((arrivalTime - Date.now()) / 1000)) },
+    );
+    return;
+  }
+
   const deliveredAt = isoNow();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const result = await env.DB.prepare(
@@ -648,19 +659,107 @@ async function deliverAirplane(airplaneId: string, env: Env) {
     "INSERT OR IGNORE INTO inbox(airplane_id, recipient_uid) VALUES (?, ?)",
   ).bind(airplaneId, plane.recipient_uid).run();
 
-  // A private reply lights the Chama only when the second airplane actually arrives.
   if (plane.reply_to_id) {
-    const userA = plane.sender_uid < plane.recipient_uid ? plane.sender_uid : plane.recipient_uid;
-    const userB = plane.sender_uid < plane.recipient_uid ? plane.recipient_uid : plane.sender_uid;
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO conversations(id, user_a, user_b) VALUES (?, ?, ?)",
-    ).bind(uuid(), userA, userB).run();
+    await ensureChamaForReply(airplaneId, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
   }
-
   await notifyNewPlane(plane.recipient_uid, airplaneId, env);
 }
 
-async function releasePreviouslyHeldSafeGreetings(env: Env): Promise<void> {
+async function processPendingAirplane(airplaneId: string, env: Env): Promise<boolean> {
+  const plane = await env.DB.prepare(
+    "SELECT id, sender_uid, recipient_uid, reply_to_id, audience, message_text FROM airplanes WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING' LIMIT 1",
+  ).bind(airplaneId).first<{
+    id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null;
+    audience: string; message_text: string;
+  }>();
+  if (!plane) return true;
+
+  const moderation = await moderate(env, plane.message_text);
+  if (moderation.state === "TEMPORARY_UNAVAILABLE") return false;
+
+  if (moderation.state === "UNSAFE") {
+    await env.DB.prepare(
+      "UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE', moderation_categories = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+    ).bind(JSON.stringify(moderation.categories), airplaneId).run();
+    return true;
+  }
+  if (moderation.state === "REVIEW") {
+    await env.DB.prepare(
+      "UPDATE airplanes SET status = 'HELD_REVIEW', moderation_state = 'REVIEW', moderation_categories = ?, expires_at = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+    ).bind(JSON.stringify(moderation.categories), new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(), airplaneId).run();
+    return true;
+  }
+
+  const now = isoNow();
+  if (plane.audience === "PUBLIC") {
+    const result = await env.DB.prepare(
+      "UPDATE airplanes SET status = 'DELIVERED', moderation_state = 'SAFE', moderation_categories = '[]', delivered_at = ?, expires_at = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+    ).bind(now, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), airplaneId).run();
+    if ((result.meta?.changes ?? 0) === 1) {
+      await env.DB.prepare("INSERT OR IGNORE INTO public_sky (airplane_id) VALUES (?)").bind(airplaneId).run();
+    }
+    return true;
+  }
+
+  if (plane.recipient_uid) {
+    const [sender, recipient] = await Promise.all([
+      requireUser(plane.sender_uid, env),
+      requireUser(plane.recipient_uid, env),
+    ]);
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(plane.sender_uid, plane.recipient_uid, plane.recipient_uid, plane.sender_uid).first();
+    if (!sender || !recipient || sender.status !== "ACTIVE" || recipient.status !== "ACTIVE" ||
+        sender.profile_completed !== 1 || recipient.profile_completed !== 1 ||
+        sender.declared_age_band !== recipient.declared_age_band || blocked) {
+      await env.DB.prepare(
+        "UPDATE airplanes SET status = 'REJECTED', moderation_state = 'SAFE', moderation_categories = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+      ).bind(JSON.stringify(["RECIPIENT_UNAVAILABLE"]), airplaneId).run();
+      return true;
+    }
+
+    const route = buildFlightPlan(sender.country_code, recipient.country_code, Boolean(plane.reply_to_id));
+    if (!route) {
+      await env.DB.prepare(
+        "UPDATE airplanes SET status = 'REJECTED', moderation_state = 'SAFE', moderation_categories = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+      ).bind(JSON.stringify(["ROUTE_UNAVAILABLE"]), airplaneId).run();
+      return true;
+    }
+    const result = await env.DB.prepare(
+      "UPDATE airplanes SET status = 'FLYING', moderation_state = 'SAFE', moderation_categories = '[]', matched_at = ?, flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+    ).bind(now, route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
+
+    if ((result.meta?.changes ?? 0) === 1) {
+      if (plane.reply_to_id) {
+        const conversationId = await ensureChamaForReply(airplaneId, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
+        if (conversationId) await notifyChatMessage(plane.recipient_uid, conversationId, env);
+      }
+      try {
+        await env.DELIVERY_QUEUE.send(
+          { type: "DELIVER_AIRPLANE", airplaneId },
+          { delaySeconds: route.durationSeconds },
+        );
+      } catch {
+        // Cron fallback will finish the flight if the queue is temporarily unavailable.
+      }
+    }
+    return true;
+  }
+
+  const result = await env.DB.prepare(
+    "UPDATE airplanes SET moderation_state = 'SAFE', moderation_categories = '[]', expires_at = ? WHERE id = ? AND status = 'QUEUED' AND moderation_state = 'PENDING'",
+  ).bind(new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), airplaneId).run();
+  if ((result.meta?.changes ?? 0) === 1) {
+    try {
+      await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
+    } catch {
+      // Scheduled matching will pick up the now-safe queued plane.
+    }
+  }
+  return true;
+}
+
+async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
   // Retry only exact greetings previously held by an uncertain/failed moderation pass.
   // A fresh primary safety-guard SAFE result is required before anything is released.
   const rows = await env.DB.prepare(
@@ -1862,11 +1961,20 @@ export default {
   async queue(batch: QueueBatch<DeliveryJob>, env: Env): Promise<void> {
     for (const message of batch.messages) {
       try {
-        if (message.body.type === "MATCH_AIRPLANE") await matchAirplane(message.body.airplaneId, env);
-        // Delivery is finalized by cron after the stored arrival timestamp.
+        if (message.body.type === "MODERATE_AIRPLANE") {
+          const completed = await processPendingAirplane(message.body.airplaneId, env);
+          if (!completed) {
+            message.retry({ delaySeconds: 45 });
+            continue;
+          }
+        } else if (message.body.type === "MATCH_AIRPLANE") {
+          await matchAirplane(message.body.airplaneId, env);
+        } else {
+          await deliverAirplane(message.body.airplaneId, env);
+        }
         message.ack();
       } catch {
-        message.retry({ delaySeconds: 60 });
+        message.retry({ delaySeconds: 45 });
       }
     }
   },
@@ -1877,8 +1985,16 @@ export default {
       "UPDATE airplanes SET status = 'EXPIRED' WHERE status IN ('QUEUED','HELD_REVIEW') AND expires_at IS NOT NULL AND expires_at <= ?",
     ).bind(isoNow()).run();
 
-    // Recheck old exact greetings held by uncertain/failed moderation; only a fresh SAFE result is released.
-    await releasePreviouslyHeldSafeGreetings(env);
+    // Retry saved airplanes when the moderation provider was temporarily unavailable.
+    const pending = await env.DB.prepare(
+      "SELECT id FROM airplanes WHERE status = 'QUEUED' AND moderation_state = 'PENDING' AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at ASC LIMIT 30",
+    ).bind(isoNow()).all<{ id: string }>();
+    for (const plane of pending.results ?? []) {
+      await processPendingAirplane(plane.id, env);
+    }
+
+    // Recheck legacy technical holds only after another fresh primary guard decision.
+    await releasePreviouslyHeldSafeMessages(env);
 
     // Keep searching until an eligible pilot is found. There is no fake delivery timer.
     const queued = await env.DB.prepare(
