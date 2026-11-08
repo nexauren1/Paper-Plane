@@ -39,7 +39,7 @@ properties = {
     "storeFile": "upload-keystore.jks",
 }
 (ANDROID / "key.properties").write_text(
-    "".join(f"{key}={value}\\n" for key, value in properties.items()),
+    "".join(f"{key}={value}\n" for key, value in properties.items()),
     encoding="utf-8",
 )
 
@@ -66,7 +66,7 @@ def locate_block(source: str, pattern: str, start: int = 0) -> tuple[int, int]:
         ch = source[i]
         nxt = source[i + 1] if i + 1 < len(source) else ""
         if line_comment:
-            if ch == "\\n":
+            if ch == "\n":
                 line_comment = False
         elif block_comment:
             if ch == "*" and nxt == "/":
@@ -75,7 +75,7 @@ def locate_block(source: str, pattern: str, start: int = 0) -> tuple[int, int]:
         elif quote:
             if escaped:
                 escaped = False
-            elif ch == "\\\\":
+            elif ch == "\\":
                 escaped = True
             elif ch == quote:
                 quote = None
@@ -85,7 +85,7 @@ def locate_block(source: str, pattern: str, start: int = 0) -> tuple[int, int]:
         elif ch == "/" and nxt == "*":
             block_comment = True
             i += 1
-        elif ch in ("'", '\\"'):
+        elif ch in ("'", '\"'):
             quote = ch
         elif ch == "{":
             depth += 1
@@ -97,45 +97,45 @@ def locate_block(source: str, pattern: str, start: int = 0) -> tuple[int, int]:
     raise SystemExit(f"Unclosed Gradle block matching {pattern!r} in {gradle}.")
 
 
-locate = r"(?m)^android\\s*\\{"
+locate = r"(?m)^android\s*\{"
 android_open, _ = locate_block(text, locate)
 if "keystoreProperties" not in text:
     prefix = (
-        'val keystoreProperties = java.util.Properties()\\n'
-        'val keystorePropertiesFile = rootProject.file("key.properties")\\n'
-        'if (keystorePropertiesFile.exists()) {\\n'
-        '    keystoreProperties.load(keystorePropertiesFile.inputStream())\\n'
-        '}\\n\\n'
+        'val keystoreProperties = java.util.Properties()\n'
+        'val keystorePropertiesFile = rootProject.file("key.properties")\n'
+        'if (keystorePropertiesFile.exists()) {\n'
+        '    keystoreProperties.load(keystorePropertiesFile.inputStream())\n'
+        '}\n\n'
         if kotlin else
-        'def keystoreProperties = new Properties()\\n'
-        'def keystorePropertiesFile = rootProject.file("key.properties")\\n'
-        'if (keystorePropertiesFile.exists()) {\\n'
-        '    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\\n'
-        '}\\n\\n'
+        'def keystoreProperties = new Properties()\n'
+        'def keystorePropertiesFile = rootProject.file("key.properties")\n'
+        'if (keystorePropertiesFile.exists()) {\n'
+        '    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\n'
+        '}\n\n'
     )
     if not kotlin and "import java.util.Properties" not in text:
-        text = "import java.util.Properties\\nimport java.io.FileInputStream\\n\\n" + text
+        text = "import java.util.Properties\nimport java.io.FileInputStream\n\n" + text
     android_statement_start = re.search(locate, text).start()
     text = text[:android_statement_start] + prefix + text[android_statement_start:]
 
 signing_config = (
-    '\\n    signingConfigs {\\n'
-    '        create("release") {\\n'
-    '            keyAlias = keystoreProperties["keyAlias"] as String\\n'
-    '            keyPassword = keystoreProperties["keyPassword"] as String\\n'
-    '            storeFile = file(keystoreProperties["storeFile"] as String)\\n'
-    '            storePassword = keystoreProperties["storePassword"] as String\\n'
-    '        }\\n'
-    '    }\\n'
+    '\n    signingConfigs {\n'
+    '        create("release") {\n'
+    '            keyAlias = keystoreProperties["keyAlias"] as String\n'
+    '            keyPassword = keystoreProperties["keyPassword"] as String\n'
+    '            storeFile = file(keystoreProperties["storeFile"] as String)\n'
+    '            storePassword = keystoreProperties["storePassword"] as String\n'
+    '        }\n'
+    '    }\n'
     if kotlin else
-    '\\n    signingConfigs {\\n'
-    '        release {\\n'
-    '            keyAlias keystoreProperties["keyAlias"]\\n'
-    '            keyPassword keystoreProperties["keyPassword"]\\n'
-    '            storeFile file(keystoreProperties["storeFile"])\\n'
-    '            storePassword keystoreProperties["storePassword"]\\n'
-    '        }\\n'
-    '    }\\n'
+    '\n    signingConfigs {\n'
+    '        release {\n'
+    '            keyAlias keystoreProperties["keyAlias"]\n'
+    '            keyPassword keystoreProperties["keyPassword"]\n'
+    '            storeFile file(keystoreProperties["storeFile"])\n'
+    '            storePassword keystoreProperties["storePassword"]\n'
+    '        }\n'
+    '    }\n'
 )
 
 android_open, android_close = locate_block(text, locate)
@@ -143,22 +143,22 @@ if "signingConfigs" not in text[android_open + 1:android_close]:
     text = text[:android_open + 1] + signing_config + text[android_open + 1:]
 
 android_open, _ = locate_block(text, locate)
-build_open, _ = locate_block(text, r"buildTypes\\s*\\{", android_open)
-release_open, release_close = locate_block(text, r"release\\s*\\{", build_open)
+build_open, _ = locate_block(text, r"buildTypes\s*\{", android_open)
+release_open, release_close = locate_block(text, r"release\s*\{", build_open)
 release_body = text[release_open + 1:release_close]
-indent_match = re.search(r"(?m)^(\\s*)\\S", release_body)
+indent_match = re.search(r"(?m)^(\s*)\S", release_body)
 inner_indent = indent_match.group(1) if indent_match else "            "
 if kotlin:
     desired = inner_indent + 'signingConfig = signingConfigs.getByName("release")'
-    signing_line = re.compile(r"(?m)^\\s*signingConfig\\s*=.*$")
+    signing_line = re.compile(r"(?m)^\s*signingConfig\s*=.*$")
 else:
     desired = inner_indent + "signingConfig signingConfigs.release"
-    signing_line = re.compile(r"(?m)^\\s*signingConfig\\s+.*$")
+    signing_line = re.compile(r"(?m)^\s*signingConfig\s+.*$")
 
 if signing_line.search(release_body):
     release_body = signing_line.sub(desired, release_body, count=1)
 else:
-    release_body = "\\n" + desired + release_body
+    release_body = "\n" + desired + release_body
 text = text[:release_open + 1] + release_body + text[release_close:]
 gradle.write_text(text, encoding="utf-8")
 print(f"Configured permanent Android release signing in {gradle}.")
