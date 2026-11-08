@@ -95,6 +95,7 @@ class PaperPlaneApi {
         'AUTH_TOKEN_UNAVAILABLE' => 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.',
         'DAILY_LIMIT_REACHED' => 'Já lançaste o teu avião original de hoje.',
         'MESSAGE_NOT_ALLOWED' => 'A mensagem não passou a verificação de segurança.',
+        'MODERATION_TEMPORARILY_UNAVAILABLE' => 'A verificação de segurança está temporariamente indisponível. O avião não foi lançado. Tenta novamente daqui a pouco.',
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
