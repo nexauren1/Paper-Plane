@@ -81,6 +81,11 @@ class PaperPlaneApi {
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
+        'PROFILE_SETUP_REQUIRED' => 'Completa primeiro o perfil do piloto.',
+        'PILOT_HANDLE_TAKEN' => 'Esse nome de copiloto já existe. Escolhe outro.',
+        'INVALID_PILOT_HANDLE' => 'Usa 4 a 28 caracteres: letras, números, _ e um sufixo como -07.',
+        'INVALID_BIRTH_YEAR' => 'Indica um ano de nascimento válido.',
+        'INVALID_COUNTRY' => 'Escolhe um país válido.',
         _ => payload['message']?.toString() ?? 'O pedido não pôde ser concluído.',
       };
       throw PaperPlaneApiException(code, message, statusCode: response.statusCode);
@@ -93,6 +98,30 @@ class PaperPlaneApi {
       _request('/v1/users/bootstrap', method: 'POST');
 
   Future<Map<String, dynamic>> getProfile() => _request('/v1/profile');
+
+  Future<Map<String, dynamic>> getCountries() => _request('/v1/meta/countries');
+
+  Future<Map<String, dynamic>> checkPilotHandle(String handle) =>
+      _request('/v1/users/handle-availability?handle=${Uri.encodeQueryComponent(handle)}');
+
+  Future<Map<String, dynamic>> savePilotProfile({
+    required String pilotName,
+    required String pilotHandle,
+    required int birthYear,
+    required String countryCode,
+    required String language,
+  }) =>
+      _request('/v1/profile', method: 'POST', body: {
+        'pilotName': pilotName,
+        'pilotHandle': pilotHandle,
+        'birthYear': birthYear,
+        'countryCode': countryCode,
+        'language': language,
+      });
+
+  Future<Map<String, dynamic>> getAirplaneFlight(String id) =>
+      _request('/v1/airplanes/$id/flight');
+
 
   Future<Map<String, dynamic>> getInbox() => _request('/v1/inbox');
 
