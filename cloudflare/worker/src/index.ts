@@ -127,13 +127,12 @@ async function authenticate(request: Request, env: Env): Promise<string | null> 
 
 async function requireUser(uid: string, env: Env) {
   return env.DB.prepare(
-    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, declared_age_band, age_declaration_at, profile_completed, language, country_code, country_visible, status, age_band, age_verified, accept_random_mail, push_enabled FROM users WHERE uid = ?",
+    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, declared_age_band, age_declaration_at, profile_completed, language, country_code, country_visible, status, accept_random_mail, push_enabled FROM users WHERE uid = ?",
   ).bind(uid).first<{
     uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null;
     birth_year: number | null; declared_age_band: string; age_declaration_at: string | null;
     profile_completed: number; language: string; country_code: string | null;
-    country_visible: number; status: string; age_band: string; age_verified: number;
-    accept_random_mail: number; push_enabled: number;
+    country_visible: number; status: string; accept_random_mail: number; push_enabled: number;
   }>();
 }
 
@@ -334,7 +333,7 @@ async function bootstrap(uid: string, env: Env) {
   if (existing) return existing;
   const pilotCode = `PP-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, age_band, age_verified, profile_completed, push_enabled) VALUES (?, ?, 'Piloto', 'UNVERIFIED', 0, 0, 0)",
+    "INSERT OR IGNORE INTO users (uid, pilot_code, pilot_name, profile_completed, push_enabled) VALUES (?, ?, 'Piloto', 0, 0)",
   ).bind(uid, pilotCode).run();
   return requireUser(uid, env);
 }
