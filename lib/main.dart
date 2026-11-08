@@ -2963,58 +2963,145 @@ class QrPlaceholderPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class CollectionScreen extends StatelessWidget {
+class CollectionScreen extends StatefulWidget {
   const CollectionScreen({super.key});
 
   @override
+  State<CollectionScreen> createState() => _CollectionScreenState();
+}
+
+class _CollectionScreenState extends State<CollectionScreen> {
+  Map<String, dynamic> _stats = {};
+  List<Map<String, dynamic>> _countries = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
+    try {
+      await PaperPlaneAuth.requireSignedInPilot();
+      final data = await PaperPlaneApi.instance.getSkyAtlas();
+      final raw = data['countries'] as List<dynamic>? ?? const [];
+      if (!mounted) return;
+      setState(() {
+        _stats = data['stats'] as Map<String, dynamic>? ?? {};
+        _countries = raw.whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e is PaperPlaneApiException ? e.message : 'Não foi possível atualizar a coleção online.';
+      });
+    }
+  }
+
+  int _number(String key) => int.tryParse(_stats[key]?.toString() ?? '') ?? 0;
+
+  @override
   Widget build(BuildContext context) {
+    final flights = _number('totalFlights');
+    final countries = _number('countriesCount');
+    final distance = _number('totalDistanceKm');
+    final completed = _number('completedFlights');
+    final active = _number('activeFlights');
+
     return ScreenFrame(
       title: 'A minha coleção',
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
-        children: [
-          Row(children: const [
-            Expanded(child: _CollectionStat(value: '128', label: 'Voos totais')),
-            SizedBox(width: 9),
-            Expanded(child: _CollectionStat(value: '24', label: 'Países')),
-            SizedBox(width: 9),
-            Expanded(child: _CollectionStat(value: '12 400', label: 'km de voo')),
-          ]),
-          const SectionTitle('Emblemas'),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            mainAxisSpacing: 9,
-            crossAxisSpacing: 9,
-            childAspectRatio: 0.92,
-            children: const [
-              _BadgeTile(icon: Icons.military_tech, label: 'Primeiro voo'),
-              _BadgeTile(icon: Icons.public, label: 'Viajante do mundo'),
-              _BadgeTile(icon: Icons.favorite, label: 'Alma gentil'),
+      action: IconButton(
+        onPressed: _load,
+        tooltip: 'Atualizar coleção',
+        icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
+      ),
+      child: RefreshIndicator(
+        color: ppGold,
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
+          children: [
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.all(36),
+                child: Center(child: CircularProgressIndicator(color: ppGold)),
+              )
+            else if (_error != null)
+              GlassPanel(child: Column(children: [
+                const Icon(Icons.cloud_off_rounded, color: Colors.orangeAccent, size: 32),
+                const SizedBox(height: 8),
+                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+              ]))
+            else ...[
+              Row(children: [
+                Expanded(child: _CollectionStat(value: flights.toString(), label: 'Voos totais')),
+                const SizedBox(width: 9),
+                Expanded(child: _CollectionStat(value: countries.toString(), label: 'Países')),
+                const SizedBox(width: 9),
+                Expanded(child: _CollectionStat(value: distance.toString(), label: 'km de voo')),
+              ]),
+              const SizedBox(height: 14),
+              GlassPanel(
+                child: Row(children: [
+                  Expanded(child: _collectionMetric('Concluídos', completed, Icons.mark_email_read_outlined)),
+                  Expanded(child: _collectionMetric('No ar', active, Icons.flight_takeoff_rounded)),
+                ]),
+              ),
+              const SectionTitle('Emblemas conquistados'),
+              GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: 3,
+                mainAxisSpacing: 9,
+                crossAxisSpacing: 9,
+                childAspectRatio: 0.92,
+                children: [
+                  _BadgeTile(icon: Icons.military_tech, label: 'Primeiro voo', unlocked: flights >= 1),
+                  _BadgeTile(icon: Icons.public, label: 'Viajante do mundo', unlocked: countries >= 3),
+                  _BadgeTile(icon: Icons.favorite, label: 'Voo concluído', unlocked: completed >= 1),
+                ],
+              ),
+              const SectionTitle('Países visitados'),
+              if (_countries.isEmpty)
+                const GlassPanel(
+                  child: Text('Ainda não há países registados nos teus voos. Quando uma rota real for concluída, os países aparecem aqui.',
+                    textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.5)),
+                )
+              else
+                for (final country in _countries)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: GlassPanel(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(children: [
+                        Text(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text(country['name']?.toString() ?? 'País', style: const TextStyle(fontWeight: FontWeight.w800))),
+                        const Icon(Icons.verified_rounded, color: ppGoldBright, size: 19),
+                      ]),
+                    ),
+                  ),
             ],
-          ),
-          const SectionTitle('Aviões colecionados'),
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 3,
-            mainAxisSpacing: 9,
-            crossAxisSpacing: 9,
-            childAspectRatio: 0.86,
-            children: const [
-              _PlaneStamp(flag: '🇯🇵', country: 'Japão'),
-              _PlaneStamp(flag: '🇵🇹', country: 'Portugal'),
-              _PlaneStamp(flag: '🇧🇷', country: 'Brasil'),
-              _PlaneStamp(flag: '🇮🇳', country: 'Índia'),
-              _PlaneStamp(flag: '🇮🇹', country: 'Itália'),
-              _PlaneStamp(flag: '🇨🇦', country: 'Canadá'),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+
+  Widget _collectionMetric(String label, int value, IconData icon) => Column(children: [
+    Icon(icon, color: ppGoldBright, size: 22),
+    const SizedBox(height: 5),
+    Text(value.toString(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+    Text(label, style: const TextStyle(fontSize: 11, color: Colors.white60)),
+  ]);
 }
 
 class _CollectionStat extends StatelessWidget {
