@@ -31,6 +31,27 @@ jobs:
       - name: Generate Android project files if missing
         run: flutter create --platforms=android --project-name paper_plane --org com.nexauren .
 
+      - name: Use direct Gradle distribution host
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          wrapper = Path("android/gradle/wrapper/gradle-wrapper.properties")
+          if not wrapper.exists():
+              raise SystemExit("Gradle wrapper properties were not generated.")
+
+          content = wrapper.read_text(encoding="utf-8")
+          if "services.gradle.org/distributions/" not in content:
+              raise SystemExit("Unexpected Gradle distribution URL; refusing to change an unknown wrapper.")
+          content = content.replace(
+              "services.gradle.org/distributions/",
+              "downloads.gradle.org/distributions/",
+          )
+          wrapper.write_text(content, encoding="utf-8")
+          print("Gradle wrapper will download directly from downloads.gradle.org.")
+          PY
+
       - name: Configure Firebase Android and build variables
         shell: bash
         run: |
