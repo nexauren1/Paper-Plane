@@ -167,4 +167,38 @@ fallback = DB.execute(recipient_query, bindings).fetchall()
 assert fallback and all(row[0] != "recipient-jp" for row in fallback), "Ineligible destination pilot must be skipped"
 assert any(row[0] == "recipient-br" for row in fallback), "Plane must fall back to an eligible pilot worldwide"
 
+age_session_table = DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'age_verification_sessions'"
+).fetchone()
+assert age_session_table is not None, "Missing age_verification_sessions table"
+
+age_session_columns = {
+    row[1] for row in DB.execute("PRAGMA table_info(age_verification_sessions)").fetchall()
+}
+assert {"uid", "provider_session_id", "reference_id", "stage", "status", "doc_scan_only"}.issubset(
+    age_session_columns
+), "Age assurance session table is incomplete"
+assert not ({"document_image", "selfie_image", "biometric_payload", "birth_date"} & age_session_columns), (
+    "D1 must not store raw identity documents, selfies, biometric payloads, or full birth dates"
+)
+
+DB.execute(
+    """INSERT INTO age_verification_sessions(
+        id, uid, provider_session_id, reference_id, stage, status
+    ) VALUES ('age-session-1', 'pilot-a', 'provider-session-1', 'reference-1', 'MINIMUM_AGE', 'PENDING')"""
+)
+assert DB.execute(
+    "SELECT uid FROM age_verification_sessions WHERE id = 'age-session-1'"
+).fetchone()[0] == "pilot-a", "Age verification session must be bound to its Firebase UID"
+
+try:
+    DB.execute(
+        """INSERT INTO age_verification_sessions(
+            id, uid, provider_session_id, reference_id, stage, status
+        ) VALUES ('age-session-2', 'pilot-b', 'provider-session-1', 'reference-2', 'MINIMUM_AGE', 'PENDING')"""
+    )
+    raise AssertionError("Provider session IDs must be unique")
+except sqlite3.IntegrityError:
+    pass
+
 print("D1 migration checks passed: hourly limits, unique pilot handles, flight metadata, hearts and first-flight workshop and global recipient fallback.")
