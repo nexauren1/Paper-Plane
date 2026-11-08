@@ -830,6 +830,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       return;
     }
 
+    var launchDialogOpen = true;
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -841,6 +842,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       if (pilot['profile_completed'] != 1) {
         if (mounted) Navigator.of(context).pop();
+        launchDialogOpen = false;
         final completed = await Navigator.of(context).push<bool>(
           MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
         );
@@ -863,6 +865,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
 
       if (!mounted) return;
       Navigator.of(context).pop();
+      launchDialogOpen = false;
       final airplane = result['airplane'] as Map<String, dynamic>? ?? const {};
       final id = airplane['id']?.toString();
       if (id == null || id.isEmpty) {
@@ -871,7 +874,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       ppPush(context, FlightScreen(airplaneId: id));
     } catch (error) {
       if (!mounted) return;
-      if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      if (launchDialogOpen && Navigator.of(context).canPop()) Navigator.of(context).pop();
       final message = error is PaperPlaneApiException
           ? error.message
           : 'Não foi possível lançar o avião. Verifica a ligação e tenta novamente.';
@@ -1125,7 +1128,7 @@ class GlobeFlightPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width * 0.44, size.height * 0.43);
+    final radius = math.min(size.width * 0.44, size.height * 0.43).toDouble();
     final origin = route?['origin'];
     final destination = route?['destination'];
     final midpoint = origin is Map && destination is Map
@@ -1158,7 +1161,7 @@ class GlobeFlightPainter extends CustomPainter {
     for (var factor = -0.75; factor <= 0.75; factor += 0.25) {
       final y = center.dy + radius * factor;
       final rx = radius * math.sqrt(1 - factor * factor);
-      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx, y), width: rx * 2, height: math.max(1, radius * 0.12)), gridPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(center.dx, y), width: rx * 2, height: radius * 0.12), gridPaint);
     }
     canvas.drawOval(Rect.fromCenter(center: center, width: radius * 0.72, height: radius * 2), gridPaint);
     canvas.drawOval(Rect.fromCenter(center: center, width: radius * 1.45, height: radius * 2), gridPaint);
@@ -1198,7 +1201,7 @@ class GlobeFlightPainter extends CustomPainter {
         ..strokeWidth = 2.2
         ..strokeCap = StrokeCap.round);
 
-      final scaled = progress.clamp(0.0, 1.0) * (points.length - 1);
+      final scaled = progress.clamp(0.0, 1.0).toDouble() * (points.length - 1);
       final index = math.min(points.length - 2, scaled.floor());
       if (points.length > 1) {
         final fraction = scaled - index;
@@ -1299,10 +1302,10 @@ class _FlightScreenState extends State<FlightScreen> {
     final started = DateTime.tryParse(flight['startedAt']?.toString() ?? '');
     final arrival = DateTime.tryParse(flight['estimatedArrivalAt']?.toString() ?? '');
     if (started == null || arrival == null || !arrival.isAfter(started)) {
-      return ((flight['progress'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0);
+      return ((flight['progress'] as num?)?.toDouble() ?? 0).clamp(0.0, 1.0).toDouble();
     }
     return (DateTime.now().difference(started).inMilliseconds /
-        arrival.difference(started).inMilliseconds).clamp(0.0, 0.999);
+        arrival.difference(started).inMilliseconds).clamp(0.0, 0.999).toDouble();
   }
 
   @override
