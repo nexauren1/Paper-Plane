@@ -51,15 +51,15 @@ There is deliberately no self-declared-age endpoint and no shortcut in the app. 
 ## Firebase setup
 
 1. Open the existing Firebase project.
-2. In Authentication → Sign-in method, enable Anonymous.
-3. Enable Firebase Cloud Messaging for the Android app.
-4. Register the Android application ID com.nexauren.paper_plane in the Firebase project.
-5. Copy the non-secret client configuration values from Project settings → Your apps: Web API key, Android App ID, Messaging Sender ID / project number, and Project ID.
-6. Build the app with the Dart defines shown below. These values identify the Firebase app; they are not service-account credentials.
-7. In Settings, the pilot can opt into notifications. The service registers the FCM token with the Worker.
+2. In Authentication → Sign-in method, enable Anonymous, Email/Password, and Google.
+3. Enable Firebase Cloud Messaging and Google Analytics for the Android app.
+4. The Android app package is com.nexauren.paper_plane. The supplied client configuration is stored at firebase/google-services.json and copied into android/app/google-services.json by the Android build workflow.
+5. The workflow reads the Firebase API key, Android App ID, project number, Project ID, and Web OAuth client ID from that file. It configures the Google Services Gradle plugin and passes the values into the Flutter build. No manual Dart defines are needed for GitHub Actions.
+6. Google sign-in uses the Web OAuth client (oauth_client client_type 3) from the Firebase file. Add the SHA-1 and SHA-256 fingerprints for the certificate used to sign the APK in Firebase Project settings → Your apps → Android app, then download a fresh google-services.json and replace firebase/google-services.json. The current uploaded file has the Web OAuth client, but no Android OAuth client entry yet; Google sign-in can fail until the signing fingerprint is registered.
+7. Analytics collection is enabled after Firebase initializes. The app records app_open, sign_up, login, and logout events; it does not send message text or passwords to Analytics.
+8. Notification registration remains an explicit opt-in in Settings. The Firebase service registers the FCM token with the Worker only after the user enables notifications.
 
-The Firebase Flutter plugins currently used by the repository are firebase_core 5.1.0, firebase_auth 7.0.1, and firebase_messaging 17.0.1. The code initializes Firebase from explicit FirebaseOptions so no real app config needs to be committed. Re-run the Firebase setup/configuration when registering another platform or changing Firebase products.
-
+The client configuration contains identifiers and an API key intended for use by the mobile app; it is not a service-account credential. Never commit a Firebase service-account private key, Cloudflare API token, or FCM service-account JSON.
 ## Cloudflare setup
 
 ### Cloudflare Workers Builds settings
@@ -108,18 +108,9 @@ The automatic Cloudflare CI checks also validate both SQL migrations in an in-me
 
 ## Flutter build
 
-From the repository root:
-~~~~bash
-flutter pub get
-flutter run \
-  --dart-define=FIREBASE_API_KEY=YOUR_FIREBASE_WEB_API_KEY \
-  --dart-define=FIREBASE_APP_ID=YOUR_ANDROID_FIREBASE_APP_ID \
-  --dart-define=FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_PROJECT_NUMBER \
-  --dart-define=FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID \
-  --dart-define=PAPER_PLANE_API_BASE_URL=https://paper-plane.nexaurenstore.workers.dev
-~~~~
+GitHub Actions generates the Android platform, copies firebase/google-services.json into android/app, configures the Google Services Gradle plugin, extracts the public Firebase client values, runs the widget tests, and builds the release APK. The build also sets PAPER_PLANE_API_BASE_URL to the deployed Worker endpoint.
 
-For a release APK, use the same defines with flutter build apk --release. Keep the Firebase API key and app identifiers in the app's normal Firebase configuration; never put a Cloudflare API token, service-account private key, or FCM service-account JSON in the Android application.
+For a local build, use the same Firebase values from firebase/google-services.json as Dart defines: FIREBASE_API_KEY, FIREBASE_APP_ID, FIREBASE_MESSAGING_SENDER_ID, FIREBASE_PROJECT_ID, and GOOGLE_SERVER_CLIENT_ID. The Android Google Services Gradle plugin and google-services.json must also be present under android/app.
 
 ## Pages
 
@@ -127,7 +118,7 @@ Pages remains the public website. Use a Worker custom domain such as api.yourdom
 
 ## Known work still required before public release
 
-- Fill in the real Firebase Project ID, app IDs, API key, and Worker custom domain locally.
+- Add the signing certificate SHA-1 and SHA-256 fingerprints to Firebase and refresh firebase/google-services.json before validating Google sign-in on the signed release APK.
 - Create the D1 database and Queue resources in the correct Cloudflare account.
 - Select and integrate a trusted age-assurance provider and signed callback. This is currently a hard release blocker: all new users are UNVERIFIED and cannot send or receive random mail until this is complete.
 - Build the human moderation dashboard/workflow on top of the admin endpoints and define response coverage and escalation procedures.
