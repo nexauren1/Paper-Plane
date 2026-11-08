@@ -2071,6 +2071,18 @@ class _FlightScreenState extends State<FlightScreen> {
     final destinationCode = route?['destinationCountry']?.toString();
     final destinationName = route?['destinationName']?.toString();
     final originName = route?['originName']?.toString();
+    final matchingInfo = flight?['matchingInfo'] is Map
+        ? Map<String, dynamic>.from(flight!['matchingInfo'] as Map)
+        : null;
+    final sameGroupProfiles = (matchingInfo?['sameGroupProfiles'] as num?)?.toInt() ?? 0;
+    final eligibleRecipients = (matchingInfo?['eligibleRecipients'] as num?)?.toInt() ?? 0;
+    final matchingDescription = matchingInfo == null
+        ? 'O servidor está a procurar um destinatário elegível. A procura volta a ser tentada automaticamente.'
+        : sameGroupProfiles == 0
+            ? 'Ainda não há outra conta com perfil completo na tua faixa etária declarada. Para o teste com duas contas, ambas têm de declarar a mesma faixa etária.'
+            : eligibleRecipients == 0
+                ? 'Existem $sameGroupProfiles perfis na tua faixa etária, mas nenhum está disponível para receber agora. A segunda conta precisa de estar ativa, ter o perfil completo e aceitar aviões aleatórios.'
+                : 'Há $eligibleRecipients copiloto(s) elegíveis para receber. O servidor está a tentar associar o teu avião agora e continuará a tentar automaticamente.';
 
     return ScreenFrame(
       title: 'O teu avião está a voar',
@@ -2159,8 +2171,19 @@ class _FlightScreenState extends State<FlightScreen> {
                 const Icon(Icons.radar_rounded, color: ppGoldBright, size: 34),
                 const SizedBox(height: 7),
                 const Text('O avião continua à procura de um destinatário elegível.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                const Text('A procura é feita pelo servidor. Quando encontrar alguém, a rota, a distância e a previsão de chegada serão registadas aqui.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+                const SizedBox(height: 8),
+                Text(
+                  matchingDescription,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+                ),
+                if (matchingInfo != null && eligibleRecipients > 0) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '$eligibleRecipients destinatário(s) elegível(is) neste momento',
+                    style: const TextStyle(color: ppGoldBright, fontSize: 11, fontWeight: FontWeight.w800),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 const LinearProgressIndicator(color: ppGold, backgroundColor: Colors.white12),
               ]),
