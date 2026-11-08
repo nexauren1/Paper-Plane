@@ -131,6 +131,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> getAirplaneFlight(String id) =>
       _request('/v1/airplanes/$id/flight');
 
+  Future<Map<String, dynamic>> getSkyAtlas() => _request('/v1/atlas');
+
+
 
   Future<Map<String, dynamic>> getInbox() => _request('/v1/inbox');
 
