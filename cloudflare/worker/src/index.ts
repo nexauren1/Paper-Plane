@@ -815,12 +815,17 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       ).bind(isoNow(), uid).run();
     }
     const firstFlight = await env.DB.prepare(
-      "SELECT state FROM onboarding_first_flights WHERE uid = ?",
-    ).bind(uid).first<{ state: string }>();
+      "SELECT state, message_text, plane_model FROM onboarding_first_flights WHERE uid = ?",
+    ).bind(uid).first<{ state: string; message_text: string; plane_model: string }>();
     return json({
       pilot: user,
       stats: { sent: stats?.sent ?? 0, received: received?.received ?? 0 },
       firstFlightState: firstFlight?.state ?? null,
+      firstFlight: firstFlight ? {
+        state: firstFlight.state,
+        message: firstFlight.message_text,
+        planeModel: firstFlight.plane_model,
+      } : null,
     });
   }
 
