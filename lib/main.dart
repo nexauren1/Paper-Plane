@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
@@ -497,10 +498,23 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   void _start() {
-    Navigator.of(context).pushReplacement(
+    final navigator = Navigator.of(context);
+    navigator.pushReplacement(
       PageRouteBuilder(
-        settings: const RouteSettings(name: 'MainShell'),
-        pageBuilder: (_, __, ___) => const MainShell(),
+        settings: const RouteSettings(name: 'AccountEntry'),
+        pageBuilder: (_, __, ___) => AccountScreen(
+          onAuthenticated: (firstFlightId) {
+            navigator.pushReplacement(
+              PageRouteBuilder(
+                settings: const RouteSettings(name: 'MainShell'),
+                pageBuilder: (_, __, ___) => MainShell(initialFlightId: firstFlightId),
+                transitionsBuilder: (_, animation, __, child) =>
+                    FadeTransition(opacity: animation, child: child),
+                transitionDuration: const Duration(milliseconds: 650),
+              ),
+            );
+          },
+        ),
         transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 650),
       ),
@@ -553,13 +567,25 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 }
 
 class MainShell extends StatefulWidget {
-  const MainShell({super.key});
+  const MainShell({super.key, this.initialFlightId});
+  final String? initialFlightId;
   @override
   State<MainShell> createState() => _MainShellState();
 }
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final firstFlightId = widget.initialFlightId;
+    if (firstFlightId != null && firstFlightId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ppPush(context, FlightScreen(airplaneId: firstFlightId));
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -640,7 +666,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final results = await Future.wait([
         PaperPlaneApi.instance.getProfile(),
         PaperPlaneApi.instance.getSentPlanes(),
@@ -859,7 +885,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
       builder: (_) => const LaunchDialog(),
     );
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final profileResult = await PaperPlaneApi.instance.getProfile();
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       if (pilot['profile_completed'] != 1) {
@@ -1497,7 +1523,7 @@ class _InboxPageState extends State<InboxPage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final results = await Future.wait([
         PaperPlaneApi.instance.getInbox(),
         PaperPlaneApi.instance.getSentPlanes(),
@@ -1875,7 +1901,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final result = await PaperPlaneApi.instance.getOpenSky();
       final messages = (result['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
@@ -2065,7 +2091,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _refresh() async {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       final result = await PaperPlaneApi.instance.getProfile();
       if (!mounted) return;
       setState(() {
@@ -2158,7 +2184,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ]),
             ),
             const SectionTitle('Conta e preferências'),
-            _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
+            _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, AccountScreen(onAuthenticated: (_) => Navigator.of(context).pop()))),
             _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
             _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
             _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
@@ -2578,7 +2604,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     try {
-      await PaperPlaneAuth.ensureAnonymousPilot();
+      await PaperPlaneAuth.requireSignedInPilot();
       await PaperPlaneNotifications.enableAndRegister();
       if (mounted) setState(() => notifications = true);
       if (mounted) {
