@@ -139,7 +139,7 @@ signing_config = (
 )
 
 android_open, android_close = locate_block(text, locate)
-if not re.search(r"\\bsigningConfigs\\s*\\{", text[android_open + 1:android_close]):
+if not re.search(r"\bsigningConfigs\s*\{", text[android_open + 1:android_close]):
     text = text[:android_open + 1] + signing_config + text[android_open + 1:]
 
 android_open, _ = locate_block(text, locate)
