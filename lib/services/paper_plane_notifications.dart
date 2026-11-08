@@ -13,7 +13,9 @@ class PaperPlaneNotifications {
       GlobalKey<ScaffoldMessengerState>();
   static VoidCallback? onOpenInbox;
   static ValueChanged<String>? onOpenPlane;
+  static VoidCallback? onOpenChat;
   static bool _pendingInboxOpen = false;
+  static bool _pendingChatOpen = false;
   static String? _pendingAirplaneId;
   static bool _handlersInitialized = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
@@ -48,9 +50,11 @@ class PaperPlaneNotifications {
             ],
           ),
           action: SnackBarAction(
-            label: message.data['airplaneId']?.toString().isNotEmpty == true
-                ? 'Abrir carta'
-                : 'Abrir caixa',
+            label: message.data['type'] == 'CHAT_MESSAGE'
+                ? 'Abrir Chama'
+                : message.data['airplaneId']?.toString().isNotEmpty == true
+                    ? 'Abrir carta'
+                    : 'Abrir caixa',
             onPressed: () => _routeMessage(message),
           ),
         ),
@@ -74,6 +78,15 @@ class PaperPlaneNotifications {
   }
 
   static void _routeMessage(RemoteMessage message) {
+    if (message.data['type'] == 'CHAT_MESSAGE') {
+      final callback = onOpenChat;
+      if (callback == null) {
+        _pendingChatOpen = true;
+      } else {
+        callback();
+      }
+      return;
+    }
     final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
     if (airplaneId.isEmpty) {
       _requestInboxOpen();
@@ -85,6 +98,12 @@ class PaperPlaneNotifications {
     } else {
       callback(airplaneId);
     }
+  }
+
+  static bool consumePendingChatOpen() {
+    final pending = _pendingChatOpen;
+    _pendingChatOpen = false;
+    return pending;
   }
 
   /// Returns a pending airplane ID once the authenticated shell is mounted.
