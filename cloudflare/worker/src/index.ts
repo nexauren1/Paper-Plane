@@ -167,7 +167,7 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
       return { state: "UNSAFE", categories: categories.length ? categories : ["GUARD_UNSAFE"] };
     }
     if (!normalized.startsWith("safe")) {
-      return { state: "REVIEW", categories: ["AI_UNCERTAIN"] };
+      return { state: "TEMPORARY_UNAVAILABLE", categories: ["AI_UNCERTAIN"] };
     }
 
     // A greeting is released only after the primary safety guard explicitly returns SAFE.
@@ -188,14 +188,16 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
     const riskOutput = modelText(riskResult);
     const start = riskOutput.indexOf("{");
     const end = riskOutput.lastIndexOf("}");
-    if (start < 0 || end <= start) return { state: "REVIEW", categories: ["RISK_CLASSIFIER_UNCERTAIN"] };
+    if (start < 0 || end <= start) {
+      return { state: "TEMPORARY_UNAVAILABLE", categories: ["RISK_CLASSIFIER_UNCERTAIN"] };
+    }
     const riskJson = JSON.parse(riskOutput.slice(start, end + 1)) as { risk_flags?: unknown; confidence?: unknown };
     const flags = Array.isArray(riskJson.risk_flags) ? riskJson.risk_flags.map(String) : [];
     const confidence = Number(riskJson.confidence ?? 0);
     const risks = flags.filter((flag) => flag !== "none");
     if (risks.length > 0) return { state: "REVIEW", categories: risks.slice(0, 8) };
     if (!Number.isFinite(confidence) || confidence < 0.7) {
-      return { state: "REVIEW", categories: ["RISK_CLASSIFIER_LOW_CONFIDENCE"] };
+      return { state: "TEMPORARY_UNAVAILABLE", categories: ["RISK_CLASSIFIER_LOW_CONFIDENCE"] };
     }
     return { state: "SAFE", categories: [] };
   } catch {
