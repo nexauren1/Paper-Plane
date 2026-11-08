@@ -9,7 +9,6 @@ import 'services/paper_plane_notifications.dart';
 import 'services/paper_plane_analytics.dart';
 import 'screens/account_screen.dart';
 import 'screens/pilot_profile_setup_screen.dart';
-import 'screens/age_verification_screen.dart';
 import 'screens/first_flight_workshop_screen.dart';
 import 'screens/support_screen.dart';
 import 'widgets/report_dialog.dart';
@@ -717,13 +716,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _openAgeVerification() async {
-    final verified = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const AgeVerificationScreen()),
-    );
-    if (verified == true) await _refresh();
-  }
-
   Future<void> _launchSavedFirstFlight() async {
     final result = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(
@@ -788,27 +780,6 @@ class _HomePageState extends State<HomePage> {
               ]),
             )
           else ...[
-            if (profileReady && _profile['age_verified'] != 1)
-              GlassPanel(
-                highlight: true,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(Icons.verified_user_outlined, color: ppGoldBright, size: 24),
-                    SizedBox(width: 12),
-                    Expanded(child: Text(
-                      'A segurança está ativa. A correspondência só é libertada depois de confirmar a idade e separar pilotos adolescentes de adultos.',
-                      style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45),
-                    )),
-                  ]),
-                  const SizedBox(height: 12),
-                  GoldButton(
-                    label: 'Verificar a minha idade',
-                    icon: Icons.shield_outlined,
-                    onPressed: _openAgeVerification,
-                    height: 52,
-                  ),
-                ]),
-              ),
             if (!profileReady)
               GlassPanel(
                 highlight: true,
@@ -829,19 +800,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ]),
               ),
-            if (_firstFlightState == 'WAITING_FOR_AGE_VERIFICATION')
-              GlassPanel(
-                highlight: true,
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.inventory_2_outlined, color: ppGoldBright, size: 29),
-                  const SizedBox(width: 12),
-                  const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('O teu primeiro avião está no hangar privado', style: TextStyle(fontWeight: FontWeight.w800)),
-                    SizedBox(height: 5),
-                    Text('A carta está guardada online. Assim que a idade estiver confirmada, poderás lançar o avião para a faixa de pilotos compatível.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
-                  ])),
-                ]),
-              ),
             if (_firstFlightState == 'READY_TO_LAUNCH')
               GlassPanel(
                 highlight: true,
@@ -852,7 +810,7 @@ class _HomePageState extends State<HomePage> {
                     Expanded(child: Text('O teu primeiro avião está pronto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
                   ]),
                   const SizedBox(height: 6),
-                  const Text('A verificação terminou. Retoma a oficina, vê o papel transformar-se em avião e lança a tua primeira viagem online.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  const Text('O teu primeiro avião está guardado no servidor e pronto para a viagem. Retoma a oficina para rever o desenho e lança-o quando estiveres preparado.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
                   const SizedBox(height: 12),
                   GoldButton(
                     label: 'Lançar o primeiro avião',
