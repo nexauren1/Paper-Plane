@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
@@ -1139,6 +1138,109 @@ String _flightTimeLeft(String? arrival) {
   return hours.toString() + 'h ' + minutes.toString() + 'min';
 }
 
+
+class AnimatedSkyFlight extends StatefulWidget {
+  const AnimatedSkyFlight({super.key});
+  @override
+  State<AnimatedSkyFlight> createState() => _AnimatedSkyFlightState();
+}
+
+class _AnimatedSkyFlightState extends State<AnimatedSkyFlight> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 5),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (_, __) => CustomPaint(
+        painter: _SkyFlightPainter(progress: _controller.value),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _SkyFlightPainter extends CustomPainter {
+  const _SkyFlightPainter({required this.progress});
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bounds = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(bounds, const Radius.circular(20)),
+      Paint()..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF142C4B), Color(0xFF071225)],
+      ).createShader(bounds),
+    );
+
+    final random = math.Random(41);
+    for (var i = 0; i < 44; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      final opacity = 0.16 + random.nextDouble() * 0.45;
+      canvas.drawCircle(
+        Offset(x, y),
+        0.5 + random.nextDouble() * 1.1,
+        Paint()..color = (i % 9 == 0 ? ppGoldBright : Colors.white).withOpacity(opacity),
+      );
+    }
+
+    final path = Path()
+      ..moveTo(size.width * 0.07, size.height * 0.78)
+      ..cubicTo(
+        size.width * 0.28, size.height * 0.08,
+        size.width * 0.58, size.height * 0.98,
+        size.width * 0.91, size.height * 0.22,
+      );
+    final metric = path.computeMetrics().first;
+    final trail = metric.extractPath(0, metric.length * progress);
+    canvas.drawPath(trail, Paint()
+      ..color = ppGold.withOpacity(0.20)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+    canvas.drawPath(trail, Paint()
+      ..color = ppGoldBright.withOpacity(0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round);
+
+    final tangent = metric.getTangentForOffset(metric.length * progress);
+    if (tangent != null) {
+      canvas.save();
+      canvas.translate(tangent.position.dx, tangent.position.dy);
+      canvas.rotate(tangent.angle + math.pi / 2);
+      final plane = Path()
+        ..moveTo(0, -15)
+        ..lineTo(8, 10)
+        ..lineTo(0, 6)
+        ..lineTo(-8, 10)
+        ..close();
+      canvas.drawPath(plane, Paint()
+        ..color = ppGold.withOpacity(0.28)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+      canvas.drawPath(plane, Paint()..color = ppPaper);
+      canvas.drawPath(plane, Paint()..color = ppGoldBright..style = PaintingStyle.stroke..strokeWidth = 1.2);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SkyFlightPainter oldDelegate) => oldDelegate.progress != progress;
+}
+
 class GlobeFlightPainter extends CustomPainter {
   const GlobeFlightPainter({this.route, this.progress = 0});
   final Map<String, dynamic>? route;
@@ -1384,6 +1486,11 @@ class _FlightScreenState extends State<FlightScreen> {
             style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: const SizedBox(height: 142, child: AnimatedSkyFlight()),
+          ),
+          const SizedBox(height: 10),
           GlassPanel(
             padding: const EdgeInsets.all(10),
             highlight: true,
@@ -1666,7 +1773,7 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
       final plane = result['airplane'] as Map<String, dynamic>?;
       if (!mounted) return;
       if (plane == null) throw const PaperPlaneApiException('NOT_FOUND', 'Esta carta já não está disponível.');
-      ppPush(context, LetterScreen(airplane: plane));
+      ppPush(context, ArrivalExperienceScreen(airplane: plane));
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível abrir a carta.';
@@ -1744,6 +1851,184 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen> {
       ),
     );
   }
+}
+
+
+class ArrivalExperienceScreen extends StatefulWidget {
+  const ArrivalExperienceScreen({super.key, required this.airplane});
+  final Map<String, dynamic> airplane;
+
+  @override
+  State<ArrivalExperienceScreen> createState() => _ArrivalExperienceScreenState();
+}
+
+class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _arrival = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  )..forward();
+
+  @override
+  void dispose() {
+    _arrival.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'O avião chegou',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 25),
+        child: Column(children: [
+          const SizedBox(height: 8),
+          const Text('Uma carta encontrou o caminho até ti.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700, fontSize: 17)),
+          const SizedBox(height: 14),
+          Expanded(
+            child: AnimatedBuilder(
+              animation: _arrival,
+              builder: (_, __) => CustomPaint(
+                painter: _HouseArrivalPainter(progress: _arrival.value),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text('O avião pousou à tua porta.', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900), textAlign: TextAlign.center),
+          const SizedBox(height: 7),
+          const Text('A carta permanece fechada até escolheres abri-la.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const SizedBox(height: 20),
+          AnimatedBuilder(
+            animation: _arrival,
+            builder: (_, child) => AnimatedOpacity(
+              opacity: _arrival.value >= 0.78 ? 1 : 0.35,
+              duration: const Duration(milliseconds: 260),
+              child: child,
+            ),
+            child: GoldButton(
+              label: 'Abrir carta',
+              icon: Icons.mark_email_read_outlined,
+              onPressed: _arrival.value < 0.78
+                  ? () {}
+                  : () => ppPush(context, LetterScreen(airplane: widget.airplane)),
+              height: 62,
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _HouseArrivalPainter extends CustomPainter {
+  const _HouseArrivalPainter({required this.progress});
+  final double progress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, const Radius.circular(22)),
+      Paint()..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF0B1D34), Color(0xFF030A15)],
+      ).createShader(rect),
+    );
+    final random = math.Random(77);
+    for (var i = 0; i < 65; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height * 0.65;
+      canvas.drawCircle(Offset(x, y), 0.6 + random.nextDouble(), Paint()
+        ..color = Colors.white.withOpacity(0.12 + random.nextDouble() * 0.28));
+    }
+
+    final houseWidth = size.width * 0.61;
+    final houseHeight = size.height * 0.43;
+    final house = Rect.fromCenter(
+      center: Offset(size.width * 0.53, size.height * 0.70),
+      width: houseWidth,
+      height: houseHeight,
+    );
+    final wall = Path()
+      ..moveTo(house.left, house.top + 14)
+      ..lineTo(house.right, house.top + 14)
+      ..lineTo(house.right, house.bottom)
+      ..lineTo(house.left, house.bottom)
+      ..close();
+    final roof = Path()
+      ..moveTo(house.left - 20, house.top + 18)
+      ..lineTo(house.center.dx, house.top - houseHeight * 0.48)
+      ..lineTo(house.right + 20, house.top + 18)
+      ..close();
+    canvas.drawPath(wall, Paint()..color = const Color(0xFF243754));
+    canvas.drawPath(wall, Paint()..color = ppGold.withOpacity(0.36)..style = PaintingStyle.stroke..strokeWidth = 1.4);
+    canvas.drawPath(roof, Paint()..color = const Color(0xFF111C2D));
+    canvas.drawPath(roof, Paint()..color = ppGold.withOpacity(0.75)..style = PaintingStyle.stroke..strokeWidth = 2);
+
+    final door = Rect.fromCenter(
+      center: Offset(house.center.dx, house.bottom - houseHeight * 0.20),
+      width: houseWidth * 0.20,
+      height: houseHeight * 0.42,
+    );
+    canvas.drawRRect(RRect.fromRectAndRadius(door, const Radius.circular(7)), Paint()..color = const Color(0xFF071225));
+    final doorGlow = Paint()
+      ..color = ppGoldBright.withOpacity(0.65)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
+    canvas.drawCircle(door.center, 19, doorGlow);
+    canvas.drawRRect(RRect.fromRectAndRadius(door, const Radius.circular(7)), Paint()..color = const Color(0xFF182B43)..style = PaintingStyle.stroke..strokeWidth = 1.5..color = ppGoldBright.withOpacity(0.8));
+
+    for (final dx in [house.left + houseWidth * 0.19, house.right - houseWidth * 0.19]) {
+      final window = Rect.fromCenter(center: Offset(dx, house.top + houseHeight * 0.37), width: houseWidth * 0.19, height: houseHeight * 0.22);
+      canvas.drawRRect(RRect.fromRectAndRadius(window, const Radius.circular(4)), Paint()..color = ppGold.withOpacity(0.75));
+      canvas.drawRRect(RRect.fromRectAndRadius(window, const Radius.circular(4)), Paint()..color = ppGoldBright.withOpacity(0.9)..style = PaintingStyle.stroke..strokeWidth = 1.2);
+    }
+
+    final start = Offset(size.width * 0.13, size.height * 0.18);
+    final end = Offset(door.center.dx, door.top + 6);
+    final control1 = Offset(size.width * 0.65, size.height * 0.08);
+    final control2 = Offset(size.width * 0.16, size.height * 0.58);
+    final flightPath = Path()
+      ..moveTo(start.dx, start.dy)
+      ..cubicTo(control1.dx, control1.dy, control2.dx, control2.dy, end.dx, end.dy);
+    final metric = flightPath.computeMetrics().first;
+    final current = metric.getTangentForOffset(metric.length * progress.clamp(0.0, 1.0));
+    if (current != null) {
+      final trail = metric.extractPath(0, metric.length * progress.clamp(0.0, 1.0));
+      canvas.drawPath(trail, Paint()
+        ..color = ppGold.withOpacity(0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
+      canvas.drawPath(trail, Paint()
+        ..color = ppGoldBright.withOpacity(0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round);
+      canvas.save();
+      canvas.translate(current.position.dx, current.position.dy);
+      canvas.rotate(current.angle + math.pi / 2);
+      final plane = Path()
+        ..moveTo(0, -14)
+        ..lineTo(7, 10)
+        ..lineTo(0, 6)
+        ..lineTo(-7, 10)
+        ..close();
+      canvas.drawPath(plane, Paint()..color = ppGold.withOpacity(0.3)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+      canvas.drawPath(plane, Paint()..color = ppPaper);
+      canvas.drawPath(plane, Paint()..color = ppGoldBright..style = PaintingStyle.stroke..strokeWidth = 1.2);
+      canvas.restore();
+    }
+
+    canvas.drawCircle(end, 12 + progress * 9, Paint()
+      ..color = ppGold.withOpacity((1 - progress).clamp(0.0, 1.0) * 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2);
+  }
+
+  @override
+  bool shouldRepaint(covariant _HouseArrivalPainter oldDelegate) => oldDelegate.progress != progress;
 }
 
 class LetterScreen extends StatefulWidget {
