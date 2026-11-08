@@ -27,6 +27,7 @@ The currently selected Cloudflare AI models list zero-data-retention availabilit
 
 - Firebase UID: internal account identifier; never displayed as the pilot's public name.
 - Pilot code and fictional pilot name.
+- Self-declared date of birth is used transiently by the Worker; D1 retains only the birth year, derived age group, and declaration timestamp, not the full date.
 - Language and optional country code. Country display is opt-in; no precise GPS location is collected by this schema.
 - Letter body, delivery state, moderation state, timestamps, and optional translation.
 - FCM device token, only after a pilot opts into notifications.
