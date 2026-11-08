@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "666736195319",
+    "project_id": "studio-7819491277-fa972",
+    "storage_bucket": "studio-7819491277-fa972.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:666736195319:android:a2617227e46d9a068285f2",
+        "android_client_info": {
+          "package_name": "com.nexauren.paper_plane"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "666736195319-8rjmgs4buucd466m7mkrulm80b10tf9a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCq8eX8LcRcVyFPMJnXdxv5zrmMvOnbRAg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "666736195319-8rjmgs4buucd466m7mkrulm80b10tf9a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
