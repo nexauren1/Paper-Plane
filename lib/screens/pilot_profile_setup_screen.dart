@@ -90,8 +90,16 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
 
   Future<void> _checkHandle() async {
     final handle = _pilotHandle.text.trim().replaceFirst(RegExp(r'^@'), '');
-    if (!RegExp(
-          r'^[a-z0-9]+(?:_[a-z0-9]+)*(?:-[0-9]{2})?
+    final parts = handle.split('-');
+    final suffixValid = parts.length == 1 ||
+        (parts.length == 2 && parts[1].length == 2 && int.tryParse(parts[1]) != null);
+    final nameParts = parts.first.split('_');
+    final nameValid = nameParts.isNotEmpty &&
+        nameParts.every((part) => part.isNotEmpty && part.codeUnits.every((unit) =>
+            (unit >= 48 && unit <= 57) ||
+            (unit >= 65 && unit <= 90) ||
+            (unit >= 97 && unit <= 122)));
+    if (!suffixValid || !nameValid || handle.length < 4 || handle.length > 28) {
       if (!mounted) return;
       setState(() {
         _checkingHandle = false;
