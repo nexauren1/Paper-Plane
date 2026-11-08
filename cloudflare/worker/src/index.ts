@@ -300,44 +300,13 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     }),
   };
 }
-async function chooseEligiblePilot(
-  env: Env,
+function chooseEligiblePilot(
   candidates: Array<{ uid: string; country_code: string; language: string }>,
-  preferences: { destinationCountry: string | null; messageLanguage: string },
 ) {
-  if (candidates.length <= 1) return candidates[0] ?? null;
-  try {
-    const result = await env.AI.run(CLASSIFICATION_MODEL, {
-      messages: [
-        {
-          role: "system",
-          content: "Choose one candidate for a symbolic paper-plane journey. All candidates passed server-side age-band, consent, account, blocking and safety checks. Prefer the requested destination country if present; otherwise consider language compatibility and geographic diversity. Return ONLY JSON: { \"candidate_index\": integer }. Never invent an index or a person.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            destinationCountry: preferences.destinationCountry,
-            messageLanguage: preferences.messageLanguage,
-            candidates: candidates.map((candidate, index) => ({
-              candidate_index: index,
-              country: candidate.country_code,
-              language: candidate.language,
-            })),
-          }),
-        },
-      ],
-    });
-    const output = modelText(result);
-    const start = output.indexOf("{"), end = output.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      const parsed = JSON.parse(output.slice(start, end + 1)) as { candidate_index?: unknown };
-      const index = Number(parsed.candidate_index);
-      if (Number.isInteger(index) && index >= 0 && index < candidates.length) return candidates[index];
-    }
-  } catch {
-    // Database fairness order is the safe fallback when Workers AI is unavailable.
-  }
-  return candidates[0];
+  // The SQL query already filtered every recipient for safety, consent, age band,
+  // blocks and reports, and sorts by requested destination + least-recently-received.
+  // Choosing the first result avoids an unnecessary Workers AI call in the delivery path.
+  return candidates[0] ?? null;
 }
 function flightProgress(startedAt: string | null, arrivalAt: string | null, status: string) {
   if (["DELIVERED", "READ", "RESPONDED"].includes(status)) return 1;
@@ -529,10 +498,7 @@ async function matchAirplane(airplaneId: string, env: Env) {
 
   // Workers AI chooses only inside this server-filtered eligible set.
   // No account identifier or message content is sent to the model.
-  const recipient = await chooseEligiblePilot(env, candidates, {
-    destinationCountry: plane.destination_country,
-    messageLanguage: plane.message_language,
-  });
+  const recipient = chooseEligiblePilot(candidates);
   if (!recipient) return;
   const route = buildFlightPlan(sender.country_code, recipient.country_code);
   if (!route) return;
