@@ -129,12 +129,12 @@ async function authenticate(request: Request, env: Env): Promise<string | null> 
 
 async function requireUser(uid: string, env: Env) {
   return env.DB.prepare(
-    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, profile_completed, language, country_code, country_visible, status, age_band, age_verified, accept_random_mail FROM users WHERE uid = ?",
+    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, profile_completed, language, country_code, country_visible, status, age_band, age_verified, accept_random_mail, push_enabled FROM users WHERE uid = ?",
   ).bind(uid).first<{
     uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null;
     birth_year: number | null; profile_completed: number; language: string;
     country_code: string | null; country_visible: number; status: string;
-    age_band: string; age_verified: number; accept_random_mail: number;
+    age_band: string; age_verified: number; accept_random_mail: number; push_enabled: number;
   }>();
 }
 
@@ -931,6 +931,38 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ error: "INVALID_ACTION" }, 400);
   }
 
+  if (path === "/v1/admin/support" && method === "GET") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const rows = await env.DB.prepare(
+      `SELECT t.id, t.uid, u.pilot_handle, t.category, t.subject, t.details, t.status, t.created_at, t.updated_at
+       FROM support_tickets t
+       JOIN users u ON u.uid = t.uid
+       WHERE t.status IN ('OPEN','IN_REVIEW')
+       ORDER BY CASE t.category WHEN 'SAFETY' THEN 0 ELSE 1 END, t.created_at ASC
+       LIMIT 200`,
+    ).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  const adminSupportMatch = path.match(/^\\/v1\\/admin\\/support\\/([^/]+)$/);
+  if (adminSupportMatch && method === "POST") {
+    if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const action = body.action;
+    const status = action === "in_review" ? "IN_REVIEW"
+      : action === "resolve" ? "RESOLVED"
+      : action === "close" ? "CLOSED" : null;
+    if (!status) return json({ error: "INVALID_ACTION" }, 400);
+    const result = await env.DB.prepare(
+      "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ? AND status IN ('OPEN','IN_REVIEW')",
+    ).bind(status, isoNow(), adminSupportMatch[1]).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "NOT_FOUND_OR_ALREADY_CLOSED" }, 404);
+    await env.DB.prepare(
+      "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'SUPPORT_TICKET_UPDATED', ?, ?)",
+    ).bind(uuid(), uid, adminSupportMatch[1], JSON.stringify({ status })).run();
+    return json({ ok: true, status });
+  }
+
   if (path === "/v1/admin/review" && method === "GET") {
     if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
     const [planes, replies] = await Promise.all([
@@ -1031,6 +1063,40 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     await env.DB.prepare("UPDATE public_replies SET moderation_state = 'SAFE' WHERE id = ?")
       .bind(reply.id).run();
     return json({ ok: true, moderation: "SAFE" });
+  }
+
+  if (method === "GET" && path === "/v1/support/tickets") {
+    const rows = await env.DB.prepare(
+      "SELECT id, category, subject, details, status, created_at, updated_at FROM support_tickets WHERE uid = ? ORDER BY created_at DESC LIMIT 30",
+    ).bind(uid).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  if (method === "POST" && path === "/v1/support/tickets") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const category = text(body.category, 24).toUpperCase();
+    const allowedCategories = new Set(["TECHNICAL", "ACCOUNT", "DELIVERY", "SAFETY", "SUGGESTION", "OTHER"]);
+    const subject = text(body.subject, 100);
+    const details = text(body.details, 1200);
+    if (!allowedCategories.has(category)) return json({ error: "INVALID_SUPPORT_CATEGORY" }, 400);
+    if (subject.length < 3 || details.length < 10) {
+      return json({ error: "SUPPORT_MESSAGE_TOO_SHORT", message: "Indica um assunto e descreve o problema com pelo menos 10 caracteres." }, 400);
+    }
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM support_tickets WHERE uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(recent?.count ?? 0) >= 5) return json({ error: "SUPPORT_RATE_LIMIT" }, 429);
+    const id = uuid();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO support_tickets(id, uid, category, subject, details) VALUES (?, ?, ?, ?, ?)",
+      ).bind(id, uid, category, subject, details),
+      env.DB.prepare(
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'SUPPORT_TICKET_CREATED', ?, ?)",
+      ).bind(uuid(), uid, id, JSON.stringify({ category })),
+    ]);
+    return json({ ok: true, ticket: { id, category, subject, status: "OPEN" } }, 201);
   }
 
   if (method === "POST" && path === "/v1/age-verification/sessions") {
@@ -1371,11 +1437,30 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const reportMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/report$/);
   if (method === "POST" && reportMatch) {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const reason = text(body.reason, 60) || "OTHER";
+    const reason = text(body.reason, 32).toUpperCase() || "OTHER";
+    const allowedReasons = new Set([
+      "HARASSMENT", "THREATS", "SEXUAL_CONTENT", "GROOMING",
+      "SPAM", "PERSONAL_INFO", "IMPERSONATION", "OTHER",
+    ]);
+    if (!allowedReasons.has(reason)) return json({ error: "INVALID_REPORT_CATEGORY" }, 400);
+    const airplaneId = reportMatch[1];
+    const existing = await env.DB.prepare(
+      "SELECT id FROM reports WHERE reporter_uid = ? AND airplane_id = ? AND status IN ('OPEN','IN_REVIEW') LIMIT 1",
+    ).bind(uid, airplaneId).first();
+    if (existing) return json({ error: "REPORT_ALREADY_OPEN" }, 409);
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM reports WHERE reporter_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(recent?.count ?? 0) >= 20) return json({ error: "REPORT_RATE_LIMIT" }, 429);
     const id = uuid();
-    await env.DB.prepare(
-      "INSERT INTO reports(id, reporter_uid, airplane_id, reported_uid, reason, details) SELECT ?, ?, a.id, a.sender_uid, ?, ? FROM airplanes a WHERE a.id = ? AND a.sender_uid <> ? AND (a.recipient_uid = ? OR a.audience = 'PUBLIC')",
-    ).bind(id, uid, reason, text(body.details, 500) || null, reportMatch[1], uid, uid).run();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO reports(id, reporter_uid, airplane_id, reported_uid, reason, details) SELECT ?, ?, a.id, a.sender_uid, ?, ? FROM airplanes a WHERE a.id = ? AND a.sender_uid <> ? AND (a.recipient_uid = ? OR a.audience = 'PUBLIC')",
+      ).bind(id, uid, reason, text(body.details, 500) || null, airplaneId, uid, uid),
+      env.DB.prepare(
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'MESSAGE_REPORTED', ?, ?)",
+      ).bind(uuid(), uid, airplaneId, JSON.stringify({ category: reason, reportId: id })),
+    ]);
     const created = await env.DB.prepare("SELECT id FROM reports WHERE id = ?").bind(id).first();
     if (!created) return json({ error: "NOT_FOUND" }, 404);
     return json({ ok: true, reportId: id }, 201);
