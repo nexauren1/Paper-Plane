@@ -376,7 +376,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         _sectionTitle('Resultados', _results.length.toString()),
         for (final person in _results) ...[
           const SizedBox(height: 8),
-          _personTile(person, action: 'Adicionar', onTap: () => _addFriend('@\${person['pilot_handle']}')),
+          _personTile(person, action: 'Adicionar', onTap: () => _addFriend('@${person['pilot_handle']}')),
         ],
       ],
       const SizedBox(height: 16),
@@ -462,7 +462,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                 const SizedBox(height: 3),
-                Text('@$handle\${country == null ? '' : ' · \${_flag(country)} \${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
                 const SizedBox(height: 5),
                 Text(last?.isNotEmpty == true ? last! : 'A Chama está acesa. Começa a conversa…',
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _chatGoldBright, fontSize: 12)),
@@ -486,7 +486,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-          Text('@$handle\${country == null ? '' : ' · \${_flag(country)} \${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         ])),
         IconButton(
           tooltip: 'Aceitar',
@@ -521,7 +521,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 3),
-          Text('@$handle\${country == null ? '' : ' · \${_flag(country)} \${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         ])),
         TextButton(
           onPressed: onTap,
@@ -745,7 +745,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(_name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-            Text('@$_handle\${_countryCode == null ? '' : ' · \${_countryFlag(_countryCode)} \${_countryName(_countryCode)}'}',
+            Text('@$_handle${_countryCode == null ? '' : ' · ${_countryFlag(_countryCode)} ${_countryName(_countryCode)}'}',
                 style: const TextStyle(fontSize: 10, color: Colors.white60)),
           ])),
         ]),
@@ -862,7 +862,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     final date = DateTime.tryParse(message['created_at']?.toString() ?? '');
     final time = date == null
         ? ''
-        : '\${date.toLocal().hour.toString().padLeft(2, '0')}:\${date.toLocal().minute.toString().padLeft(2, '0')}';
+        : '${date.toLocal().hour.toString().padLeft(2, '0')}:${date.toLocal().minute.toString().padLeft(2, '0')}';
     return Align(
       alignment: isOwn ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
