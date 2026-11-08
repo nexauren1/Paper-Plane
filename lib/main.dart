@@ -2705,7 +2705,7 @@ class SafetyScreen extends StatelessWidget {
           Text(
             'Não partilhes morada, contactos, palavras-passe, escola ou outros dados pessoais com desconhecidos. Se uma carta te fizer sentir desconfortável, não respondas: denuncia e bloqueia.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white45, fontSize: 11, height: 1.45),
+            style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.45),
           ),
         ],
       ),
