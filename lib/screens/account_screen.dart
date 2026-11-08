@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/firebase_runtime.dart';
 import '../services/paper_plane_api.dart';
 import '../services/paper_plane_auth.dart';
+import 'pilot_profile_setup_screen.dart';
 
 const Color _navy = Color(0xFF071225);
 const Color _gold = Color(0xFFF0CE7C);
@@ -85,12 +86,18 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<String> _syncPilot(String successMessage) async {
-    try {
-      await PaperPlaneApi.instance.bootstrapPilot();
-      return '$successMessage Perfil sincronizado com o Paper Plane.';
-    } catch (_) {
-      return '$successMessage A sincronização com o servidor será repetida quando houver ligação.';
+    final result = await PaperPlaneApi.instance.bootstrapPilot();
+    final pilot = result['pilot'] as Map<String, dynamic>? ?? const {};
+    if (pilot['profile_completed'] != 1) {
+      if (!mounted) return '$successMessage';
+      final completed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
+      );
+      if (completed != true) {
+        return 'A conta foi criada, mas falta completar o perfil de copiloto para utilizar os voos.';
+      }
     }
+    return '$successMessage Perfil sincronizado com o Paper Plane.';
   }
 
   Future<void> _resetPassword() async {
