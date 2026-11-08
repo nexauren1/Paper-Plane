@@ -638,8 +638,8 @@ async function notifyChatMessage(uid: string, conversationId: string, env: Env) 
 
 async function deliverAirplane(airplaneId: string, env: Env) {
   const plane = await env.DB.prepare(
-    "SELECT id, recipient_uid FROM airplanes WHERE id = ? AND status = 'FLYING' AND recipient_uid IS NOT NULL",
-  ).bind(airplaneId).first<{ id: string; recipient_uid: string }>();
+    "SELECT id, sender_uid, recipient_uid, reply_to_id FROM airplanes WHERE id = ? AND status = 'FLYING' AND recipient_uid IS NOT NULL",
+  ).bind(airplaneId).first<{ id: string; sender_uid: string; recipient_uid: string; reply_to_id: string | null }>();
   if (!plane) return;
   const deliveredAt = isoNow();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -650,6 +650,16 @@ async function deliverAirplane(airplaneId: string, env: Env) {
   await env.DB.prepare(
     "INSERT OR IGNORE INTO inbox(airplane_id, recipient_uid) VALUES (?, ?)",
   ).bind(airplaneId, plane.recipient_uid).run();
+
+  // A private reply lights the Chama only when the second airplane actually arrives.
+  if (plane.reply_to_id) {
+    const userA = plane.sender_uid < plane.recipient_uid ? plane.sender_uid : plane.recipient_uid;
+    const userB = plane.sender_uid < plane.recipient_uid ? plane.recipient_uid : plane.sender_uid;
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO conversations(id, user_a, user_b) VALUES (?, ?, ?)",
+    ).bind(uuid(), userA, userB).run();
+  }
+
   await notifyNewPlane(plane.recipient_uid, airplaneId, env);
 }
 
@@ -1565,11 +1575,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       await env.DB.prepare(
         "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
       ).bind(privateReplyMatch[1]).run();
-      const userA = uid < original.sender_uid ? uid : original.sender_uid;
-      const userB = uid < original.sender_uid ? original.sender_uid : uid;
-      await env.DB.prepare(
-        "INSERT OR IGNORE INTO conversations(id, user_a, user_b) VALUES (?, ?, ?)",
-      ).bind(uuid(), userA, userB).run();
     }
     return replyResponse;
   }
