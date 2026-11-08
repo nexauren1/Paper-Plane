@@ -11,7 +11,7 @@ class PaperPlaneAuth {
 
   static bool _googleInitialized = false;
 
-  static Future<User> ensureAnonymousPilot() async {
+  static Future<User> requireSignedInPilot() async {
     if (!FirebaseRuntime.isInitialized) {
       throw const PaperPlaneApiException(
         'FIREBASE_NOT_CONFIGURED',
@@ -19,14 +19,12 @@ class PaperPlaneAuth {
       );
     }
 
-    final auth = FirebaseAuth.instance;
-    User? user = auth.currentUser;
-    if (user == null) {
-      final credential = await auth.signInAnonymously();
-      user = credential.user;
-    }
-    if (user == null) {
-      throw const PaperPlaneApiException('AUTH_FAILED', 'Não foi possível criar a identidade do piloto.');
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      throw const PaperPlaneApiException(
+        'AUTH_REQUIRED',
+        'Cria uma conta ou inicia sessão para continuar.',
+      );
     }
 
     await PaperPlaneApi.instance.bootstrapPilot();
