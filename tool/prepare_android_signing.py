@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import os
 import re
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,20 +23,55 @@ if missing:
     print("::warning::Permanent Android signing is not active yet. Add all four Android signing secrets to GitHub Actions.")
     raise SystemExit(0)
 
+raw_base64 = os.environ["ANDROID_KEYSTORE_BASE64"]
+compact_base64 = "".join(raw_base64.split())
 try:
-    keystore_bytes = base64.b64decode(os.environ["ANDROID_KEYSTORE_BASE64"], validate=True)
+    keystore_bytes = base64.b64decode(compact_base64, validate=True)
 except Exception as exc:
-    raise SystemExit("ANDROID_KEYSTORE_BASE64 is not valid Base64.") from exc
+    raise SystemExit(
+        "ANDROID_KEYSTORE_BASE64 is invalid. Replace that GitHub secret with the single-line value from paper-plane-ANDROID_KEYSTORE_BASE64.txt."
+    ) from exc
 if not keystore_bytes:
     raise SystemExit("Decoded Android keystore is empty.")
 
 APP.mkdir(parents=True, exist_ok=True)
-(APP / "upload-keystore.jks").write_bytes(keystore_bytes)
+keystore_path = APP / "upload-keystore.jks"
+keystore_path.write_bytes(keystore_bytes)
+
+key_alias = os.environ["ANDROID_KEY_ALIAS"]
+store_password = os.environ["ANDROID_KEYSTORE_PASSWORD"]
+key_password = os.environ["ANDROID_KEY_PASSWORD"]
+verification = subprocess.run(
+    [
+        "keytool", "-list", "-v", "-keystore", str(keystore_path),
+        "-storepass", store_password,
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+if verification.returncode != 0:
+    raise SystemExit("The keystore cannot be opened. Check ANDROID_KEYSTORE_PASSWORD.")
+
+certificate = verification.stdout
+if f"Alias name: {key_alias}" not in certificate:
+    raise SystemExit("ANDROID_KEY_ALIAS does not match the uploaded keystore.")
+
+def normalized_fingerprint(label: str) -> str:
+    match = re.search(rf"(?m)^\\s*{label}:\\s*([0-9A-Fa-f:]+)\\s*$", certificate)
+    return match.group(1).replace(":", "").lower() if match else ""
+
+sha1 = normalized_fingerprint("SHA1")
+sha256 = normalized_fingerprint("SHA256")
+expected_sha1 = "f45f3c66211a38235934dfc80716a2e12d4b3a7f"
+expected_sha256 = "6e9b240e193b53e192fb3c11d406ece477ece8ca501593072105a6397479106b"
+if sha1 != expected_sha1 or sha256 != expected_sha256:
+    raise SystemExit("The selected keystore does not match the permanent Paper Plane SHA-1/SHA-256 certificate.")
 
 properties = {
-    "storePassword": os.environ["ANDROID_KEYSTORE_PASSWORD"],
-    "keyPassword": os.environ["ANDROID_KEY_PASSWORD"],
-    "keyAlias": os.environ["ANDROID_KEY_ALIAS"],
+    "storePassword": store_password,
+    "keyPassword": key_password,
+    "keyAlias": key_alias,
     "storeFile": "upload-keystore.jks",
 }
 (ANDROID / "key.properties").write_text(
