@@ -1334,13 +1334,15 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const pilotOnRoute = await requireUser(uid, env);
   if (method === "GET" && path === "/v1/account/export") {
     if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
-    const [profile, sent, received, replies, friendships, chats, chatMessages, reports, tickets] = await Promise.all([
+    const [profile, sent, received, replies, likes, blocks, friendships, chats, chatMessages, reports, tickets] = await Promise.all([
       env.DB.prepare(
         "SELECT pilot_code, pilot_name, pilot_handle, avatar_url, birth_year, declared_age_band, age_declaration_at, country_code, country_visible, language, preferred_language, profile_completed, created_at, updated_at FROM users WHERE uid = ?",
       ).bind(uid).first(),
       env.DB.prepare("SELECT * FROM airplanes WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 1000").bind(uid).all(),
       env.DB.prepare("SELECT a.* FROM airplanes a JOIN inbox i ON i.airplane_id = a.id WHERE i.recipient_uid = ? ORDER BY a.created_at DESC LIMIT 1000").bind(uid).all(),
       env.DB.prepare("SELECT * FROM public_replies WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 1000").bind(uid).all(),
+      env.DB.prepare("SELECT * FROM public_likes WHERE uid = ? ORDER BY created_at DESC LIMIT 1000").bind(uid).all(),
+      env.DB.prepare("SELECT * FROM blocks WHERE blocker_uid = ? OR blocked_uid = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT * FROM friendships WHERE requester_uid = ? OR addressee_uid = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT * FROM conversations WHERE user_a = ? OR user_b = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT m.* FROM chat_messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.user_a = ? OR c.user_b = ? ORDER BY m.created_at DESC LIMIT 2000").bind(uid, uid).all(),
@@ -1352,6 +1354,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       profile,
       airplanes: { sent: sent.results ?? [], received: received.results ?? [] },
       publicReplies: replies.results ?? [],
+      publicLikes: likes.results ?? [],
+      blocks: blocks.results ?? [],
       friendships: friendships.results ?? [],
       conversations: chats.results ?? [],
       chatMessages: chatMessages.results ?? [],
