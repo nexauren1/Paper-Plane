@@ -4233,7 +4233,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SectionTitle('Conta e preferências'),
             _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, AccountScreen(onAuthenticated: (_) => Navigator.of(context).pop()))),
-            _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
+            _ProfileLink(icon: Icons.translate, title: 'Idioma preferido', subtitle: 'Tradução de aviões e mensagens', onTap: () => ppPush(context, const SettingsScreen())),
             _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
             _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
           ],
