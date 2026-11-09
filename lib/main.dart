@@ -4885,6 +4885,28 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool notifications = false;
   bool _loadingNotifications = true;
+  String _language = 'pt';
+  bool _loadingLanguage = true;
+
+  static const Map<String, String> _languageNames = {
+    'pt': 'Português',
+    'en': 'English',
+    'ja': '日本語',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'zh': '中文',
+    'ko': '한국어',
+    'ar': 'العربية',
+    'ru': 'Русский',
+    'hi': 'हिन्दी',
+    'id': 'Bahasa Indonesia',
+    'it': 'Italiano',
+    'nl': 'Nederlands',
+    'tr': 'Türkçe',
+    'th': 'ไทย',
+    'vi': 'Tiếng Việt',
+  };
 
   @override
   void initState() {
@@ -4894,7 +4916,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadNotificationPreference() async {
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
-      if (mounted) setState(() => _loadingNotifications = false);
+      if (mounted) {
+        setState(() {
+          _loadingNotifications = false;
+          _loadingLanguage = false;
+        });
+      }
       return;
     }
     try {
@@ -4903,11 +4930,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           notifications = pilot['push_enabled'] == 1 || pilot['push_enabled'] == true;
+          _language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
           _loadingNotifications = false;
+          _loadingLanguage = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingNotifications = false);
+      if (mounted) {
+        setState(() {
+          _loadingNotifications = false;
+          _loadingLanguage = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _changeLanguage() async {
+    if (_loadingLanguage || !FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF142541),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+          children: [
+            const Text('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            const Text(
+              'Os aviões recebidos e as traduções das mensagens usam este idioma.',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            for (final entry in _languageNames.entries)
+              ListTile(
+                leading: Icon(
+                  _language == entry.key ? Icons.check_circle_rounded : Icons.language_rounded,
+                  color: _language == entry.key ? ppGoldBright : Colors.white54,
+                ),
+                title: Text(entry.value),
+                onTap: () => Navigator.pop(sheetContext, entry.key),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == _language) return;
+    try {
+      await PaperPlaneApi.instance.updateLanguagePreference(selected);
+      if (!mounted) return;
+      setState(() => _language = selected);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Idioma preferido alterado para ' + (_languageNames[selected] ?? selected) + '.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException
+          ? error.message
+          : 'Não foi possível alterar o idioma preferido.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -4965,6 +5047,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Configurações',
       child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
         const SectionTitle('Preferências'),
+        GlassPanel(
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.translate_rounded, color: ppGoldBright),
+            title: const Text('Idioma preferido dos aviões'),
+            subtitle: Text(
+              _loadingLanguage
+                  ? 'A consultar o idioma da tua conta…'
+                  : _languageNames[_language] ?? _language,
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+            onTap: _loadingLanguage ? null : _changeLanguage,
+          ),
+        ),
+        const SizedBox(height: 10),
         GlassPanel(
           child: SwitchListTile(
             contentPadding: EdgeInsets.zero,
