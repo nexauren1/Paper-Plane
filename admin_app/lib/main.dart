@@ -652,7 +652,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
         if (!sendAll) 'targetUid': uid.text.trim(),
         'title': title.text.trim(), 'body': body.text.trim(),
       });
-      toast('Notificações entregues: ' + show(result['sentCount'], '0') +
+      toast('Dispositivos aceites pelo FCM: ' + show(result['sentCount'], '0') +
         ' · falhas: ' + show(result['failedCount'], '0'));
       title.clear(); body.clear(); await load();
     } catch (e) { toast(e.toString()); }
@@ -701,7 +701,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
       title: Text(show(row['title']), style: const TextStyle(fontWeight: FontWeight.w800)),
       subtitle: Text(show(row['body']) + '\n' +
         (row['target_type'] == 'ALL' ? 'Todos' : 'UID: ' + show(row['recipient_uid'])) +
-        ' · enviados ' + show(row['sent_count'], '0') + '/' + show(row['device_count'], '0') +
+        ' · aceites pelo FCM ' + show(row['sent_count'], '0') + '/' + show(row['device_count'], '0') +
         ' · falhas ' + show(row['failed_count'], '0'),
         style: const TextStyle(color: Colors.white60, fontSize: 11)),
       isThreeLine: true,
