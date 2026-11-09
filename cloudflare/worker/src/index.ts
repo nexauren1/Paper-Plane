@@ -579,13 +579,13 @@ async function ensureChamaForReply(
     .bind(conversation.id).run();
 
   const planes = await env.DB.prepare(
-    "SELECT id, sender_uid, message_text, created_at FROM airplanes WHERE id IN (?, ?) AND moderation_state = 'SAFE' AND status IN ('FLYING','DELIVERED','READ','RESPONDED') ORDER BY created_at ASC",
+    "SELECT id, sender_uid, message_text, message_language_tag, created_at FROM airplanes WHERE id IN (?, ?) AND moderation_state = 'SAFE' AND status IN ('FLYING','DELIVERED','READ','RESPONDED') ORDER BY created_at ASC",
   ).bind(originalAirplaneId, replyAirplaneId).all<{
-    id: string; sender_uid: string; message_text: string; created_at: string;
+    id: string; sender_uid: string; message_text: string; message_language_tag: string; created_at: string;
   }>();
   const statements = (planes.results ?? []).map((plane) => env.DB.prepare(
-    "INSERT OR IGNORE INTO chat_messages(id, conversation_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
-  ).bind("plane:" + plane.id, conversation.id, plane.sender_uid, plane.message_text, plane.created_at));
+    "INSERT OR IGNORE INTO chat_messages(id, conversation_id, sender_uid, message_text, message_language_tag, moderation_state, created_at) VALUES (?, ?, ?, ?, ?, 'SAFE', ?)",
+  ).bind("plane:" + plane.id, conversation.id, plane.sender_uid, plane.message_text, plane.message_language_tag, plane.created_at));
   const latestMessageAt = planes.results && planes.results.length
     ? planes.results[planes.results.length - 1].created_at
     : null;
