@@ -575,43 +575,137 @@ class SupportPage extends StatefulWidget {
 class _SupportPageState extends State<SupportPage> {
   List<Map<String, dynamic>> tickets = [];
   bool loading = false;
+
   @override
-  void initState() { super.initState(); load(); }
-  void toast(String s) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s)));
+  void initState() {
+    super.initState();
+    load();
+  }
+
+  void toast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
   Future<void> load() async {
     setState(() => loading = true);
     try {
-      final data = await widget.api.get('/v1/admin/support');
-      if (mounted) setState(() => tickets = itemsOf(data['items']));
-    } catch (e) { if (mounted) toast(e.toString()); }
-    finally { if (mounted) setState(() => loading = false); }
+      final result = await widget.api.get('/v1/admin/support');
+      if (mounted) {
+        setState(() => tickets = itemsOf(result['items']));
+      }
+    } catch (error) {
+      if (mounted) toast(error.toString());
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
-  Future<void> updateTicket(String id, String actionName) async {
-    try { await widget.api.post('/v1/admin/support/' + Uri.encodeComponent(id), {'action': actionName}); await load(); }
-    catch (e) { toast(e.toString()); }
+
+  Future<void> updateTicket(String id, String action) async {
+    try {
+      await widget.api.post(
+        '/v1/admin/support/' + Uri.encodeComponent(id),
+        {'action': action},
+      );
+      toast('Pedido de suporte atualizado.');
+      await load();
+    } catch (error) {
+      if (mounted) toast(error.toString());
+    }
   }
+
   @override
-  Widget build(BuildContext context) => Column(children: [
-    const Padding(padding: EdgeInsets.all(16),
-      child: SectionTitle('Centro de suporte', 'Pedidos privados e problemas reportados pelos utilizadores.')),
-    if (loading) const LinearProgressIndicator(minHeight: 2, color: gold),
-    Expanded(child: tickets.isEmpty && !loading
-      ? const EmptyPanel(icon: Icons.support_agent, text: 'Não há pedidos em aberto.')
-      : RefreshIndicator(onRefresh: load, child: ListView(padding: const EdgeInsets.all(12),
-          children: tickets.map((t) => Card(child: Padding(padding: const EdgeInsets.all(13), child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(show(t['subject']), style: const TextStyle(color: goldLight, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 5),
-              Text(show(t['details']), style: const TextStyle(height: 1.4)),
-              Text(show(t['category']) + ' · @' + show(t['pilot_handle']) + ' · ' + show(t['status']),
-                style: const TextStyle(color: Colors.white54, fontSize: 10)),
-              Wrap(children: [
-                TextButton(onPressed: () => updateTicket(t['id'].toString(), 'in_review'), child: const Text('Em análise')),
-                TextButton(onPressed: () => updateTicket(t['id'].toString(), 'resolve'), child: const Text('Resolver')),
-                TextButton(onPressed: () => updateTicket(t['id'].toString(), 'close'), child: const Text('Fechar')),
-              ]),
-            ]))).toList()))),
-  ]);
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(16),
+          child: SectionTitle(
+            'Centro de suporte',
+            'Pedidos privados e problemas reportados pelos utilizadores.',
+          ),
+        ),
+        if (loading)
+          const LinearProgressIndicator(minHeight: 2, color: gold),
+        Expanded(
+          child: tickets.isEmpty && !loading
+              ? const EmptyPanel(
+                  icon: Icons.support_agent,
+                  text: 'Não há pedidos em aberto.',
+                )
+              : RefreshIndicator(
+                  onRefresh: load,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: tickets.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final ticket = tickets[index];
+                      final id = ticket['id']?.toString() ?? '';
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                show(ticket['subject']),
+                                style: const TextStyle(
+                                  color: goldLight,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                show(ticket['details']),
+                                style: const TextStyle(height: 1.4),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                show(ticket['category']) +
+                                    ' · @' + show(ticket['pilot_handle']) +
+                                    ' · ' + show(ticket['status']),
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 4,
+                                children: [
+                                  TextButton(
+                                    onPressed: id.isEmpty
+                                        ? null
+                                        : () => updateTicket(id, 'in_review'),
+                                    child: const Text('Em análise'),
+                                  ),
+                                  TextButton(
+                                    onPressed: id.isEmpty
+                                        ? null
+                                        : () => updateTicket(id, 'resolve'),
+                                    child: const Text('Resolver'),
+                                  ),
+                                  TextButton(
+                                    onPressed: id.isEmpty
+                                        ? null
+                                        : () => updateTicket(id, 'close'),
+                                    child: const Text('Fechar'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
 }
 
 class AnnouncementsPage extends StatefulWidget {
