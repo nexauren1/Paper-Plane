@@ -1382,7 +1382,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ error: "FORBIDDEN" }, 403);
   }
 
-  const adminBlockMatch = path.match(/^\\/v1\\/admin\\/blocks\\/([^/]+)\\/([^/]+)$/);
+  const adminBlockMatch = path.match(/^\/v1\/admin\/blocks\/([^/]+)\/([^/]+)$/);
   if (adminBlockMatch && method === "POST") {
     const blockerUid = adminBlockMatch[1];
     const blockedUid = adminBlockMatch[2];
@@ -1436,7 +1436,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ items: rows.results ?? [] });
   }
 
-  const adminUserMatch = path.match(/^\\/v1\\/admin\\/users\\/([^/]+)$/);
+  const adminUserMatch = path.match(/^\/v1\/admin\/users\/([^/]+)$/);
   if (adminUserMatch && method === "GET") {
     const targetUid = adminUserMatch[1];
     const user = await env.DB.prepare(
