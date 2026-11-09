@@ -555,6 +555,8 @@ async function ensureChamaForReply(
     "SELECT id FROM conversations WHERE user_a = ? AND user_b = ? AND kind = 'CHAMA' LIMIT 1",
   ).bind(userA, userB).first<{ id: string }>();
   if (!conversation) return null;
+  await env.DB.prepare("UPDATE conversations SET hidden_at_a = NULL, hidden_at_b = NULL WHERE id = ?")
+    .bind(conversation.id).run();
 
   const planes = await env.DB.prepare(
     "SELECT id, sender_uid, message_text, created_at FROM airplanes WHERE id IN (?, ?) AND moderation_state = 'SAFE' AND status IN ('FLYING','DELIVERED','READ','RESPONDED') ORDER BY created_at ASC",
@@ -1319,8 +1321,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
        FROM conversations c
        JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
        WHERE (c.user_a = ? OR c.user_b = ?) AND c.kind = ?
+         AND ((c.user_a = ? AND c.hidden_at_a IS NULL) OR (c.user_b = ? AND c.hidden_at_b IS NULL))
        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC LIMIT 100`,
-    ).bind(uid, uid, uid, uid, kind).all();
+    ).bind(uid, uid, uid, uid, kind, uid, uid).all();
     return json({ items: rows.results ?? [] });
   }
 
@@ -1359,7 +1362,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       "SELECT id, kind FROM conversations WHERE user_a = ? AND user_b = ? AND kind = 'CHAT' LIMIT 1",
     ).bind(userA, userB).first<{ id: string; kind: string }>();
     if (!conversation) return json({ error: "CHAT_CREATE_FAILED" }, 500);
+    await env.DB.prepare(
+      "UPDATE conversations SET hidden_at_a = CASE WHEN user_a = ? THEN NULL ELSE hidden_at_a END, hidden_at_b = CASE WHEN user_b = ? THEN NULL ELSE hidden_at_b END WHERE id = ?",
+    ).bind(uid, uid, conversation.id).run();
     return json({ conversation: { id: conversation.id, kind: conversation.kind }, created: true }, 201);
+  }
+
+  const deleteConversationMatch = path.match(/^\/v1\/(chats|chamas)\/([^/]+)$/);
+  if (method === "DELETE" && deleteConversationMatch) {
+    const expectedKind = deleteConversationMatch[1] === "chamas" ? "CHAMA" : "CHAT";
+    const result = await env.DB.prepare(
+      "UPDATE conversations SET hidden_at_a = CASE WHEN user_a = ? THEN ? ELSE hidden_at_a END, hidden_at_b = CASE WHEN user_b = ? THEN ? ELSE hidden_at_b END WHERE id = ? AND kind = ? AND (user_a = ? OR user_b = ?)",
+    ).bind(uid, isoNow(), uid, isoNow(), deleteConversationMatch[2], expectedKind, uid, uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "CONVERSATION_NOT_FOUND" }, 404);
+    return json({ ok: true, hidden: true });
   }
 
   const chatMessagesMatch = path.match(/^\/v1\/chats\/([^/]+)\/messages$/);
@@ -1389,13 +1405,43 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       env.DB.prepare(
         "INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
       ).bind(id, conversation.id, uid, message, createdAt),
-      env.DB.prepare("UPDATE conversations SET last_message_at = ? WHERE id = ?")
-        .bind(createdAt, conversation.id),
+      env.DB.prepare(
+        "UPDATE conversations SET last_message_at = ?, hidden_at_a = CASE WHEN user_a = ? THEN NULL ELSE hidden_at_a END, hidden_at_b = CASE WHEN user_b = ? THEN NULL ELSE hidden_at_b END WHERE id = ?",
+      ).bind(createdAt, uid, uid, conversation.id),
     ]);
     ctx.waitUntil(notifyChatMessage(otherUid, conversation.id, env));
     return json({
       message: { id, conversation_id: conversation.id, sender_uid: uid, message_text: message, created_at: createdAt },
     }, 201);
+  }
+
+  const airplaneDeleteMatch = path.match(/^\/v1\/airplanes\/([^/]+)$/);
+  if (method === "DELETE" && airplaneDeleteMatch) {
+    const airplane = await env.DB.prepare(
+      "SELECT sender_uid, recipient_uid FROM airplanes WHERE id = ? LIMIT 1",
+    ).bind(airplaneDeleteMatch[1]).first<{ sender_uid: string; recipient_uid: string | null }>();
+    if (!airplane) return json({ error: "AIRPLANE_NOT_FOUND" }, 404);
+    if (airplane.sender_uid === uid) {
+      await env.DB.prepare("UPDATE airplanes SET sender_hidden_at = ? WHERE id = ? AND sender_uid = ?")
+        .bind(isoNow(), airplaneDeleteMatch[1], uid).run();
+      return json({ ok: true, hidden: true, scope: "sent" });
+    }
+    if (airplane.recipient_uid === uid) {
+      const removed = await env.DB.prepare("DELETE FROM inbox WHERE airplane_id = ? AND recipient_uid = ?")
+        .bind(airplaneDeleteMatch[1], uid).run();
+      if ((removed.meta?.changes ?? 0) !== 1) return json({ error: "AIRPLANE_NOT_FOUND" }, 404);
+      return json({ ok: true, hidden: true, scope: "inbox" });
+    }
+    return json({ error: "AIRPLANE_NOT_FOUND" }, 404);
+  }
+
+  const cancelAirplaneMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/cancel$/);
+  if (method === "POST" && cancelAirplaneMatch) {
+    const result = await env.DB.prepare(
+      "UPDATE airplanes SET status = 'RELEASED', cancelled_at = ? WHERE id = ? AND sender_uid = ? AND status IN ('QUEUED','FLYING') AND cancelled_at IS NULL",
+    ).bind(isoNow(), cancelAirplaneMatch[1], uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "FLIGHT_CANNOT_BE_CANCELLED" }, 409);
+    return json({ ok: true, status: "CANCELLED" });
   }
 
   const chatMatch = path.match(/^\/v1\/chats\/([^/]+)$/);
@@ -1410,6 +1456,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
        WHERE c.id = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1`,
     ).bind(uid, uid, chatMatch[1], uid, uid).first();
     if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    await env.DB.prepare(
+      "UPDATE conversations SET hidden_at_a = CASE WHEN user_a = ? THEN NULL ELSE hidden_at_a END, hidden_at_b = CASE WHEN user_b = ? THEN NULL ELSE hidden_at_b END WHERE id = ?",
+    ).bind(uid, uid, chatMatch[1]).run();
     if ((conversation as { kind?: string }).kind === "CHAT") {
       await env.DB.prepare(
         "UPDATE chat_messages SET read_at = ? WHERE conversation_id = ? AND sender_uid <> ? AND read_at IS NULL",
@@ -1926,7 +1975,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/airplanes/sent") {
     const rows = await env.DB.prepare(
-      "SELECT id, audience, status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at FROM airplanes WHERE sender_uid = ? ORDER BY created_at DESC LIMIT 100",
+      "SELECT id, audience, CASE WHEN cancelled_at IS NOT NULL THEN 'CANCELLED' ELSE status END AS status, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, cancelled_at FROM airplanes WHERE sender_uid = ? AND sender_hidden_at IS NULL ORDER BY created_at DESC LIMIT 100",
     ).bind(uid).all();
     return json({ items: rows.results ?? [] });
   }
@@ -1934,9 +1983,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const flightMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/flight$/);
   if (method === "GET" && flightMatch) {
     const loadFlightPlane = () => env.DB.prepare(
-      "SELECT id, sender_uid, recipient_uid, reply_to_id, status, moderation_state, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
+      "SELECT id, sender_uid, recipient_uid, reply_to_id, status, cancelled_at, moderation_state, destination_country, created_at, matched_at, delivered_at, read_at, flight_distance_km, flight_duration_seconds, flight_started_at, estimated_arrival_at, route_json FROM airplanes WHERE id = ? AND (sender_uid = ? OR recipient_uid = ?) LIMIT 1",
     ).bind(flightMatch[1], uid, uid).first<{
-      id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; status: string; moderation_state: string;
+      id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; status: string; cancelled_at: string | null; moderation_state: string;
       destination_country: string | null; created_at: string; matched_at: string | null;
       delivered_at: string | null; read_at: string | null; flight_distance_km: number | null;
       flight_duration_seconds: number | null; flight_started_at: string | null;
@@ -2027,7 +2076,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     return json({
       flight: {
-        id: plane.id, status: plane.status, matchedAt: plane.matched_at,
+        id: plane.id, status: plane.cancelled_at ? "CANCELLED" : plane.status, matchedAt: plane.matched_at,
         searching: plane.status === "QUEUED" && plane.moderation_state === "SAFE",
         moderationState: plane.moderation_state,
         conversationId,
