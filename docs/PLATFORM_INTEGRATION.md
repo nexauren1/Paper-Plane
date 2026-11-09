@@ -34,11 +34,11 @@ This branch prepares the production architecture without committing private cred
 - Reports, blocks, and administrative actions are stored in D1. Admin-only endpoints can list open reports, dismiss/action reports, and suspend accounts. Admin access uses the Worker secret ADMIN_UIDS.
 - Moderation review endpoints are restricted to Firebase UIDs listed in the Worker secret ADMIN_UIDS.
 
-### Message safety and optional AI
-- Sending does not call an AI model and does not depend on AI availability. A fast local filter rejects only a small set of explicit, high-confidence threats, self-harm encouragement, and sexual solicitation.
-- Ordinary greetings, friendship, everyday conversation, and other normal messages are not held for an AI review.
-- Reports, user blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls remain active. The local filter is not a guarantee that every harmful message will be detected; users must still be able to report and block accounts.
-- Workers AI uses `@cf/meta/m2m100-1.2b`. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; the original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
+### Message safety and AI translation
+- The current Worker moderation function returns SAFE without running a content classifier. Automated content moderation and an operational human-review process are not implemented yet; do not present them as active protections.
+- Reporting, blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls are implemented. These controls do not replace content moderation or guarantee that harmful messages will be detected.
+- Workers AI uses `@cf/meta/m2m100-1.2b` for translation only. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; the original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
+- Automated screening, human-review operations, account deletion/export, and tested retention procedures remain pre-release requirements.
 
 ## Self-declared age groups and child safety
 
