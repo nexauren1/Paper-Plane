@@ -35,10 +35,13 @@ This branch prepares the production architecture without committing private cred
 - Moderation review endpoints are restricted to Firebase UIDs listed in the Worker secret ADMIN_UIDS.
 
 ### Message safety and AI translation
-- The current Worker moderation function returns SAFE without running a content classifier. Automated content moderation and an operational human-review process are not implemented yet; do not present them as active protections.
-- Reporting, blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls are implemented. These controls do not replace content moderation or guarantee that harmful messages will be detected.
-- Workers AI uses `@cf/meta/m2m100-1.2b` for translation only. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; the original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
-- Automated screening now has a server-side classifier, and the Admin app exposes held planes, held public replies and user reports for operator review. A staffed human-review schedule, escalation policy, account deletion/export tests, retention procedures and launch-country legal review remain pre-release requirements.
+
+- The Worker uses Cloudflare Workers AI model `@cf/meta/llama-guard-3-8b` for first-pass screening of airplanes and public replies. Flagged items are not shown in Open Sky or delivered as normal content; they remain in the Admin human-review queue until an authorized operator approves or rejects them.
+- Private Chat messages are screened before storage; messages that are not classified SAFE are not sent. If the model is unavailable or returns an invalid response, the Worker fails closed rather than publishing unverified content.
+- This classifier can make mistakes and is not a guarantee of safety. It does not replace trained moderators, live response coverage, escalation procedures or effective reporting.
+- Reporting, blocking, same-age-cohort matching and rolling hourly anti-spam controls are also active server-side safeguards; none proves a user's identity or declared age.
+- Workers AI uses `@cf/meta/m2m100-1.2b` for translation. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
+- The account screen now provides authenticated JSON data export and a reauthentication-protected account deletion flow. The Worker deletes associated user data and retains only a one-way SHA-256 UID tombstone; the client then requests deletion of the Firebase Authentication identity.
 
 ## Self-declared age groups and child safety
 
@@ -135,10 +138,10 @@ Pages remains the public website. Use a Worker custom domain such as api.yourdom
 
 ## Known work still required before public release
 
-- Add the signing certificate SHA-1 and SHA-256 fingerprints to Firebase and refresh firebase/google-services.json before validating Google sign-in on the signed release APK.
-- Create the D1 database and Queue resources in the correct Cloudflare account.
-- Build the human moderation dashboard/workflow on top of the admin endpoints and define response coverage and escalation procedures.
-- Verify local laws and privacy requirements for every launch country, and publish clear notices for self-declared age information and user safety.
-- Connect live API data to every visual screen; the composer, auth, notification registration, and API clients are prepared, but inbox, Open Sky, profile, collection, and some other visual screens still show illustrative content.
-- Test FCM delivery on a real Android device and configure notification channels.
-- Add integration tests using Firebase Auth and Cloudflare staging resources before production.
+- Register the permanent signing certificate SHA-1/SHA-256 in Firebase, download a fresh `firebase/google-services.json`, and test Google Login using the exact signed APK.
+- Apply D1 migrations `0011_admin_console.sql` and `0012_account_deletion.sql` to staging and production before using the new Admin and privacy endpoints.
+- Verify Cloudflare Queue resources, Workers AI access and the FCM service-account secret. Set the trusted operator UID list in `ADMIN_UIDS`.
+- Confirm that trained human moderators can review every held item, respond to reports, handle escalation and support all launch hours. The Admin APK provides tools; it does not provide staffed coverage.
+- Verify launch-country laws, age-appropriate design, child-safety duties, privacy notices and cross-border data handling. Self-declared age cohorts are not age verification.
+- Test FCM on real Android devices in foreground, background and terminated states, and verify that tapping a notification opens the exact airplane.
+- Run integration tests using Firebase Auth, D1 staging data and Cloudflare Worker staging resources; validate account export/deletion, Open Sky publishing/replies and Admin permissions before production.
