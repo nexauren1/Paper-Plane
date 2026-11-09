@@ -311,6 +311,10 @@ async function ensurePilotReady(uid: string, env: Env) {
 }
 
 async function bootstrap(uid: string, env: Env) {
+  const deleted = await env.DB.prepare(
+    "SELECT 1 AS deleted FROM deleted_accounts WHERE uid_hash = ? LIMIT 1",
+  ).bind(await sha256(uid)).first();
+  if (deleted) return null;
   const existing = await requireUser(uid, env);
   if (existing) return existing;
   const pilotCode = `PP-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
@@ -1298,6 +1302,30 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   if (!uid) return json({ error: "UNAUTHORIZED", message: "A valid Firebase ID token is required." }, 401);
 
   const pilotOnRoute = await requireUser(uid, env);
+  if (method === "DELETE" && path === "/v1/account") {
+    const uidHash = await sha256(uid);
+    const existingDeletion = await env.DB.prepare(
+      "SELECT 1 AS deleted FROM deleted_accounts WHERE uid_hash = ? LIMIT 1",
+    ).bind(uidHash).first();
+    if (existingDeletion) return json({ ok: true, alreadyDeleted: true });
+    if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO deleted_accounts(uid_hash) VALUES (?)").bind(uidHash),
+      env.DB.prepare(
+        "DELETE FROM reports WHERE reporter_uid = ? OR reported_uid = ? OR airplane_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ? OR reply_to_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?))",
+      ).bind(uid, uid, uid, uid, uid, uid),
+      env.DB.prepare(
+        "DELETE FROM public_replies WHERE sender_uid = ? OR airplane_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?)",
+      ).bind(uid, uid, uid),
+      env.DB.prepare(
+        "DELETE FROM airplanes WHERE sender_uid = ? OR recipient_uid = ? OR reply_to_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?)",
+      ).bind(uid, uid, uid, uid),
+      env.DB.prepare("DELETE FROM admin_notifications WHERE recipient_uid = ?").bind(uid),
+      env.DB.prepare("DELETE FROM audit_events WHERE actor_uid = ?").bind(uid),
+      env.DB.prepare("DELETE FROM users WHERE uid = ?").bind(uid),
+    ]);
+    return json({ ok: true, dataDeleted: true, firebaseIdentityMustBeDeleted: true });
+  }
   if (path !== "/v1/users/bootstrap" && !pilotOnRoute) {
     return json({ error: "PILOT_NOT_INITIALIZED", message: "Create the pilot profile first." }, 409);
   }
@@ -1308,29 +1336,19 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   const isAdmin = admins.includes(uid);
 
-  // Permanently close and scrub a pilot account before the client removes the
-  // corresponding Firebase Authentication identity. A closed UID is retained as
-  // a minimal tombstone so the same Firebase identity cannot silently bootstrap again.
-  if (method === "DELETE" && path === "/v1/account") {
-    if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
-    if (pilotOnRoute.status === "CLOSED") return json({ ok: true, alreadyClosed: true });
-    await env.DB.batch([
-      env.DB.prepare(
-        "DELETE FROM reports WHERE reporter_uid = ? OR reported_uid = ? OR airplane_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?)",
-      ).bind(uid, uid, uid, uid),
-      env.DB.prepare("DELETE FROM public_replies WHERE sender_uid = ?").bind(uid),
-      env.DB.prepare("DELETE FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?").bind(uid, uid),
-      env.DB.prepare("DELETE FROM conversations WHERE user_a = ? OR user_b = ?").bind(uid, uid),
-      env.DB.prepare("DELETE FROM audit_events WHERE actor_uid = ?").bind(uid),
-      env.DB.prepare(
-        "UPDATE users SET pilot_code = ?, pilot_name = 'Conta eliminada', pilot_handle = NULL, avatar_url = NULL, birth_year = NULL, declared_age_band = 'UNVERIFIED', age_declaration_at = NULL, profile_completed = 0, language = 'pt', preferred_language = 'pt', country_code = NULL, country_visible = 0, status = 'CLOSED', accept_random_mail = 0, push_enabled = 0, last_received_at = NULL, updated_at = ? WHERE uid = ?",
-      ).bind(`PP-CLOSED-${uid.slice(0, 12)}`, isoNow(), uid),
-    ]);
-    return json({ ok: true, status: "CLOSED", firebaseIdentityMustBeDeleted: true });
-  }
-
   if (path.startsWith("/v1/admin/") && !isAdmin) {
     return json({ error: "FORBIDDEN" }, 403);
+  }
+
+  if (method === "GET" && path === "/v1/admin/blocks") {
+    const rows = await env.DB.prepare(
+      `SELECT b.blocker_uid, a.pilot_handle AS blocker_handle, b.blocked_uid, z.pilot_handle AS blocked_handle, b.created_at
+       FROM blocks b
+       LEFT JOIN users a ON a.uid = b.blocker_uid
+       LEFT JOIN users z ON z.uid = b.blocked_uid
+       ORDER BY b.created_at DESC LIMIT 200`,
+    ).all();
+    return json({ items: rows.results ?? [] });
   }
 
   if (method === "GET" && path === "/v1/admin/dashboard") {
