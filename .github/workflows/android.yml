@@ -68,6 +68,41 @@ jobs:
           print("Android notification permission and monochrome airplane icon are configured.")
           PY
 
+      - name: Enable core library desugaring for Android notifications
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          candidates = [Path("android/app/build.gradle.kts"), Path("android/app/build.gradle")]
+          gradle = next((path for path in candidates if path.exists()), None)
+          if gradle is None:
+              raise SystemExit("Android app Gradle file was not generated.")
+          content = gradle.read_text(encoding="utf-8")
+          kotlin = gradle.suffix == ".kts"
+
+          if "compileOptions {" not in content:
+              raise SystemExit("Could not find the Android compileOptions block.")
+          if kotlin:
+              setting = "        isCoreLibraryDesugaringEnabled = true"
+              dependency = '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+          else:
+              setting = "        coreLibraryDesugaringEnabled true"
+              dependency = "    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
+
+          if "isCoreLibraryDesugaringEnabled = true" not in content and "coreLibraryDesugaringEnabled true" not in content:
+              content = content.replace("    compileOptions {", "    compileOptions {\n" + setting, 1)
+          if "desugar_jdk_libs" not in content:
+              marker = "dependencies {"
+              index = content.find(marker)
+              if index < 0:
+                  raise SystemExit("Could not find the Gradle dependencies block.")
+              insert_at = index + len(marker)
+              content = content[:insert_at] + "\n" + dependency + content[insert_at:]
+          gradle.write_text(content, encoding="utf-8")
+          print(f"Enabled core library desugaring in {gradle}.")
+          PY
+
       - name: Use direct Gradle distribution host
         shell: bash
         run: |
