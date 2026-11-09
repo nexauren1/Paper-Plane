@@ -227,6 +227,7 @@ class PaperPlaneNotifications {
     }
 
     final token = await messaging.getToken();
+    await messaging.subscribeToTopic('paper_plane_all');
     if (token == null || token.isEmpty) {
       throw const PaperPlaneApiException('FCM_TOKEN_UNAVAILABLE', 'Não foi possível registar este dispositivo.');
     }
@@ -248,6 +249,7 @@ class PaperPlaneNotifications {
 
     final messaging = FirebaseMessaging.instance;
     final token = await messaging.getToken();
+    await messaging.unsubscribeFromTopic('paper_plane_all');
     await _tokenSubscription?.cancel();
     _tokenSubscription = null;
 
