@@ -189,6 +189,55 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  Future<void> _exportAccountData() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final data = await PaperPlaneApi.instance.exportAccountData();
+      final encoded = const JsonEncoder.withIndent('  ').convert(data);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Os teus dados'),
+          content: SizedBox(
+            width: 520,
+            height: 420,
+            child: SingleChildScrollView(
+              child: SelectableText(encoded, style: const TextStyle(fontSize: 11, height: 1.35)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fechar'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: encoded));
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Dados copiados. Guarda-os num local seguro.')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Copiar JSON'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível exportar os teus dados.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _deleteAccount() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _busy) return;
@@ -383,6 +432,17 @@ class _AccountScreenState extends State<AccountScreen> {
                         style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45),
                       ),
                       const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _exportAccountData,
+                        icon: const Icon(Icons.download_outlined),
+                        label: const Text('Exportar os meus dados (JSON)'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _goldLight,
+                          side: BorderSide(color: _gold.withOpacity(0.45)),
+                          minimumSize: const Size.fromHeight(46),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _deleteAccount,
                         icon: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
