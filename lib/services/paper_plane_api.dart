@@ -148,6 +148,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> deleteAccountData() =>
       _request('/v1/account', method: 'DELETE');
 
+  Future<Map<String, dynamic>> exportAccountData() =>
+      _request('/v1/account/export');
+
   Future<Map<String, dynamic>> getProfile() => _request('/v1/profile');
 
   Future<Map<String, dynamic>> saveFirstFlight({
