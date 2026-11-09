@@ -1176,7 +1176,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
       if (id == null || id.isEmpty) {
         throw const PaperPlaneApiException('AIRPLANE_NOT_CREATED', 'O servidor não confirmou a criação do avião.');
       }
-      final isPublic = _visibility == 'Público';
+      final isPublic = const {'Público', 'Public', 'PUBLIC', 'Open Sky'}.contains(_visibility.trim());
       if (isPublic) {
         Navigator.of(context).pop();
         final published = airplane['status']?.toString() == 'DELIVERED' &&
