@@ -2060,18 +2060,35 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       "SELECT id, sender_uid, recipient_uid, reply_to_id, audience, status FROM airplanes WHERE id = ? AND status = 'HELD_REVIEW'",
     ).bind(airplaneId).first<{ id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; audience: string; status: string }>();
     if (!plane) return json({ error: "NOT_FOUND" }, 404);
+    if (body.action !== "approve" && body.action !== "reject") {
+      return json({ error: "INVALID_ACTION" }, 400);
+    }
     if (body.action === "reject") {
-      await env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE id = ?")
-        .bind(airplaneId).run();
+      const rejected = await env.DB.prepare(
+        "UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE id = ? AND status = 'HELD_REVIEW'",
+      ).bind(airplaneId).run();
+      if ((rejected.meta?.changes ?? 0) !== 1) {
+        return json({ error: "REVIEW_ALREADY_RESOLVED" }, 409);
+      }
+      await env.DB.prepare(
+        "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_AIRPLANE_REJECTED', ?, ?)",
+      ).bind(uuid(), uid, airplaneId, JSON.stringify({ action: "reject" })).run();
       return json({ ok: true, status: "REJECTED" });
     }
-    if (body.action !== "approve") return json({ error: "INVALID_ACTION" }, 400);
+
     const sender = await requireUser(plane.sender_uid, env);
-    if (!sender || !["UNDER_18", "ADULT"].includes(sender.declared_age_band)) {
+    if (
+      !sender ||
+      sender.status !== "ACTIVE" ||
+      sender.profile_completed !== 1 ||
+      !sender.country_code ||
+      !["UNDER_18", "ADULT"].includes(sender.declared_age_band)
+    ) {
       return json({ error: "AGE_DECLARATION_REQUIRED" }, 403);
     }
 
     let nextStatus: "DELIVERED" | "FLYING" | "QUEUED";
+    let approvedRoute: ReturnType<typeof buildFlightPlan> = null;
     if (plane.audience === "PUBLIC") {
       nextStatus = "DELIVERED";
     } else if (plane.audience === "DIRECT") {
@@ -2080,6 +2097,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       if (
         !recipient ||
         recipient.status !== "ACTIVE" ||
+        recipient.profile_completed !== 1 ||
+        !recipient.country_code ||
         !["UNDER_18", "ADULT"].includes(recipient.declared_age_band) ||
         recipient.declared_age_band !== sender.declared_age_band
       ) return json({ error: "RECIPIENT_UNAVAILABLE" }, 409);
@@ -2087,33 +2106,51 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
       ).bind(plane.sender_uid, plane.recipient_uid, plane.recipient_uid, plane.sender_uid).first();
       if (blocked) return json({ error: "RECIPIENT_UNAVAILABLE" }, 409);
+      approvedRoute = buildFlightPlan(
+        sender.country_code,
+        recipient.country_code,
+        Boolean(plane.reply_to_id),
+      );
+      if (!approvedRoute) return json({ error: "ROUTE_UNAVAILABLE" }, 409);
       nextStatus = "FLYING";
     } else {
       nextStatus = "QUEUED";
     }
 
-    await env.DB.prepare(
-      "UPDATE airplanes SET moderation_state = 'SAFE', status = ?, delivered_at = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_at END WHERE id = ? AND status = 'HELD_REVIEW'",
-    ).bind(nextStatus, nextStatus, isoNow(), airplaneId).run();
+    const now = isoNow();
+    const expiresAt = new Date(
+      Date.now() + (nextStatus === "DELIVERED" ? 7 : 1) * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const approvalResult = nextStatus === "FLYING" && approvedRoute
+      ? await env.DB.prepare(
+          "UPDATE airplanes SET moderation_state = 'SAFE', moderation_categories = '[]', status = 'FLYING', flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ? AND status = 'HELD_REVIEW'",
+        ).bind(
+          approvedRoute.distanceKm,
+          approvedRoute.durationSeconds,
+          approvedRoute.startedAt,
+          approvedRoute.arrivalAt,
+          approvedRoute.routeJson,
+          airplaneId,
+        ).run()
+      : await env.DB.prepare(
+          "UPDATE airplanes SET moderation_state = 'SAFE', moderation_categories = '[]', status = ?, delivered_at = CASE WHEN ? = 'DELIVERED' THEN ? ELSE delivered_at END, expires_at = ? WHERE id = ? AND status = 'HELD_REVIEW'",
+        ).bind(nextStatus, nextStatus, now, expiresAt, airplaneId).run();
+
+    if ((approvalResult.meta?.changes ?? 0) !== 1) {
+      return json({ error: "REVIEW_ALREADY_RESOLVED" }, 409);
+    }
 
     if (nextStatus === "DELIVERED") {
       await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
-    } else if (nextStatus === "FLYING") {
-      const sender = await requireUser(plane.sender_uid, env);
-      const recipient = plane.recipient_uid ? await requireUser(plane.recipient_uid, env) : null;
-      const route = buildFlightPlan(sender?.country_code ?? null, recipient?.country_code ?? null);
-      if (!route || !recipient) return json({ error: "ROUTE_UNAVAILABLE" }, 409);
-      await env.DB.prepare(
-        "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
-      ).bind(route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
-      if (plane.reply_to_id) {
-        await env.DB.prepare(
-          "UPDATE airplanes SET status = 'RESPONDED' WHERE id = ? AND status IN ('DELIVERED','READ')",
-        ).bind(plane.reply_to_id).run();
-      }
-    } else {
+    } else if (nextStatus === "FLYING" && plane.reply_to_id) {
+      // The original airplane is marked RESPONDED when the reply actually arrives.
+    } else if (nextStatus === "QUEUED") {
       await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
     }
+
+    await env.DB.prepare(
+      "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_AIRPLANE_APPROVED', ?, ?)",
+    ).bind(uuid(), uid, airplaneId, JSON.stringify({ status: nextStatus })).run();
     return json({ ok: true, status: nextStatus });
   }
 
