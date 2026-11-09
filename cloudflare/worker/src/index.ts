@@ -606,7 +606,7 @@ async function notifyChatMessage(uid: string, conversationId: string, env: Env) 
               body: "Tens uma nova mensagem privada.",
             },
             data: { type: "CHAT_MESSAGE", conversationId },
-            android: { priority: "HIGH" },
+            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
           },
         }),
       });
@@ -1294,6 +1294,13 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const uid = await authenticate(request, env);
   if (!uid) return json({ error: "UNAUTHORIZED", message: "A valid Firebase ID token is required." }, 401);
 
+  const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  const isAdmin = admins.includes(uid);
+  const isAdminRoute = path.startsWith("/v1/admin/");
+  if (isAdminRoute && !isAdmin) {
+    return json({ error: "FORBIDDEN" }, 403);
+  }
+
   const pilotOnRoute = await requireUser(uid, env);
   if (method === "GET" && path === "/v1/account/export") {
     if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
@@ -1368,18 +1375,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ]);
     return json({ ok: true, dataDeleted: true, firebaseIdentityMustBeDeleted: true });
   }
-  if (path !== "/v1/users/bootstrap" && !pilotOnRoute) {
+  if (!isAdminRoute && path !== "/v1/users/bootstrap" && !pilotOnRoute) {
     return json({ error: "PILOT_NOT_INITIALIZED", message: "Create the pilot profile first." }, 409);
   }
-  if (pilotOnRoute && pilotOnRoute.status !== "ACTIVE") {
+  if (!isAdminRoute && pilotOnRoute && pilotOnRoute.status !== "ACTIVE") {
     return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
-  }
-
-  const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
-  const isAdmin = admins.includes(uid);
-
-  if (path.startsWith("/v1/admin/") && !isAdmin) {
-    return json({ error: "FORBIDDEN" }, 403);
   }
 
   const adminBlockMatch = path.match(/^\/v1\/admin\/blocks\/([^/]+)\/([^/]+)$/);
@@ -1956,8 +1956,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (action === "suspend_user") {
       if (!report.reported_uid) return json({ error: "REPORTED_USER_UNAVAILABLE" }, 409);
       await env.DB.batch([
-        env.DB.prepare("UPDATE users SET status = 'SUSPENDED', accept_random_mail = 0, updated_at = ? WHERE uid = ?")
+        env.DB.prepare("UPDATE users SET status = 'SUSPENDED', accept_random_mail = 0, push_enabled = 0, updated_at = ? WHERE uid = ?")
           .bind(isoNow(), report.reported_uid),
+        env.DB.prepare("DELETE FROM devices WHERE uid = ?").bind(report.reported_uid),
         env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE sender_uid = ? AND status IN ('QUEUED','FLYING','HELD_REVIEW')")
           .bind(report.reported_uid),
         env.DB.prepare("UPDATE reports SET status = 'ACTIONED' WHERE id = ?").bind(report.id),
