@@ -24,7 +24,7 @@ This branch prepares the production architecture without committing private cred
 
 ### Worker API and D1
 - Firebase RS256 ID-token signature, issuer, audience, expiry, and subject are verified on the Worker.
-- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented.
+- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented. The core Flutter screens request live API data; they must still be integration-tested against production resources.
 - Original planes have unlimited daily sending, a rolling hourly anti-spam safeguard, and a 200-character limit.
 - Random planes are matched immediately when an eligible recipient exists, then retried by the queue and scheduled matcher when nobody is available; they are never falsely marked delivered.
 - Matching only considers active users in the same self-declared age group. Blocks apply in both directions; this is cohort separation, not proof of age.
@@ -38,7 +38,7 @@ This branch prepares the production architecture without committing private cred
 - The current Worker moderation function returns SAFE without running a content classifier. Automated content moderation and an operational human-review process are not implemented yet; do not present them as active protections.
 - Reporting, blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls are implemented. These controls do not replace content moderation or guarantee that harmful messages will be detected.
 - Workers AI uses `@cf/meta/m2m100-1.2b` for translation only. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; the original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
-- Automated screening, human-review operations, account deletion/export, and tested retention procedures remain pre-release requirements.
+- Automated screening now has a server-side classifier, and the Admin app exposes held planes, held public replies and user reports for operator review. A staffed human-review schedule, escalation policy, account deletion/export tests, retention procedures and launch-country legal review remain pre-release requirements.
 
 ## Self-declared age groups and child safety
 
