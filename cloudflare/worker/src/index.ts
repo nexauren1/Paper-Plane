@@ -619,6 +619,80 @@ async function notifyChatMessage(uid: string, conversationId: string, env: Env) 
   }
 }
 
+async function sendAdminAnnouncement(
+  actorUid: string,
+  targetUid: string | null,
+  title: string,
+  body: string,
+  env: Env,
+): Promise<{ id: string; deviceCount: number; sentCount: number; failedCount: number }> {
+  const id = uuid();
+  const serviceToken = await exchangeFcmAccessToken(env);
+  if (!serviceToken) throw new Error("FCM_NOT_CONFIGURED");
+
+  const targetFilter = targetUid ? "AND d.uid = ?" : "";
+  const devices = await env.DB.prepare(
+    `SELECT d.uid, d.fcm_token
+     FROM devices d JOIN users u ON u.uid = d.uid
+     WHERE u.push_enabled = 1 AND u.status = 'ACTIVE' ${targetFilter}
+     ORDER BY d.uid LIMIT 5000`,
+  ).bind(...(targetUid ? [targetUid] : [])).all<{ uid: string; fcm_token: string }>();
+
+  let sentCount = 0;
+  let failedCount = 0;
+  for (const device of devices.results ?? []) {
+    try {
+      const response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            message: {
+              token: device.fcm_token,
+              notification: { title, body },
+              data: { type: "ADMIN_ANNOUNCEMENT", announcementId: id },
+              android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
+            },
+          }),
+        },
+      );
+      if (response.ok) {
+        sentCount++;
+      } else {
+        failedCount++;
+        if (response.status === 404) {
+          const failure = await response.json().catch(() => ({})) as {
+            error?: { details?: Array<{ errorCode?: string }> };
+          };
+          const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
+          if (errorCode === "UNREGISTERED") {
+            await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?")
+              .bind(device.uid, device.fcm_token).run();
+          }
+        }
+      }
+    } catch {
+      failedCount++;
+    }
+  }
+
+  await env.DB.prepare(
+    "INSERT INTO admin_notifications(id, actor_uid, target_type, recipient_uid, title, body, device_count, sent_count, failed_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  ).bind(
+    id, actorUid, targetUid ? "USER" : "ALL", targetUid, title, body,
+    devices.results?.length ?? 0, sentCount, failedCount,
+  ).run();
+  await env.DB.prepare(
+    "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_NOTIFICATION_SENT', ?, ?)",
+  ).bind(
+    uuid(), actorUid, id,
+    JSON.stringify({ targetType: targetUid ? "USER" : "ALL", recipientUid: targetUid, deviceCount: devices.results?.length ?? 0, sentCount, failedCount }),
+  ).run();
+
+  return { id, deviceCount: devices.results?.length ?? 0, sentCount, failedCount };
+}
+
 async function ensureChamaForReply(
   replyAirplaneId: string,
   senderUid: string,
