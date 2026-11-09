@@ -139,6 +139,19 @@ jobs:
           (adaptive / "ic_launcher.xml").write_text(adaptive_xml, encoding="utf-8")
           (adaptive / "ic_launcher_round.xml").write_text(adaptive_xml, encoding="utf-8")
 
+          # Remove Flutter's generated bitmap launcher marks so Android always
+          # resolves the custom Paper Plane vector resource instead.
+          for folder in res.glob("mipmap-*"):
+              if folder.name in {"mipmap-anydpi", "mipmap-anydpi-v26"}:
+                  continue
+              for filename in (
+                  "ic_launcher.png", "ic_launcher.webp",
+                  "ic_launcher_round.png", "ic_launcher_round.webp",
+              ):
+                  candidate = folder / filename
+                  if candidate.exists():
+                      candidate.unlink()
+
           colors = values / "colors.xml"
           color_entry = '<color name="ic_launcher_background">#071225</color>'
           if colors.exists():
@@ -171,11 +184,11 @@ jobs:
           launch.write_text("""<?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
               <item android:drawable="@color/ic_launcher_background" />
-              <item>
-                  <inset android:drawable="@drawable/ic_launcher_foreground"
-                      android:insetLeft="52dp" android:insetTop="52dp"
-                      android:insetRight="52dp" android:insetBottom="52dp" />
-              </item>
+              <item
+                  android:drawable="@drawable/ic_launcher_foreground"
+                  android:width="108dp"
+                  android:height="108dp"
+                  android:gravity="center" />
           </layer-list>
           """, encoding="utf-8")
 
