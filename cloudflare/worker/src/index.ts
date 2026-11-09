@@ -627,18 +627,18 @@ async function sendAdminAnnouncement(
   const serviceToken = await exchangeFcmAccessToken(env);
   if (!serviceToken) throw new Error("FCM_NOT_CONFIGURED");
 
-  const targetFilter = targetUid ? "AND d.uid = ?" : "";
-  const devices = await env.DB.prepare(
-    `SELECT d.uid, d.fcm_token
-     FROM devices d JOIN users u ON u.uid = d.uid
-     WHERE u.push_enabled = 1 AND u.status = 'ACTIVE' ${targetFilter}
-     ORDER BY d.uid LIMIT 5000`,
-  ).bind(...(targetUid ? [targetUid] : [])).all<{ uid: string; fcm_token: string }>();
-
+  let deviceCount = 0;
   let sentCount = 0;
   let failedCount = 0;
-  for (const device of devices.results ?? []) {
-    try {
+
+  if (!targetUid) {
+    // Topic fan-out lets FCM deliver a global announcement without thousands of
+    // sequential HTTP calls inside one Worker request. Only opted-in devices join.
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS total FROM devices d JOIN users u ON u.uid = d.uid WHERE u.push_enabled = 1 AND u.status = 'ACTIVE'",
+    ).first<{ total: number }>();
+    deviceCount = Number(count?.total ?? 0);
+    if (deviceCount > 0) {
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`,
         {
@@ -646,7 +646,7 @@ async function sendAdminAnnouncement(
           headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
           body: JSON.stringify({
             message: {
-              token: device.fcm_token,
+              topic: "paper_plane_all",
               notification: { title, body },
               data: { type: "ADMIN_ANNOUNCEMENT", announcementId: id },
               android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
@@ -654,23 +654,53 @@ async function sendAdminAnnouncement(
           }),
         },
       );
-      if (response.ok) {
-        sentCount++;
-      } else {
-        failedCount++;
-        if (response.status === 404) {
-          const failure = await response.json().catch(() => ({})) as {
-            error?: { details?: Array<{ errorCode?: string }> };
-          };
-          const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
-          if (errorCode === "UNREGISTERED") {
-            await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?")
-              .bind(device.uid, device.fcm_token).run();
+      if (response.ok) sentCount = deviceCount;
+      else failedCount = deviceCount;
+    }
+  } else {
+    const devices = await env.DB.prepare(
+      `SELECT d.uid, d.fcm_token
+       FROM devices d JOIN users u ON u.uid = d.uid
+       WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'
+       ORDER BY d.uid LIMIT 20`,
+    ).bind(targetUid).all<{ uid: string; fcm_token: string }>();
+    deviceCount = devices.results?.length ?? 0;
+
+    for (const device of devices.results ?? []) {
+      try {
+        const response = await fetch(
+          `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`,
+          {
+            method: "POST",
+            headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
+            body: JSON.stringify({
+              message: {
+                token: device.fcm_token,
+                notification: { title, body },
+                data: { type: "ADMIN_ANNOUNCEMENT", announcementId: id },
+                android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
+              },
+            }),
+          },
+        );
+        if (response.ok) {
+          sentCount++;
+        } else {
+          failedCount++;
+          if (response.status === 404) {
+            const failure = await response.json().catch(() => ({})) as {
+              error?: { details?: Array<{ errorCode?: string }> };
+            };
+            const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
+            if (errorCode === "UNREGISTERED") {
+              await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?")
+                .bind(device.uid, device.fcm_token).run();
+            }
           }
         }
+      } catch {
+        failedCount++;
       }
-    } catch {
-      failedCount++;
     }
   }
 
@@ -678,16 +708,16 @@ async function sendAdminAnnouncement(
     "INSERT INTO admin_notifications(id, actor_uid, target_type, recipient_uid, title, body, device_count, sent_count, failed_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ).bind(
     id, actorUid, targetUid ? "USER" : "ALL", targetUid, title, body,
-    devices.results?.length ?? 0, sentCount, failedCount,
+    deviceCount, sentCount, failedCount,
   ).run();
   await env.DB.prepare(
     "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_NOTIFICATION_SENT', ?, ?)",
   ).bind(
     uuid(), actorUid, id,
-    JSON.stringify({ targetType: targetUid ? "USER" : "ALL", recipientUid: targetUid, deviceCount: devices.results?.length ?? 0, sentCount, failedCount }),
+    JSON.stringify({ targetType: targetUid ? "USER" : "ALL", recipientUid: targetUid, deviceCount, acceptedByFcm: sentCount, failedCount }),
   ).run();
 
-  return { id, deviceCount: devices.results?.length ?? 0, sentCount, failedCount };
+  return { id, deviceCount, sentCount, failedCount };
 }
 
 async function ensureChamaForReply(
