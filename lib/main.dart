@@ -3744,10 +3744,14 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                 final text = controller.text.trim();
                 if (text.isEmpty) return;
                 try {
-                  await PaperPlaneApi.instance.addPublicReply(id, text);
+                  final response = await PaperPlaneApi.instance.addPublicReply(id, text);
                   if (sheetContext.mounted) Navigator.pop(sheetContext);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Resposta enviada para publicação.')));
+                    final status = response['status']?.toString();
+                    final notice = status == 'PUBLISHED'
+                        ? 'A tua resposta já está publicada no Open Sky.'
+                        : 'A tua resposta foi recebida e aguarda revisão de segurança.';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
                     _refresh();
                   }
                 } catch (error) {
