@@ -313,11 +313,11 @@ jobs:
       - name: Build signed Admin APK
         working-directory: admin_app
         run: |
-          flutter build apk --release \\
-            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \\
-            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \\
-            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \\
-            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \\
+          flutter build apk --release \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
             --dart-define=ADMIN_API_BASE_URL="https://paper-plane.nexaurenstore.workers.dev"
 
       - name: Upload Admin APK
