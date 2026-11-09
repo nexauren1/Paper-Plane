@@ -23,7 +23,12 @@ assert DB.execute(
 ).fetchone() is None, "The obsolete one-plane-per-day counter must be removed"
 
 user_columns = {row[1] for row in DB.execute("PRAGMA table_info(users)").fetchall()}
-assert {"declared_age_band", "age_declaration_at"}.issubset(user_columns), "Missing self-declared age fields"
+assert {"declared_age_band", "age_declaration_at", "preferred_language"}.issubset(user_columns), "Missing self-declared age or language fields"
+DB.execute("UPDATE users SET language = 'en' WHERE uid = 'pilot-a'")
+DB.execute("UPDATE users SET preferred_language = language WHERE language IN ('pt', 'en')")
+assert DB.execute("SELECT preferred_language FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "en", "Legacy profile language was not preserved"
+DB.execute("UPDATE users SET preferred_language = 'ja' WHERE uid = 'pilot-a'")
+assert DB.execute("SELECT preferred_language FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "ja", "Japanese preference was not persisted"
 assert DB.execute("SELECT declared_age_band FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "UNSET", "New accounts must start without a declared age group"
 assert "birth_date" not in user_columns, "Full birth dates must not be retained in D1"
 assert DB.execute(
@@ -114,6 +119,7 @@ except sqlite3.IntegrityError:
 airplane_columns = {
     row[1] for row in DB.execute("PRAGMA table_info(airplanes)").fetchall()
 }
+assert "message_language_tag" in airplane_columns, "Missing full source-language tag on airplanes"
 required_flight_columns = {
     "flight_distance_km",
     "flight_duration_seconds",
@@ -227,7 +233,11 @@ social_tables = {
         "SELECT name FROM sqlite_master WHERE type = 'table'"
     ).fetchall()
 }
-assert {"friendships", "conversations", "chat_messages"}.issubset(social_tables), "Missing social/Chama tables"
+assert {"friendships", "conversations", "chat_messages", "airplane_translations", "chat_translations"}.issubset(social_tables), "Missing social, Chama or translation tables"
+chat_message_columns = {
+    row[1] for row in DB.execute("PRAGMA table_info(chat_messages)").fetchall()
+}
+assert "message_language_tag" in chat_message_columns, "Missing full source-language tag on chat messages"
 
 DB.execute(
     "UPDATE users SET declared_age_band = 'UNDER_18', profile_completed = 1 WHERE uid IN ('pilot-a','pilot-b')"
@@ -245,12 +255,27 @@ DB.execute(
        VALUES ('chama-1', 'pilot-a', 'pilot-b')"""
 )
 DB.execute(
-    """INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text)
-       VALUES ('chat-1', 'chama-1', 'pilot-a', 'Olá, tudo bem?')"""
+    """INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text, message_language_tag)
+       VALUES ('chat-1', 'chama-1', 'pilot-a', 'Olá, tudo bem?', 'pt')"""
 )
 assert DB.execute(
-    "SELECT message_text FROM chat_messages WHERE id = 'chat-1'"
-).fetchone()[0] == "Olá, tudo bem?", "Chama message was not persisted"
+    "SELECT message_text, message_language_tag FROM chat_messages WHERE id = 'chat-1'"
+).fetchone() == ("Olá, tudo bem?", "pt"), "Chama message or its language tag was not persisted"
+DB.execute(
+    """INSERT INTO chat_translations(message_id, target_language, translated_text)
+       VALUES ('chat-1', 'ja', 'こんにちは、お元気ですか？')"""
+)
+assert DB.execute(
+    "SELECT translated_text FROM chat_translations WHERE message_id = 'chat-1' AND target_language = 'ja'"
+).fetchone()[0] == "こんにちは、お元気ですか？", "Japanese chat translation cache failed"
+insert_plane("lang-plane", "pilot-b")
+DB.execute(
+    """INSERT INTO airplane_translations(airplane_id, target_language, translated_text)
+       VALUES ('lang-plane', 'ja', 'こんにちは')"""
+)
+assert DB.execute(
+    "SELECT translated_text FROM airplane_translations WHERE airplane_id = 'lang-plane' AND target_language = 'ja'"
+).fetchone()[0] == "こんにちは", "Japanese airplane translation cache failed"
 
 try:
     DB.execute(
