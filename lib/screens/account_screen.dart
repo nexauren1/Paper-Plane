@@ -189,6 +189,86 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  Future<void> _deleteAccount() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _busy) return;
+    final needsPassword = user.providerData.any((provider) => provider.providerId == 'password');
+    final passwordController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar conta e dados?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Esta ação elimina o perfil, aviões enviados e recebidos, respostas, chats, amizades, denúncias associadas e dispositivos registados. Não pode ser desfeita.',
+            ),
+            if (needsPassword) ...[
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Palavra-passe atual',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              const Text('Será pedida uma nova confirmação pela tua conta Google.'),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Eliminar permanentemente'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      passwordController.dispose();
+      return;
+    }
+
+    setState(() => _busy = true);
+    var serverDataDeleted = false;
+    try {
+      await PaperPlaneAuth.reauthenticateCurrentUser(
+        password: needsPassword ? passwordController.text : null,
+      );
+      await PaperPlaneApi.instance.deleteAccountData();
+      serverDataDeleted = true;
+      await FirebaseAuth.instance.currentUser?.delete();
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Conta e dados eliminados com sucesso.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        final message = serverDataDeleted
+            ? 'Os dados do Paper Plane foram eliminados, mas o Firebase ainda não removeu a identidade. Verifica a sessão e tenta novamente nesta tela. Detalhe: ${_friendlyError(error)}'
+            : _friendlyError(error);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+        );
+      }
+    } finally {
+      passwordController.dispose();
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _signOut() async {
     setState(() => _busy = true);
     try {
@@ -290,6 +370,31 @@ class _AccountScreenState extends State<AccountScreen> {
                   onPressed: _busy ? null : _signOut,
                   icon: const Icon(Icons.logout_rounded),
                   label: const Text('Terminar sessão'),
+                ),
+                const SizedBox(height: 22),
+                _AccountCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Zona de segurança', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 7),
+                      const Text(
+                        'Podes solicitar a eliminação da tua conta e dos dados associados. A confirmação exige voltar a autenticar.',
+                        style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _deleteAccount,
+                        icon: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
+                        label: const Text('Eliminar conta e todos os dados'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(color: Colors.redAccent),
+                          minimumSize: const Size.fromHeight(48),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
