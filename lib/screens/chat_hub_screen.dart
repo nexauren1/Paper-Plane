@@ -1037,6 +1037,55 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     );
   }
 
+  void _insertChatEmoji(String emoji) {
+    final value = _message.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final next = value.text.replaceRange(selection.start, selection.end, emoji);
+    final limit = widget.isChama ? 200 : 1000;
+    if (next.runes.length > limit) return;
+    _message.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: selection.start + emoji.length),
+    );
+  }
+
+  Future<void> _openEmojiPicker() async {
+    const emojis = ['😊', '😂', '🥹', '❤️', '💌', '🌍', '🌸', '✨', '🌙', '🙏', '🤝', '🕊️'];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF142541),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
+          child: Wrap(
+            alignment: WrapAlignment.spaceAround,
+            spacing: 12,
+            runSpacing: 12,
+            children: emojis.map((emoji) => InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => Navigator.pop(sheetContext, emoji),
+              child: Container(
+                width: 52,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF203958),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _chatGold.withOpacity(0.2)),
+                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 25)),
+              ),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+    if (selected != null) _insertChatEmoji(selected);
+  }
+
   Future<void> _translateMessage(Map<String, dynamic> message) async {
     final id = message['id']?.toString() ?? '';
     if (id.isEmpty) return;
@@ -1326,6 +1375,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
               border: Border(top: BorderSide(color: Color(0x33F0CE7C))),
             ),
             child: Row(children: [
+              IconButton(
+                onPressed: widget.isChama && _chamaEnded ? null : _openEmojiPicker,
+                tooltip: 'Adicionar emoji',
+                icon: const Icon(Icons.emoji_emotions_outlined, color: _chatGoldBright),
+              ),
               Expanded(
                 child: TextField(
                   controller: _message,
@@ -1463,6 +1517,20 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           const SizedBox(height: 5),
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints.tightFor(width: 27, height: 25),
+              padding: EdgeInsets.zero,
+              tooltip: 'Copiar mensagem',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: original));
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mensagem copiada.'), behavior: SnackBarBehavior.floating),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded, color: Colors.white54, size: 12),
+            ),
             if (isOwn && !widget.isChama) ...[
               const SizedBox(width: 6),
               Icon(
