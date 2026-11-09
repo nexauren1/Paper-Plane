@@ -10,7 +10,7 @@ This branch prepares the production architecture without committing private cred
 - Cloudflare Worker: authenticated API, business rules, matching, safety gates, delivery state, and AI orchestration.
 - Cloudflare D1: primary relational database. Message data is not duplicated into Firestore.
 - Cloudflare Queues: asynchronous matching and delivery notifications.
-- Workers AI: internal safety classification, triage, message metadata classification, and requested translation. There is no AI chatbot or AI compose button.
+- Workers AI: optional, user-requested translation only. Sending and recipient matching never wait for AI. There is no AI chatbot or AI compose button.
 - Cloudflare Pages: public website / help / privacy pages. The Android app calls the Worker API, not Pages Functions.
 
 ## What is implemented in this branch
@@ -25,22 +25,20 @@ This branch prepares the production architecture without committing private cred
 ### Worker API and D1
 - Firebase RS256 ID-token signature, issuer, audience, expiry, and subject are verified on the Worker.
 - Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, translation, and device registration endpoints are scaffolded.
-- Original planes have a one-per-UTC-day limit and a 200-character limit.
-- Random planes remain queued when there is no eligible recipient; they are not falsely marked delivered.
+- Original planes have unlimited daily sending, a rolling hourly anti-spam safeguard, and a 200-character limit.
+- Random planes are matched immediately when an eligible recipient exists, then retried by the queue and scheduled matcher when nobody is available; they are never falsely marked delivered.
 - Matching only considers active users in the same self-declared age group. Blocks apply in both directions; this is cohort separation, not proof of age.
 - Unread delivered letters expire after 24 hours. Once opened, the retention window changes to 48 hours.
 - A reply must be allowed by the original sender.
 - Open Sky supports up to five public replies.
-- Reports and administrative review records are stored in D1. Admin-only endpoints can list held AI-review messages and open reports, dismiss/action reports, approve/reject held planes, or suspend an account. Admin access uses the Worker secret ADMIN_UIDS.
+- Reports, blocks, and administrative actions are stored in D1. Admin-only endpoints can list open reports, dismiss/action reports, and suspend accounts. Admin access uses the Worker secret ADMIN_UIDS.
 - Moderation review endpoints are restricted to Firebase UIDs listed in the Worker secret ADMIN_UIDS.
 
-### Hidden AI
-- Llama Guard 3 8B checks message safety.
-- GLM-4.7-Flash performs a second risk-triage pass for grooming/predatory contact, sexual solicitation, self-harm, threats, personal contact details, off-platform contact requests, coercion, and spam. Risk or uncertainty sends a message to manual review.
-- GLM-4.7-Flash also classifies language, mood, and theme for internal metadata.
-- GLM-4.7-Flash translates a letter only when an authenticated participant requests a translation.
-- The models never compose a letter on behalf of a pilot.
-- AI is a screening aid, not a safety guarantee. It can miss harmful content or flag harmless content. Human review, reporting, blocking, rate limits, and clear community rules remain necessary.
+### Message safety and optional AI
+- Sending does not call an AI model and does not depend on AI availability. A fast local filter rejects only a small set of explicit, high-confidence threats, self-harm encouragement, and sexual solicitation.
+- Ordinary greetings, friendship, everyday conversation, and other normal messages are not held for an AI review.
+- Reports, user blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls remain active. The local filter is not a guarantee that every harmful message will be detected; users must still be able to report and block accounts.
+- Workers AI is used only when an authenticated participant explicitly requests a translation. Translation failure never blocks sending or delivery.
 
 ## Self-declared age groups and child safety
 

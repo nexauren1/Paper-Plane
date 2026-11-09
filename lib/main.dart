@@ -2115,13 +2115,13 @@ class _FlightScreenState extends State<FlightScreen> {
           const SizedBox(height: 5),
           Text(
             _loading ? 'A contactar o servidor…' : moderationPending
-                ? 'A confirmar a segurança da tua carta'
+                ? 'A preparar o teu avião'
                 : searching ? 'À procura de alguém para receber a tua carta'
                 : status == 'FLYING'
                     ? 'Em rota para ' + (destinationName?.trim().isNotEmpty == true ? destinationName! : _countryName(destinationCode))
                     : ['DELIVERED', 'READ', 'RESPONDED'].contains(status)
                         ? 'O avião chegou ao destino'
-                        : status == 'HELD_REVIEW' ? 'Em revisão de segurança' : 'Estado: ' + status,
+                        : status == 'HELD_REVIEW' ? 'A preparar o teu avião' : 'Estado: ' + status,
             style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),

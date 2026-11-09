@@ -54,7 +54,6 @@ interface Env {
 const FIREBASE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"),
 );
-const MODERATION_MODEL = "@cf/meta/llama-guard-3-8b";
 const CLASSIFICATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 const TRANSLATION_MODEL = "@cf/zai-org/glm-4.7-flash";
 
@@ -136,62 +135,20 @@ async function requireUser(uid: string, env: Env) {
   }>();
 }
 
-async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
-  let lastOutput = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const guardResult = await env.AI.run(MODERATION_MODEL, {
-        messages: [
-          { role: "system", content: "Classify the user message only for safety. Do not answer it. Return the standard Llama Guard result: safe, or unsafe followed by applicable categories. Be proportionate: ordinary greetings, friendship, kindness and everyday conversation are safe. Evaluate the actual content, not imagined intent. Consider sexual exploitation or solicitation, grooming, threats, violence, self-harm, personal contact details, scams and abusive content." },
-          { role: "user", content: message },
-        ],
-      });
-      lastOutput = modelText(guardResult).trim();
-      const normalized = lastOutput.toLowerCase();
-      if (normalized.startsWith("unsafe")) {
-        const categories = lastOutput.split("\n").slice(1).map((line) => line.trim()).filter(Boolean).slice(0, 8);
-        return { state: "UNSAFE", categories: categories.length ? categories : ["GUARD_UNSAFE"] };
-      }
-      if (normalized.startsWith("safe")) {
-        // The primary guard is authoritative. Optional enrichment must never block ordinary sending.
-        return { state: "SAFE", categories: [] };
-      }
-    } catch {
-      // Retry the primary safety guard once before persisting the message for background moderation.
-    }
-  }
-  return { state: "TEMPORARY_UNAVAILABLE", categories: [lastOutput ? "PRIMARY_GUARD_UNCERTAIN" : "PRIMARY_GUARD_UNAVAILABLE"] };
+async function moderate(_env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
+  // Sending never depends on a remote AI provider. Only a few high-confidence,
+  // explicit abuse patterns are rejected locally; ordinary conversation passes.
+  const normalized = message.normalize("NFKC").toLowerCase().replace(/\s+/g, " ");
+  const rules: Array<[string, RegExp]> = [
+    ["DIRECT_THREATS", /\b(?:vou\s+te\s+matar|vou\s+matar-te|eu\s+vou\s+te\s+matar|i will kill you|i'll kill you|i am going to kill you)\b/i],
+    ["SELF_HARM_ENCOURAGEMENT", /\b(?:mata-te|mata\s+te|kill yourself|go kill yourself)\b/i],
+    ["SEXUAL_SOLICITATION", /\b(?:manda(?:-me)?\s+(?:nudes?|fotos?\s+nuas?)|envia(?:-me)?\s+(?:nudes?|fotos?\s+nuas?)|send(?:\s+me)?\s+nudes?|send(?:\s+me)?\s+nude\s+photos?)\b/i],
+  ];
+  const categories = rules.filter(([, pattern]) => pattern.test(normalized)).map(([category]) => category);
+  return categories.length
+    ? { state: "UNSAFE", categories }
+    : { state: "SAFE", categories: [] };
 }
-
-async function classifyInBackground(env: Env, airplaneId: string, message: string) {
-  try {
-    const result = await env.AI.run(CLASSIFICATION_MODEL, {
-      messages: [
-        {
-          role: "system",
-          content: "Classify a short letter. Return ONLY compact JSON with keys language (pt or en), mood (kind, hopeful, sad, happy, neutral), theme (friendship, encouragement, daily_life, culture, other). Never rewrite or answer the letter.",
-        },
-        { role: "user", content: message },
-      ],
-    }) as { response?: string } | string;
-    const output = modelText(result);
-    const start = output.indexOf("{");
-    const end = output.lastIndexOf("}");
-    if (start < 0 || end <= start) return;
-    const parsed = JSON.parse(output.slice(start, end + 1)) as Record<string, unknown>;
-    const language = parsed.language === "en" ? "en" : parsed.language === "pt" ? "pt" : null;
-    const moods = ["kind", "hopeful", "sad", "happy", "neutral"];
-    const themes = ["friendship", "encouragement", "daily_life", "culture", "other"];
-    const mood = moods.includes(String(parsed.mood)) ? String(parsed.mood) : null;
-    const theme = themes.includes(String(parsed.theme)) ? String(parsed.theme) : null;
-    await env.DB.prepare(
-      "UPDATE airplanes SET detected_language = COALESCE(?, detected_language), detected_mood = ?, theme_tag = ? WHERE id = ?",
-    ).bind(language, mood, theme, airplaneId).run();
-  } catch {
-    // Classification is helpful metadata, never a delivery dependency.
-  }
-}
-
 
 function normalizePilotHandle(value: unknown): string {
   return text(value, 32).replace(/^@/, "").toLowerCase();
@@ -394,7 +351,6 @@ async function createAirplane(
     "UPDATE onboarding_first_flights SET state = 'LAUNCHED', updated_at = ? WHERE uid = ? AND state = 'READY_TO_LAUNCH'",
   ).bind(isoNow(), uid).run();
 
-  if (moderation.state === "SAFE") ctx.waitUntil(classifyInBackground(env, id, message));
   if (directFlight && status === "FLYING") {
     await env.DB.prepare(
       "UPDATE airplanes SET flight_distance_km = ?, flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ?, route_json = ? WHERE id = ?",
@@ -416,10 +372,16 @@ async function createAirplane(
       // The scheduled worker also retries persisted pending moderation rows.
     }
   } else if (status === "QUEUED") {
-    try {
-      await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
-    } catch {
-      // The scheduled matcher will pick up this saved plane.
+    // Match immediately so a ready recipient does not wait for the next queue/cron tick.
+    await matchAirplane(id, env);
+    const latest = await env.DB.prepare("SELECT status FROM airplanes WHERE id = ?")
+      .bind(id).first<{ status: string }>();
+    if (latest?.status === "QUEUED") {
+      try {
+        await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId: id });
+      } catch {
+        // The scheduled matcher will pick up this saved plane.
+      }
     }
   } else if (status === "FLYING" && directFlight) {
     try {
@@ -763,28 +725,20 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
   // Retry only exact greetings previously held by an uncertain/failed moderation pass.
   // A fresh primary safety-guard SAFE result is required before anything is released.
   const rows = await env.DB.prepare(
-    `SELECT a.id, a.sender_uid, a.recipient_uid, a.reply_to_id, a.audience, a.message_text,
+    \`SELECT a.id, a.sender_uid, a.recipient_uid, a.reply_to_id, a.audience, a.message_text,
             s.country_code AS sender_country, r.country_code AS recipient_country
      FROM airplanes a
      JOIN users s ON s.uid = a.sender_uid
      LEFT JOIN users r ON r.uid = a.recipient_uid
      WHERE a.status = 'HELD_REVIEW'
-       AND a.moderation_categories IN (?, ?, ?, ?, ?, ?)
-     ORDER BY a.created_at ASC LIMIT 30`,
-  ).bind(
-    JSON.stringify(["RISK_CLASSIFIER_UNCERTAIN"]),
-    JSON.stringify(["RISK_CLASSIFIER_LOW_CONFIDENCE"]),
-    JSON.stringify(["AI_UNCERTAIN"]),
-    JSON.stringify(["MODERATION_UNAVAILABLE"]),
-    JSON.stringify(["PRIMARY_GUARD_UNAVAILABLE"]),
-    JSON.stringify(["PRIMARY_GUARD_UNCERTAIN"]),
+     ORDER BY a.created_at ASC LIMIT 100\`,
   ).all<{
     id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; audience: string;
     message_text: string; sender_country: string | null; recipient_country: string | null;
   }>();
 
   for (const plane of rows.results ?? []) {
-    // Re-run the primary safety guard before releasing any prior technical hold.
+    // Re-run the local high-confidence filter; no remote verification is required.
     const moderation = await moderate(env, plane.message_text);
     if (moderation.state === "TEMPORARY_UNAVAILABLE" || moderation.state === "REVIEW") continue;
     if (moderation.state === "UNSAFE") {
@@ -846,7 +800,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
     if (changed) {
       await env.DB.prepare(
         "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, NULL, 'TECHNICAL_HOLD_RELEASED_AFTER_RECHECK', ?, ?)",
-      ).bind(uuid(), plane.id, JSON.stringify({ rule: "fresh_primary_guard_safe" })).run();
+      ).bind(uuid(), plane.id, JSON.stringify({ rule: "local_high_confidence_filter_passed" })).run();
     }
   }
 }
