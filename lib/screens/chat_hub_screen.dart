@@ -814,7 +814,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         border: Border.all(color: _chatGold.withOpacity(0.38)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: const [
+        Row(children: [
           Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB36F), size: 21),
           SizedBox(width: 7),
           Text('A Chama do Deserto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
