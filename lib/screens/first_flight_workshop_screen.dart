@@ -73,9 +73,12 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
         message: text,
         planeModel: _model,
       );
+      final profile = await PaperPlaneApi.instance.getProfile();
+      final pilot = profile['pilot'] as Map<String, dynamic>? ?? const {};
+      final language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
       final launched = await PaperPlaneApi.instance.sendPlane(
         message: text,
-        language: 'pt',
+        language: language,
         mood: 'Esperança',
         visibility: 'Aleatório 1-para-1',
         destinationCountry: null,
