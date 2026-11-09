@@ -77,7 +77,8 @@ Cloudflare credentials are supplied through GitHub Actions secrets. Runtime inte
 - Llama Guard 3 8B performs first-pass text screening on planes and public replies. Messages flagged unsafe remain hidden in human review; private Chat messages not classified safe are not sent. A model result is not proof that a user is safe or that content is harmless. If the model is unavailable or returns an invalid result, new submissions fail closed.
 - AI risk signals must be treated as review cues, not a conclusion that a user has lied about age.
 - User reports and support tickets are stored separately. Only authorized admin UIDs can access moderation/support administration endpoints.
-- The account screen exposes JSON export and account deletion. Deletion erases the user's Paper Plane records and leaves only a SHA-256 UID tombstone to prevent re-creation; the app then asks Firebase Authentication to delete the identity. Validate the complete sequence and retries on staging.\n- Before public release, verify the FCM service-account secret, Cloudflare queue/cron configuration, Firebase OAuth SHA fingerprints, local age-related requirements, human-review coverage and real-device behaviour.
+- The account screen exposes JSON export and account deletion. Deletion erases the user's Paper Plane records and leaves only a SHA-256 UID tombstone to prevent re-creation; the app then asks Firebase Authentication to delete the identity. Validate the complete sequence and retries on staging.
+- Before public release, verify the FCM service-account secret, Cloudflare queue/cron configuration, Firebase OAuth SHA fingerprints, local age-related requirements, human-review coverage and real-device behaviour.
 
 ## Development
 
