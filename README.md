@@ -38,12 +38,12 @@ The animated flight globe is included in the flight tracker. It uses estimated r
 
 ## Repository layout
 
-- `lib/` — Flutter/Dart application.\n- `admin_app/` — separate Paper Plane Admin Flutter app and APK.\n- `admin_app/` — separate Paper Plane Admin Flutter app and APK.
+- `lib/` — Flutter/Dart application.
+- `admin_app/` — separate Paper Plane Admin Flutter app and APK.
 - `cloudflare/worker/` — API, D1 migrations and backend validation.
 - `firebase/google-services.json` — Android Firebase client configuration.
-- `.github/workflows/android.yml` — Flutter tests and signed release APK build.
+- `.github/workflows/android.yml` — Flutter tests and signed APK build jobs.
 - `.github/workflows/deploy-worker.yml` — D1 migration validation, remote migration and Worker deployment.
-- `docs/` — deployment, privacy and integration notes.
 
 ## Build Android
 
