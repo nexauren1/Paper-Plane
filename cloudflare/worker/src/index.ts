@@ -188,7 +188,7 @@ async function moderate(env: Env, message: string): Promise<{ state: "SAFE" | "R
     });
 
     const raw = modelText(result).trim();
-    const objectText = raw.match(/\\{[\\s\\S]*\\}/)?.[0];
+    const objectText = raw.match(/\{[\s\S]*\}/)?.[0];
     if (!objectText) return { state: "TEMPORARY_UNAVAILABLE", categories: ["INVALID_MODEL_RESPONSE"] };
 
     const parsed = JSON.parse(objectText) as {
