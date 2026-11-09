@@ -151,13 +151,14 @@ jobs:
                       count=1,
                   )
               else:
-                  content = content.replace("</resources>", f"    {color_entry}\\n</resources>")
+                  content = content.replace("</resources>", f"    {color_entry}\n</resources>")
           else:
-              content = '<resources>\\n    ' + color_entry + '\\n</resources>\\n'
+              content = '<resources>\n    ' + color_entry + '\n</resources>\n'
           colors.write_text(content, encoding="utf-8")
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           text = manifest.read_text(encoding="utf-8")
+          text = re.sub(r'android:label="[^"]+"', 'android:label="Paper Plane"', text, count=1)
           text = re.sub(r'android:icon="[^"]+"', 'android:icon="@mipmap/ic_launcher"', text, count=1)
           if 'android:roundIcon=' in text:
               text = re.sub(r'android:roundIcon="[^"]+"', 'android:roundIcon="@mipmap/ic_launcher_round"', text, count=1)
@@ -169,7 +170,7 @@ jobs:
           launch = drawable / "launch_background.xml"
           launch.write_text("""<?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-              <item android:drawable="#071225" />
+              <item android:drawable="@color/ic_launcher_background" />
               <item>
                   <inset android:drawable="@drawable/ic_launcher_foreground"
                       android:insetLeft="52dp" android:insetTop="52dp"
@@ -184,8 +185,8 @@ jobs:
               if "android:windowSplashScreenBackground" not in style_text:
                   style_text = style_text.replace(
                       "</style>",
-                      '        <item name="android:windowSplashScreenBackground">#071225</item>\\n'
-                      '        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>\\n'
+                      '        <item name="android:windowSplashScreenBackground">#071225</item>\n'
+                      '        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>\n'
                       '    </style>',
                       1,
                   )
