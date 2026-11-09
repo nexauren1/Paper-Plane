@@ -91,6 +91,11 @@ class PaperPlaneApi {
       final message = switch (code) {
         'AGE_DECLARATION_REQUIRED' => 'Completa a tua data de nascimento no perfil antes de enviar.',
         'INVALID_BIRTH_DATE' => 'Indica uma data de nascimento válida.',
+        'INVALID_AVATAR_URL' => 'Usa um link HTTPS público para a tua foto ou perfil.',
+        'PREVIEW_UNAVAILABLE' => 'Não foi possível carregar a pré-visualização deste link.',
+        'CHAMA_USES_PLANES' => 'A Chama funciona através de aviões de resposta.',
+        'CHAMA_ENDED' => 'Esta Chama foi encerrada.',
+
         'AGE_NOT_ELIGIBLE' => 'O Paper Plane está disponível a partir dos 13 anos.',
         'AUTH_TOKEN_UNAVAILABLE' => 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.',
         'DAILY_LIMIT_REACHED' => 'Já lançaste o teu avião original de hoje.',
@@ -152,14 +157,22 @@ class PaperPlaneApi {
     required DateTime birthDate,
     required String countryCode,
     required String language,
+    String? avatarUrl,
   }) =>
       _request('/v1/profile', method: 'POST', body: {
         'pilotName': pilotName,
         'pilotHandle': pilotHandle,
+        'avatarUrl': avatarUrl,
         'birthDate': '${birthDate.year.toString().padLeft(4, '0')}-${birthDate.month.toString().padLeft(2, '0')}-${birthDate.day.toString().padLeft(2, '0')}',
         'countryCode': countryCode,
         'language': language,
       });
+
+  Future<Map<String, dynamic>> updateAvatarUrl(String? avatarUrl) =>
+      _request('/v1/profile/avatar', method: 'POST', body: {'avatarUrl': avatarUrl});
+
+  Future<Map<String, dynamic>> getLinkPreview(String url) =>
+      _request('/v1/link-preview?url=${Uri.encodeQueryComponent(url)}');
 
   Future<Map<String, dynamic>> getAirplaneFlight(String id) =>
       _request('/v1/airplanes/$id/flight');
@@ -197,6 +210,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> getChats() => _request('/v1/chats');
 
   Future<Map<String, dynamic>> getChamas() => _request('/v1/chamas');
+
+  Future<Map<String, dynamic>> endChama(String conversationId) =>
+      _request('/v1/chamas/$conversationId/end', method: 'POST');
 
   Future<Map<String, dynamic>> createChat(String friendUid) =>
       _request('/v1/chats', method: 'POST', body: {'uid': friendUid});

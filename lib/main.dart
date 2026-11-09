@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
@@ -15,6 +17,8 @@ import 'screens/support_screen.dart';
 import 'screens/chat_hub_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'widgets/report_dialog.dart';
+import 'widgets/pilot_avatar.dart';
+import 'widgets/chat_link_preview.dart';
 
 const Color ppNavy = Color(0xFF071225);
 const Color ppNavyDeep = Color(0xFF040A15);
@@ -161,48 +165,82 @@ class PlanePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final plane = Path()
-      ..moveTo(size.width * 0.05, size.height * 0.42)
-      ..lineTo(size.width * 0.95, size.height * 0.05)
-      ..lineTo(size.width * 0.61, size.height * 0.95)
-      ..lineTo(size.width * 0.43, size.height * 0.63)
-      ..lineTo(size.width * 0.27, size.height * 0.81)
-      ..lineTo(size.width * 0.30, size.height * 0.53)
-      ..close();
+    final nose = Offset(size.width * 0.95, size.height * 0.05);
+    final tail = Offset(size.width * 0.30, size.height * 0.53);
+    final center = Offset(size.width * 0.43, size.height * 0.63);
+    final leftTip = Offset(size.width * 0.05, size.height * 0.42);
+    final rightTip = Offset(size.width * 0.61, size.height * 0.95);
+    final foldedTail = Offset(size.width * 0.27, size.height * 0.81);
 
+    final plane = Path()
+      ..moveTo(leftTip.dx, leftTip.dy)
+      ..lineTo(nose.dx, nose.dy)
+      ..lineTo(rightTip.dx, rightTip.dy)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(foldedTail.dx, foldedTail.dy)
+      ..lineTo(tail.dx, tail.dy)
+      ..close();
+    final leftFacet = Path()
+      ..moveTo(leftTip.dx, leftTip.dy)
+      ..lineTo(nose.dx, nose.dy)
+      ..lineTo(center.dx, center.dy)
+      ..close();
+    final rightFacet = Path()
+      ..moveTo(nose.dx, nose.dy)
+      ..lineTo(rightTip.dx, rightTip.dy)
+      ..lineTo(center.dx, center.dy)
+      ..close();
+    final lowerFacet = Path()
+      ..moveTo(tail.dx, tail.dy)
+      ..lineTo(center.dx, center.dy)
+      ..lineTo(rightTip.dx, rightTip.dy)
+      ..close();
     final fold = Path()
-      ..moveTo(size.width * 0.30, size.height * 0.53)
-      ..lineTo(size.width * 0.95, size.height * 0.05)
-      ..lineTo(size.width * 0.43, size.height * 0.63);
+      ..moveTo(tail.dx, tail.dy)
+      ..lineTo(nose.dx, nose.dy)
+      ..lineTo(center.dx, center.dy);
 
     if (glow) {
       canvas.drawPath(
         plane,
         Paint()
-          ..color = color.withOpacity(0.26)
+          ..color = color.withOpacity(0.32)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 9
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 13),
+          ..strokeWidth = 10
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
       );
     }
     if (fill) {
-      canvas.drawPath(plane, Paint()..color = color.withOpacity(0.12));
+      final bounds = plane.getBounds();
+      canvas.drawPath(
+        plane,
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFFFFFF), Color(0xFFF4EFE4), Color(0xFFD7D0C4)],
+          ).createShader(bounds),
+      );
+      canvas.drawPath(leftFacet, Paint()..color = const Color(0xFFC9E2EE).withOpacity(0.54));
+      canvas.drawPath(rightFacet, Paint()..color = const Color(0xFFFFE1A3).withOpacity(0.36));
+      canvas.drawPath(lowerFacet, Paint()..color = const Color(0xFF8FA8BB).withOpacity(0.24));
     }
     canvas.drawPath(
       plane,
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
+        ..strokeWidth = 2.2
         ..strokeJoin = StrokeJoin.round,
     );
     canvas.drawPath(
       fold,
       Paint()
-        ..color = color.withOpacity(0.9)
+        ..color = const Color(0xFF9B8A6D).withOpacity(0.95)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+        ..strokeWidth = 1.25,
     );
+    canvas.drawCircle(nose, 1.8, Paint()..color = Colors.white.withOpacity(0.95));
   }
 
   @override
@@ -1677,17 +1715,63 @@ class GlobeFlightPainter extends CustomPainter {
       path.lineTo(point.dx, point.dy);
     }
     path.close();
+
+    final bounds = path.getBounds();
     canvas.drawPath(
       path,
-      Paint()..color = const Color(0xFF24516A).withOpacity(0.78),
+      Paint()
+        ..color = const Color(0xFF1ABCEB).withOpacity(0.20)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
     );
     canvas.drawPath(
       path,
       Paint()
-        ..color = const Color(0xFF7CA9B8).withOpacity(0.45)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.85,
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF2D749B),
+            Color(0xFF164569),
+            Color(0xFF0A2746),
+          ],
+        ).createShader(bounds),
     );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFFFFD88A).withOpacity(0.42)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.2
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0xFFFFE8B5).withOpacity(0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.95
+        ..strokeJoin = StrokeJoin.round,
+    );
+
+    // Soft city-light clusters follow the coastline; the actual route remains
+    // a separate animated layer so it is clear which way the plane is travelling.
+    for (var i = 0; i < projected.length; i++) {
+      if (i % 2 != 0) continue;
+      final point = projected[i];
+      final glow = 1.7 + (i % 4) * 0.45;
+      canvas.drawCircle(
+        point,
+        glow * 3.1,
+        Paint()
+          ..color = const Color(0xFFFFC96A).withOpacity(0.24)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.5),
+      );
+      canvas.drawCircle(
+        point,
+        glow * 0.62,
+        Paint()..color = const Color(0xFFFFE5A6).withOpacity(0.78),
+      );
+    }
   }
 
   void _drawLocation(
@@ -1807,8 +1891,8 @@ class GlobeFlightPainter extends CustomPainter {
       center,
       radius + 8,
       Paint()
-        ..color = const Color(0xFF5F9BB8).withOpacity(0.07)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+        ..color = const Color(0xFF168BFF).withOpacity(0.19)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 31),
     );
     canvas.drawCircle(
       center,
@@ -1818,11 +1902,12 @@ class GlobeFlightPainter extends CustomPainter {
           center: Alignment(-0.34, -0.42),
           radius: 1.05,
           colors: [
-            Color(0xFF1B5277),
-            Color(0xFF0D2947),
-            Color(0xFF04101F),
+            Color(0xFF2378A8),
+            Color(0xFF0C3A67),
+            Color(0xFF051A33),
+            Color(0xFF020812),
           ],
-          stops: [0, 0.58, 1],
+          stops: [0, 0.38, 0.76, 1],
         ).createShader(sphereRect),
     );
 
@@ -1830,9 +1915,9 @@ class GlobeFlightPainter extends CustomPainter {
     canvas.clipPath(Path()..addOval(sphereRect));
 
     final gridPaint = Paint()
-      ..color = const Color(0xFF8CB2C6).withOpacity(0.18)
+      ..color = const Color(0xFF9FCFFF).withOpacity(0.065)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.7;
+      ..strokeWidth = 0.65;
     for (var factor = -0.75; factor <= 0.75; factor += 0.25) {
       final y = center.dy + radius * factor;
       final rx = radius * math.sqrt(1 - factor * factor);
@@ -1890,10 +1975,10 @@ class GlobeFlightPainter extends CustomPainter {
       canvas.drawPath(
         metric.extractPath(0, metric.length),
         Paint()
-          ..color = ppGold.withOpacity(0.20)
+          ..color = const Color(0xFF24C9FF).withOpacity(0.22)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 9
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+          ..strokeWidth = 12
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
       );
       canvas.drawPath(
         metric.extractPath(0, metric.length),
@@ -1909,10 +1994,10 @@ class GlobeFlightPainter extends CustomPainter {
         canvas.drawPath(
           completed,
           Paint()
-            ..color = ppGold.withOpacity(0.38)
+            ..color = ppGold.withOpacity(0.5)
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 8
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+            ..strokeWidth = 9
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
         );
         canvas.drawPath(
           completed,
@@ -2030,11 +2115,20 @@ class GlobeFlightPainter extends CustomPainter {
     canvas.restore();
     canvas.drawCircle(
       center,
+      radius + 9,
+      Paint()
+        ..color = const Color(0xFF20AFFF).withOpacity(0.16)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
+    );
+    canvas.drawCircle(
+      center,
       radius,
       Paint()
-        ..color = const Color(0xFF9BC5D8).withOpacity(0.38)
+        ..color = const Color(0xFFFFD98B).withOpacity(0.62)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.1,
+        ..strokeWidth = 1.35,
     );
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius + 3),
@@ -2894,7 +2988,7 @@ class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
           const SizedBox(height: 16),
           const Text('O avião pousou à tua porta.', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900), textAlign: TextAlign.center),
           const SizedBox(height: 7),
-          const Text('A carta permanece fechada até escolheres abri-la.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const Text('Abre a tua carta e descobre quem te encontrou no mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 20),
           AnimatedBuilder(
             animation: _arrival,
@@ -2902,7 +2996,7 @@ class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
               opacity: _arrival.value >= 0.78 ? 1 : 0.35,
               duration: const Duration(milliseconds: 260),
               child: GoldButton(
-                label: _arrival.value >= 0.78 ? 'Abrir carta' : 'A chegar à tua porta…',
+                label: _arrival.value >= 0.78 ? 'Abrir carta' : 'O avião está a aterrar…',
                 icon: Icons.mark_email_read_outlined,
                 onPressed: _arrival.value < 0.78
                     ? () {}
@@ -2923,108 +3017,255 @@ class _HouseArrivalPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
+    final bounds = Offset.zero & size;
     canvas.drawRRect(
-      RRect.fromRectAndRadius(rect, const Radius.circular(22)),
-      Paint()..shader = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0xFF0B1D34), Color(0xFF030A15)],
-      ).createShader(rect),
+      RRect.fromRectAndRadius(bounds, const Radius.circular(22)),
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF07162B), Color(0xFF0A213D), Color(0xFF030914)],
+        ).createShader(bounds),
     );
+
     final random = math.Random(77);
-    for (var i = 0; i < 65; i++) {
+    for (var i = 0; i < 95; i++) {
       final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height * 0.65;
-      canvas.drawCircle(Offset(x, y), 0.6 + random.nextDouble(), Paint()
-        ..color = Colors.white.withOpacity(0.12 + random.nextDouble() * 0.28));
+      final y = random.nextDouble() * size.height * 0.78;
+      final radius = 0.35 + random.nextDouble() * 1.2;
+      final shimmer = 0.25 + 0.5 * (0.5 + 0.5 * math.sin(progress * math.pi * 2 + i));
+      canvas.drawCircle(
+        Offset(x, y),
+        radius,
+        Paint()..color = (i % 7 == 0 ? ppGoldBright : Colors.white).withOpacity(shimmer),
+      );
     }
 
-    final houseWidth = size.width * 0.61;
-    final houseHeight = size.height * 0.43;
-    final house = Rect.fromCenter(
-      center: Offset(size.width * 0.53, size.height * 0.70),
-      width: houseWidth,
-      height: houseHeight,
-    );
-    final wall = Path()
-      ..moveTo(house.left, house.top + 14)
-      ..lineTo(house.right, house.top + 14)
-      ..lineTo(house.right, house.bottom)
-      ..lineTo(house.left, house.bottom)
+    // Distant mountain and Japanese garden silhouettes.
+    final mountain = Path()
+      ..moveTo(0, size.height * 0.65)
+      ..lineTo(size.width * 0.23, size.height * 0.49)
+      ..lineTo(size.width * 0.31, size.height * 0.57)
+      ..lineTo(size.width * 0.45, size.height * 0.38)
+      ..lineTo(size.width * 0.58, size.height * 0.58)
+      ..lineTo(size.width * 0.75, size.height * 0.46)
+      ..lineTo(size.width, size.height * 0.62)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
       ..close();
-    final roof = Path()
-      ..moveTo(house.left - 20, house.top + 18)
-      ..lineTo(house.center.dx, house.top - houseHeight * 0.48)
-      ..lineTo(house.right + 20, house.top + 18)
+    canvas.drawPath(mountain, Paint()..color = const Color(0xFF12243C).withOpacity(0.88));
+
+    final torii = Path()
+      ..moveTo(size.width * 0.68, size.height * 0.55)
+      ..lineTo(size.width * 0.68, size.height * 0.76)
+      ..lineTo(size.width * 0.705, size.height * 0.76)
+      ..lineTo(size.width * 0.705, size.height * 0.58)
+      ..lineTo(size.width * 0.88, size.height * 0.58)
+      ..lineTo(size.width * 0.88, size.height * 0.76)
+      ..lineTo(size.width * 0.91, size.height * 0.76)
+      ..lineTo(size.width * 0.91, size.height * 0.55)
+      ..lineTo(size.width * 0.68, size.height * 0.55)
       ..close();
-    canvas.drawPath(wall, Paint()..color = const Color(0xFF243754));
-    canvas.drawPath(wall, Paint()..color = ppGold.withOpacity(0.36)..style = PaintingStyle.stroke..strokeWidth = 1.4);
-    canvas.drawPath(roof, Paint()..color = const Color(0xFF111C2D));
-    canvas.drawPath(roof, Paint()..color = ppGold.withOpacity(0.75)..style = PaintingStyle.stroke..strokeWidth = 2);
-
-    final door = Rect.fromCenter(
-      center: Offset(house.center.dx, house.bottom - houseHeight * 0.20),
-      width: houseWidth * 0.20,
-      height: houseHeight * 0.42,
+    canvas.drawPath(torii, Paint()..color = const Color(0xFF090F1D));
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(size.width * 0.65, size.height * 0.53, size.width * 0.29, 7),
+        const Radius.circular(3),
+      ),
+      Paint()..color = const Color(0xFF111927),
     );
-    canvas.drawRRect(RRect.fromRectAndRadius(door, const Radius.circular(7)), Paint()..color = const Color(0xFF071225));
-    final doorGlow = Paint()
-      ..color = ppGoldBright.withOpacity(0.65)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16);
-    canvas.drawCircle(door.center, 19, doorGlow);
-    canvas.drawRRect(RRect.fromRectAndRadius(door, const Radius.circular(7)), Paint()..color = const Color(0xFF182B43)..style = PaintingStyle.stroke..strokeWidth = 1.5..color = ppGoldBright.withOpacity(0.8));
 
-    for (final dx in [house.left + houseWidth * 0.19, house.right - houseWidth * 0.19]) {
-      final window = Rect.fromCenter(center: Offset(dx, house.top + houseHeight * 0.37), width: houseWidth * 0.19, height: houseHeight * 0.22);
-      canvas.drawRRect(RRect.fromRectAndRadius(window, const Radius.circular(4)), Paint()..color = ppGold.withOpacity(0.75));
-      canvas.drawRRect(RRect.fromRectAndRadius(window, const Radius.circular(4)), Paint()..color = ppGoldBright.withOpacity(0.9)..style = PaintingStyle.stroke..strokeWidth = 1.2);
+    // A ribbon of light leads from the plane into the mailbox.
+    final landing = (progress - 0.2).clamp(0.0, 1.0);
+    final trail = Path()
+      ..moveTo(size.width * 0.55, size.height * (0.18 + landing * 0.08))
+      ..cubicTo(
+        size.width * 0.34, size.height * 0.38,
+        size.width * 0.73, size.height * 0.52,
+        size.width * 0.52, size.height * 0.71,
+      );
+    canvas.drawPath(
+      trail,
+      Paint()
+        ..color = ppGold.withOpacity(0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 12
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15),
+    );
+    canvas.drawPath(
+      trail,
+      Paint()
+        ..color = ppGoldBright.withOpacity(0.82)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.7
+        ..strokeCap = StrokeCap.round,
+    );
+    for (var i = 0; i < 34; i++) {
+      final t = ((i / 34) + progress * 0.28) % 1.0;
+      final point = Offset(
+        size.width * (0.55 - 0.03 * t + 0.09 * math.sin(t * math.pi * 2)),
+        size.height * (0.18 + t * 0.53),
+      );
+      canvas.drawCircle(
+        point,
+        3.4,
+        Paint()
+          ..color = ppGold.withOpacity(0.32)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+      );
+      canvas.drawCircle(point, 0.8 + (i % 3) * 0.25, Paint()..color = ppGoldBright.withOpacity(0.86));
     }
 
-    final start = Offset(size.width * 0.13, size.height * 0.18);
-    final end = Offset(door.center.dx, door.top + 6);
-    final control1 = Offset(size.width * 0.65, size.height * 0.08);
-    final control2 = Offset(size.width * 0.16, size.height * 0.58);
-    final flightPath = Path()
-      ..moveTo(start.dx, start.dy)
-      ..cubicTo(control1.dx, control1.dy, control2.dx, control2.dy, end.dx, end.dy);
-    final metric = flightPath.computeMetrics().first;
-    final current = metric.getTangentForOffset(metric.length * progress.clamp(0.0, 1.0));
-    if (current != null) {
-      final trail = metric.extractPath(0, metric.length * progress.clamp(0.0, 1.0));
-      canvas.drawPath(trail, Paint()
-        ..color = ppGold.withOpacity(0.25)
+    // Deep blue mailbox, inspired by the illuminated Japanese postbox in the reference.
+    final post = Rect.fromLTWH(size.width * 0.47, size.height * 0.82, size.width * 0.11, size.height * 0.16);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(post, const Radius.circular(6)),
+      Paint()..shader = const LinearGradient(
+        colors: [Color(0xFF203E63), Color(0xFF0B1A30)],
+      ).createShader(post),
+    );
+    final box = Rect.fromCenter(
+      center: Offset(size.width * 0.52, size.height * 0.72),
+      width: size.width * 0.52,
+      height: size.height * 0.33,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(box.inflate(9), const Radius.circular(23)),
+      Paint()
+        ..color = const Color(0xFFFFC96D).withOpacity(0.18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20),
+    );
+    final shell = RRect.fromRectAndRadius(box, const Radius.circular(22));
+    canvas.drawRRect(
+      shell,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF315A84), Color(0xFF102B4B), Color(0xFF07172C)],
+        ).createShader(box),
+    );
+    canvas.drawRRect(
+      shell,
+      Paint()
+        ..color = const Color(0xFF7DB6E8).withOpacity(0.72)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 8
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7));
-      canvas.drawPath(trail, Paint()
-        ..color = ppGoldBright.withOpacity(0.9)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round);
-      canvas.save();
-      canvas.translate(current.position.dx, current.position.dy);
-      canvas.rotate(current.angle + math.pi / 2);
-      final plane = Path()
-        ..moveTo(0, -14)
-        ..lineTo(7, 10)
-        ..lineTo(0, 6)
-        ..lineTo(-7, 10)
-        ..close();
-      canvas.drawPath(plane, Paint()..color = ppGold.withOpacity(0.3)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
-      canvas.drawPath(plane, Paint()..color = ppPaper);
-      canvas.drawPath(plane, Paint()..color = ppGoldBright..style = PaintingStyle.stroke..strokeWidth = 1.2);
-      canvas.restore();
-    }
+        ..strokeWidth = 1.5,
+    );
 
-    canvas.drawCircle(end, 12 + progress * 9, Paint()
-      ..color = ppGold.withOpacity((1 - progress).clamp(0.0, 1.0) * 0.25)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2);
+    final roof = RRect.fromRectAndRadius(
+      Rect.fromLTWH(box.left + 9, box.top + 4, box.width - 18, 24),
+      const Radius.circular(14),
+    );
+    canvas.drawRRect(roof, Paint()..color = const Color(0xFF456C91));
+    canvas.drawRRect(
+      roof,
+      Paint()
+        ..color = const Color(0xFF8AB9DE).withOpacity(0.7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.1,
+    );
+
+    final slot = RRect.fromRectAndRadius(
+      Rect.fromLTWH(box.left + 17, box.top + 39, box.width - 34, 37),
+      const Radius.circular(7),
+    );
+    canvas.drawRRect(
+      slot.inflate(7),
+      Paint()
+        ..color = ppGold.withOpacity(0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14),
+    );
+    canvas.drawRRect(
+      slot,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFE8AE), Color(0xFFC48B39), Color(0xFF52391F)],
+        ).createShader(slot.outerRect),
+    );
+    canvas.drawRRect(
+      slot,
+      Paint()
+        ..color = const Color(0xFFFFE8A8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.15,
+    );
+
+    final front = Rect.fromLTWH(box.left + 16, box.top + 87, box.width - 32, box.height - 98);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(front, const Radius.circular(8)),
+      Paint()..color = const Color(0xFF0A203A).withOpacity(0.95),
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(front, const Radius.circular(8)),
+      Paint()
+        ..color = ppGold.withOpacity(0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    final glyph = TextPainter(
+      text: const TextSpan(
+        text: '✈',
+        style: TextStyle(color: ppGoldBright, fontSize: 25, fontWeight: FontWeight.w900),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    glyph.paint(canvas, Offset(box.center.dx - glyph.width / 2, front.center.dy - glyph.height / 2));
+
+    // The plane descends gently, keeping the landing sequence alive.
+    final planeY = size.height * (0.27 + 0.23 * landing);
+    final planeX = size.width * (0.57 - 0.07 * landing);
+    final bob = math.sin(progress * math.pi * 2) * 3;
+    canvas.save();
+    canvas.translate(planeX, planeY + bob);
+    canvas.rotate(0.12 + landing * 0.22);
+    final plane = Path()
+      ..moveTo(0, -32)
+      ..lineTo(38, 20)
+      ..lineTo(3, 10)
+      ..lineTo(-12, 30)
+      ..lineTo(-8, 4)
+      ..lineTo(-30, 15)
+      ..close();
+    final fold = Path()
+      ..moveTo(-8, 4)
+      ..lineTo(0, -32)
+      ..lineTo(3, 10)
+      ..close();
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..color = ppGold.withOpacity(0.38)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+    );
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFEF7), Color(0xFFF1E9D9), Color(0xFFD1C7B3)],
+        ).createShader(const Rect.fromLTWH(-31, -32, 70, 63)),
+    );
+    canvas.drawPath(fold, Paint()..color = const Color(0xFFB7A98D).withOpacity(0.76));
+    canvas.drawPath(
+      plane,
+      Paint()
+        ..color = ppGoldBright
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _HouseArrivalPainter oldDelegate) => oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _HouseArrivalPainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }
 
 class LetterScreen extends StatefulWidget {
@@ -3178,6 +3419,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   List<Map<String, dynamic>> _messages = [];
   bool _loading = true;
   String? _error;
+  String? _selectedCountry;
 
   @override
   void initState() {
@@ -3189,7 +3431,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
       await PaperPlaneAuth.requireSignedInPilot();
-      final result = await PaperPlaneApi.instance.getOpenSky();
+      final result = await PaperPlaneApi.instance.getOpenSky(country: _selectedCountry);
       final messages = (result['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       if (!mounted) return;
@@ -3280,6 +3522,25 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
     }
   }
 
+  String _skyCountryName(String? code) {
+    const names = {
+      'MZ': 'Moçambique', 'BR': 'Brasil', 'PT': 'Portugal',
+      'JP': 'Japão', 'IN': 'Índia', 'ZA': 'África do Sul', 'AO': 'Angola',
+    };
+    return names[code?.toUpperCase()] ?? (code ?? 'Mundo');
+  }
+
+  String _timeAgo(String? value) {
+    final date = DateTime.tryParse(value ?? '');
+    if (date == null) return '';
+    final difference = DateTime.now().difference(date.toLocal());
+    if (difference.inMinutes < 1) return 'agora';
+    if (difference.inMinutes < 60) return '${difference.inMinutes} min';
+    if (difference.inHours < 24) return '${difference.inHours} h';
+    if (difference.inDays < 7) return '${difference.inDays} d';
+    return '${date.toLocal().day.toString().padLeft(2, '0')}/${date.toLocal().month.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -3287,12 +3548,49 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
       onRefresh: _refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        padding: const EdgeInsets.fromLTRB(18, 15, 18, 26),
         children: [
-          const Text('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          const Text('Mensagens públicas que chegaram ao céu', style: TextStyle(color: Colors.white70)),
+          Row(children: [
+            const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+              SizedBox(height: 3),
+              Text('Mensagens do mundo inteiro', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            ])),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: ppBlue.withOpacity(0.26), shape: BoxShape.circle, border: Border.all(color: ppGold.withOpacity(0.24))),
+              child: const Icon(Icons.public_rounded, color: ppGoldBright, size: 23),
+            ),
+          ]),
           const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111F36),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: ppGold.withOpacity(0.25)),
+            ),
+            child: const Row(children: [
+              Icon(Icons.tune_rounded, color: ppGoldBright, size: 18),
+              SizedBox(width: 8),
+              Text('Filtrar por país', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              Spacer(),
+              Icon(Icons.expand_more_rounded, color: Colors.white60),
+            ]),
+          ),
+          const SizedBox(height: 9),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              _skyFilterChip(null, '🌍 Mundo'),
+              _skyFilterChip('MZ', '🇲🇿 Moçambique'),
+              _skyFilterChip('BR', '🇧🇷 Brasil'),
+              _skyFilterChip('PT', '🇵🇹 Portugal'),
+              _skyFilterChip('JP', '🇯🇵 Japão'),
+              _skyFilterChip('IN', '🇮🇳 Índia'),
+            ]),
+          ),
+          const SizedBox(height: 13),
           if (_loading)
             const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator(color: ppGold)))
           else if (_error != null)
@@ -3306,70 +3604,115 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               ]),
             )
           else if (_messages.isEmpty)
-            const GlassPanel(child: Text('O céu público ainda está vazio. Quando uma mensagem pública for aprovada e publicada, aparecerá aqui.', style: TextStyle(color: Colors.white70, height: 1.45)))
+            GlassPanel(
+              child: Column(children: const [
+                Icon(Icons.mark_email_unread_outlined, color: ppGoldBright, size: 34),
+                SizedBox(height: 9),
+                Text('Ainda não há aviões neste céu.', style: TextStyle(fontWeight: FontWeight.w900)),
+                SizedBox(height: 5),
+                Text('Sê o primeiro a lançar uma mensagem pública para o mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.4)),
+              ]),
+            )
           else
             for (final message in _messages) ...[
-              const SizedBox(height: 11),
-              GlassPanel(
+              const SizedBox(height: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF101D33),
+                  borderRadius: BorderRadius.circular(19),
+                  border: Border.all(color: const Color(0x223F74B6)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 16, offset: const Offset(0, 7))],
+                ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Text(_countryFlag(message['sender_country_code']?.toString()), style: const TextStyle(fontSize: 25)),
-                    const SizedBox(width: 10),
-                    Expanded(child: Text(_countryName(message['sender_country_code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16))),
-                    Text(message['created_at']?.toString() ?? '', style: const TextStyle(color: Colors.white54, fontSize: 10)),
-                    if (message['is_own'] != 1 && message['is_own'] != true)
-                      PopupMenuButton<String>(
-                        tooltip: 'Mais opções',
-                        icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
-                        onSelected: (action) async {
-                          final airplaneId = message['id'].toString();
-                          if (action == 'report') {
-                            await showReportDialog(context, airplaneId);
-                          } else if (action == 'block') {
-                            try {
-                              await PaperPlaneApi.instance.blockSenderOfPlane(airplaneId);
-                              await _refresh();
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Remetente bloqueado.')),
-                                );
-                              }
-                            } catch (error) {
-                              if (mounted) {
-                                final messageText = error is PaperPlaneApiException
-                                    ? error.message
-                                    : 'Não foi possível bloquear esta conta.';
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(messageText)));
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(13, 13, 10, 10),
+                    child: Row(children: [
+                      PilotAvatar(url: message['avatar_url']?.toString(), size: 42),
+                      const SizedBox(width: 10),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_countryFlag(message['sender_country_code']?.toString())} ${_skyCountryName(message['sender_country_code']?.toString())} · ${_timeAgo(message['created_at']?.toString())}',
+                          style: const TextStyle(color: Colors.white60, fontSize: 10),
+                        ),
+                      ])),
+                      if (message['is_own'] != 1 && message['is_own'] != true)
+                        PopupMenuButton<String>(
+                          tooltip: 'Mais opções',
+                          icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
+                          onSelected: (action) async {
+                            final airplaneId = message['id'].toString();
+                            if (action == 'report') {
+                              await showReportDialog(context, airplaneId);
+                            } else if (action == 'block') {
+                              try {
+                                await PaperPlaneApi.instance.blockSenderOfPlane(airplaneId);
+                                await _refresh();
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Remetente bloqueado.')));
+                              } catch (error) {
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear esta conta.')));
                               }
                             }
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(value: 'report', child: Text('Denunciar mensagem')),
-                          PopupMenuItem(value: 'block', child: Text('Bloquear remetente')),
-                        ],
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(value: 'report', child: Text('Denunciar mensagem')),
+                            PopupMenuItem(value: 'block', child: Text('Bloquear remetente')),
+                          ],
+                        ),
+                    ]),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(15, 1, 15, 5),
+                    child: Text(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 14, height: 1.48, fontWeight: FontWeight.w500)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 13),
+                    child: ChatLinkPreview(
+                      key: ValueKey('sky-${message['id']}'),
+                      message: message['message_text']?.toString() ?? '',
+                    ),
+                  ),
+                  const Divider(color: Color(0x223F74B6), height: 18),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(7, 0, 9, 7),
+                    child: Row(children: [
+                      TextButton.icon(
+                        onPressed: () => _like(message['id'].toString()),
+                        icon: const Icon(Icons.favorite_border_rounded, color: ppGold, size: 18),
+                        label: Text((message['likes_count'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
                       ),
-                  ]),
-                  const SizedBox(height: 12),
-                  Text(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 15, height: 1.45)),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    TextButton.icon(
-                      onPressed: () => _like(message['id'].toString()),
-                      icon: const Icon(Icons.favorite_border, color: ppGold, size: 18),
-                      label: Text((message['likes_count'] ?? 0).toString()),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => _showReplies(message['id'].toString()),
-                      icon: const Icon(Icons.chat_bubble_outline, size: 17),
-                      label: Text('Responder (' + (message['replies_count'] ?? 0).toString() + ')'),
-                    ),
-                  ]),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () => _showReplies(message['id'].toString()),
+                        icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17, color: ppGoldBright),
+                        label: Text('Responder · ${message['replies_count'] ?? 0}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                      ),
+                    ]),
+                  ),
                 ]),
               ),
             ],
         ],
+      ),
+    );
+  }
+
+  Widget _skyFilterChip(String? code, String label) {
+    final selected = _selectedCountry == code;
+    return Padding(
+      padding: const EdgeInsets.only(right: 7),
+      child: ChoiceChip(
+        selected: selected,
+        onSelected: (_) {
+          setState(() => _selectedCountry = code);
+          _refresh();
+        },
+        label: Text(label),
+        selectedColor: ppGold,
+        backgroundColor: const Color(0xFF172844),
+        side: BorderSide(color: selected ? ppGold : Colors.white.withOpacity(0.12)),
+        labelStyle: TextStyle(color: selected ? ppNavy : Colors.white70, fontSize: 10, fontWeight: FontWeight.w800),
       ),
     );
   }
@@ -3426,6 +3769,77 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _editAvatar(String? currentUrl) async {
+    final controller = TextEditingController(text: currentUrl ?? '');
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, updateDialog) => AlertDialog(
+          backgroundColor: const Color(0xFF142541),
+          title: const Text('A tua foto de perfil'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PilotAvatar(url: controller.text.trim(), size: 88),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controller,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  onChanged: (_) => updateDialog(() {}),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.link_rounded, color: ppGoldBright),
+                    labelText: 'Link da foto ou perfil público',
+                    hintText: 'https://…',
+                    labelStyle: TextStyle(color: Colors.white70),
+                    hintStyle: TextStyle(color: Colors.white38),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: ppGold)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.',
+                  style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+            TextButton(onPressed: () { controller.clear(); updateDialog(() {}); }, child: const Text('Remover')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Guardar')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) {
+      try {
+        await PaperPlaneApi.instance.updateAvatarUrl(
+          controller.text.trim().isEmpty ? null : controller.text.trim(),
+        );
+        await _refresh();
+      } catch (error) {
+        if (!mounted) return;
+        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível actualizar a foto.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      }
+    }
+    controller.dispose();
+  }
+
+  Future<void> _copyInvite(String handle) async {
+    final link = PaperPlaneApi.instance.buildFriendInviteLink(handle);
+    await Clipboard.setData(ClipboardData(text: link));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Link de convite copiado.')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pilot = _profile['pilot'] as Map<String, dynamic>? ?? const {};
@@ -3434,6 +3848,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final name = pilot['pilot_name']?.toString() ?? 'Piloto';
     final handle = pilot['pilot_handle']?.toString();
     final country = pilot['country_code']?.toString();
+    final avatarUrl = pilot['avatar_url']?.toString();
     final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
     final received = int.tryParse(stats['received']?.toString() ?? '') ?? 0;
 
@@ -3445,7 +3860,7 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
           Row(children: [
-            const Expanded(child: Text('Perfil & Conta', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
+            const Expanded(child: Text('Perfil & Convidar', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
             IconButton(onPressed: () => ppPush(context, const SettingsScreen()), icon: const Icon(Icons.settings_outlined, color: ppGold)),
           ]),
           if (_loading)
@@ -3464,11 +3879,24 @@ class _ProfilePageState extends State<ProfilePage> {
             GlassPanel(
               highlight: true,
               child: Row(children: [
-                Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: ppBlue.withOpacity(0.38), border: Border.all(color: ppGold.withOpacity(0.45))),
-                  child: const Icon(Icons.flight_outlined, color: ppGoldBright, size: 42),
+                InkWell(
+                  onTap: () => _editAvatar(avatarUrl),
+                  borderRadius: BorderRadius.circular(42),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      PilotAvatar(url: avatarUrl, size: 76),
+                      Positioned(
+                        right: -1,
+                        bottom: -1,
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(color: ppGold, shape: BoxShape.circle, border: Border.all(color: ppNavy, width: 2)),
+                          child: const Icon(Icons.edit_rounded, color: ppInk, size: 12),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 15),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3500,6 +3928,47 @@ class _ProfilePageState extends State<ProfilePage> {
                 Expanded(child: _ProfileNumber(number: sent.toString(), label: 'Aviões enviados')),
                 Container(width: 1, height: 55, color: Colors.white24),
                 Expanded(child: _ProfileNumber(number: received.toString(), label: 'Aviões recebidos')),
+              ]),
+            ),
+            const SectionTitle('Convida amigos para o Paper Plane'),
+            GlassPanel(
+              highlight: true,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Row(children: [
+                  Icon(Icons.card_giftcard_rounded, color: ppGoldBright, size: 25),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('Cada convite aproxima mais o mundo.', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
+                ]),
+                const SizedBox(height: 7),
+                const Text('Partilha o teu link para que outros copilotos possam encontrar-te e começar a trocar aviões.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                const SizedBox(height: 13),
+                if (handle != null && handle.isNotEmpty)
+                  Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                      child: QrImageView(
+                        data: PaperPlaneApi.instance.buildFriendInviteLink(handle),
+                        size: 86,
+                        backgroundColor: Colors.white,
+                        foregroundColor: ppNavy,
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('@$handle', style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 5),
+                      const Text('O teu link de convite pessoal', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: () => _copyInvite(handle),
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Copiar convite'),
+                        style: FilledButton.styleFrom(backgroundColor: ppBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)),
+                      ),
+                    ])),
+                  ]),
               ]),
             ),
             const SectionTitle('Explorar o teu percurso'),

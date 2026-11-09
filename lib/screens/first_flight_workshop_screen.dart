@@ -249,44 +249,83 @@ class _PlaneTypePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
+    final nose = Offset(center.dx, size.height * 0.05);
+    final left = Offset(size.width * 0.08, size.height * 0.79);
+    final right = Offset(size.width * 0.92, size.height * 0.79);
+    final tail = Offset(center.dx, size.height * 0.94);
+    final mid = Offset(center.dx, size.height * 0.63);
     final path = Path();
+
     switch (model) {
       case 'GLIDER':
         path
-          ..moveTo(center.dx, size.height * 0.08)
+          ..moveTo(nose.dx, nose.dy)
           ..lineTo(size.width * 0.97, size.height * 0.82)
-          ..lineTo(center.dx, size.height * 0.64)
+          ..lineTo(center.dx + 5, mid.dy)
+          ..lineTo(tail.dx, tail.dy)
+          ..lineTo(center.dx - 5, mid.dy)
           ..lineTo(size.width * 0.03, size.height * 0.82)
           ..close();
         break;
       case 'SWALLOW':
         path
-          ..moveTo(center.dx, size.height * 0.05)
+          ..moveTo(nose.dx, nose.dy)
           ..lineTo(size.width * 0.96, size.height * 0.82)
-          ..lineTo(center.dx + 6, size.height * 0.62)
-          ..lineTo(center.dx, size.height * 0.93)
-          ..lineTo(center.dx - 6, size.height * 0.62)
+          ..lineTo(center.dx + 8, size.height * 0.61)
+          ..lineTo(tail.dx, tail.dy)
+          ..lineTo(center.dx - 8, size.height * 0.61)
           ..lineTo(size.width * 0.04, size.height * 0.82)
           ..close();
         break;
       default:
         path
-          ..moveTo(center.dx, size.height * 0.04)
-          ..lineTo(size.width * 0.91, size.height * 0.85)
-          ..lineTo(center.dx, size.height * 0.65)
-          ..lineTo(size.width * 0.09, size.height * 0.85)
+          ..moveTo(nose.dx, nose.dy)
+          ..lineTo(right.dx, right.dy)
+          ..lineTo(center.dx, mid.dy)
+          ..lineTo(left.dx, left.dy)
           ..close();
     }
-    canvas.drawPath(path, Paint()..color = _workshopPaper);
+
+    final bounds = path.getBounds();
+    canvas.drawPath(path, Paint()
+      ..color = _workshopGoldBright.withOpacity(0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFFFF), Color(0xFFF4EFE3), Color(0xFFD3CBBB)],
+        ).createShader(bounds),
+    );
+
+    final leftFacet = Path()
+      ..moveTo(nose.dx, nose.dy + 2)
+      ..lineTo(left.dx, left.dy)
+      ..lineTo(center.dx, mid.dy)
+      ..close();
+    final rightFacet = Path()
+      ..moveTo(nose.dx, nose.dy + 2)
+      ..lineTo(right.dx, right.dy)
+      ..lineTo(center.dx, mid.dy)
+      ..close();
+    canvas.drawPath(leftFacet, Paint()..color = const Color(0xFFB8D5E4).withOpacity(0.46));
+    canvas.drawPath(rightFacet, Paint()..color = const Color(0xFFFFDCA0).withOpacity(0.3));
+
+    final foldPaint = Paint()
+      ..color = const Color(0xFF9B8E7C).withOpacity(0.85)
+      ..strokeWidth = 1.15
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(nose, tail, foldPaint);
+    canvas.drawLine(mid, left, foldPaint);
+    canvas.drawLine(mid, right, foldPaint);
     canvas.drawPath(path, Paint()
       ..color = _workshopGoldBright
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.25
+      ..strokeWidth = 1.45
       ..strokeJoin = StrokeJoin.round);
-    final fold = Path()
-      ..moveTo(center.dx, size.height * 0.05)
-      ..lineTo(center.dx, size.height * 0.65);
-    canvas.drawPath(fold, Paint()..color = const Color(0xFF9A8B70)..strokeWidth = 1);
   }
 
   @override

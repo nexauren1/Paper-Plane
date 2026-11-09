@@ -126,36 +126,26 @@ async function authenticate(request: Request, env: Env): Promise<string | null> 
 
 async function requireUser(uid: string, env: Env) {
   return env.DB.prepare(
-    "SELECT uid, pilot_code, pilot_name, pilot_handle, birth_year, declared_age_band, age_declaration_at, profile_completed, language, country_code, country_visible, status, accept_random_mail, push_enabled FROM users WHERE uid = ?",
+    "SELECT uid, pilot_code, pilot_name, pilot_handle, avatar_url, birth_year, declared_age_band, age_declaration_at, profile_completed, language, country_code, country_visible, status, accept_random_mail, push_enabled FROM users WHERE uid = ?",
   ).bind(uid).first<{
-    uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null;
+    uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null; avatar_url: string | null;
     birth_year: number | null; declared_age_band: string; age_declaration_at: string | null;
     profile_completed: number; language: string; country_code: string | null;
     country_visible: number; status: string; accept_random_mail: number; push_enabled: number;
   }>();
 }
 
-async function moderate(_env: Env, message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
-  // Sending never depends on a remote AI provider. Only a few high-confidence,
-  // explicit abuse patterns are rejected locally; ordinary conversation passes.
-  const normalized = message.normalize("NFKC").toLowerCase().replace(/\s+/g, " ");
-  const rules: Array<[string, RegExp]> = [
-    ["DIRECT_THREATS", /\b(?:vou\s+te\s+matar|vou\s+matar-te|eu\s+vou\s+te\s+matar|i will kill you|i'll kill you|i am going to kill you)\b/i],
-    ["SELF_HARM_ENCOURAGEMENT", /\b(?:mata-te|mata\s+te|kill yourself|go kill yourself)\b/i],
-    ["SEXUAL_SOLICITATION", /\b(?:manda(?:-me)?\s+(?:nudes?|fotos?\s+nuas?)|envia(?:-me)?\s+(?:nudes?|fotos?\s+nuas?)|send(?:\s+me)?\s+nudes?|send(?:\s+me)?\s+nude\s+photos?)\b/i],
-  ];
-  const categories = rules.filter(([, pattern]) => pattern.test(normalized)).map(([category]) => category);
-  return categories.length
-    ? { state: "UNSAFE", categories }
-    : { state: "SAFE", categories: [] };
+async function moderate(_env: Env, _message: string): Promise<{ state: "SAFE"; categories: string[] }> {
+  // Users can write freely. Blocking and reporting remain available as user controls.
+  return { state: "SAFE", categories: [] };
 }
 
 function normalizePilotHandle(value: unknown): string {
   return text(value, 32).replace(/^@/, "").toLowerCase();
 }
 function isValidPilotHandle(value: string): boolean {
-  return value.length >= 4 && value.length <= 28 &&
-    /^[a-z0-9]+(?:_[a-z0-9]+)*(?:-[0-9]{2})?$/.test(value);
+  return value.length >= 3 && value.length <= 28 &&
+    /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(value);
 }
 function buildFlightPlan(originCode: string | null, destinationCode: string | null, expedited = false) {
   if (!originCode || !destinationCode) return null;
@@ -189,7 +179,8 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
     });
   }
   // Symbolic app journey, not GPS or physical-aircraft telemetry.
-  const durationSeconds = expedited ? 4 : flightDurationForDistance(distanceKm);
+  const standardDuration = flightDurationForDistance(distanceKm);
+  const durationSeconds = expedited ? Math.max(20, Math.ceil(standardDuration / 3)) : standardDuration;
   const startedAt = isoNow();
   return {
     distanceKm,
@@ -208,8 +199,8 @@ function buildFlightPlan(originCode: string | null, destinationCode: string | nu
   };
 }
 function flightDurationForDistance(distanceKm: number): number {
-  // Symbolic globe flights: five to twelve seconds, regardless of real-world distance.
-  return Math.max(5, Math.min(12, Math.round(4 + Math.sqrt(distanceKm) * 0.055)));
+  // Symbolic journey duration: 1–10 minutes, depending on the route distance.
+  return Math.max(60, Math.min(600, Math.round(60 + Math.sqrt(Math.max(0, distanceKm)) * 6.5)));
 }
 
 function chooseEligiblePilot(
@@ -951,6 +942,112 @@ async function translateMessage(airplaneId: string, targetLanguage: "pt" | "en",
   }
 }
 
+
+function safePublicHttpsUrl(input: unknown): URL | null {
+  const raw = text(input, 900);
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (!host || host === "localhost" || host.endsWith(".localhost") ||
+        host.endsWith(".local") || host.endsWith(".internal") ||
+        host === "metadata.google.internal" || host.includes(":") ||
+        /^[0-9.]+$/.test(host) ||
+        /^(?:10\.|127\.|169\.254\.|192\.168\.)/.test(host) ||
+        /^172\.(?:1[6-9]|2\d|3[01])\./.test(host)) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+function decodePreviewEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+function readPreviewMeta(html: string, key: string): string | null {
+  for (const tag of html.match(/<meta\b[^>]*>/gi) ?? []) {
+    const identity = /(?:property|name)\s*=\s*["']([^"']+)["']/i.exec(tag)?.[1]?.toLowerCase();
+    if (identity !== key.toLowerCase()) continue;
+    const value = /content\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1];
+    if (value) return decodePreviewEntities(value).trim();
+  }
+  return null;
+}
+
+async function readPreviewHtml(response: Response, limit = 180_000): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < limit) {
+      const part = await reader.read();
+      if (part.done) break;
+      const bytes = part.value.byteLength > limit - total ? part.value.slice(0, limit - total) : part.value;
+      chunks.push(bytes);
+      total += bytes.byteLength;
+      if (bytes.byteLength < part.value.byteLength) break;
+    }
+  } finally {
+    try { await reader.cancel(); } catch { /* response already ended */ }
+  }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { combined.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(combined);
+}
+
+async function buildLinkPreview(input: string): Promise<Record<string, string> | null> {
+  let target = safePublicHttpsUrl(input);
+  if (!target) return null;
+  for (let hop = 0; hop < 4; hop++) {
+    let response: Response;
+    try {
+      response = await fetch(target.toString(), {
+        redirect: "manual",
+        headers: { "Accept": "text/html,application/xhtml+xml,image/*;q=0.8", "User-Agent": "PaperPlanePreview/1.0" },
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      return null;
+    }
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get("Location");
+      if (!location || hop === 3) return null;
+      target = safePublicHttpsUrl(new URL(location, target).toString());
+      if (!target) return null;
+      continue;
+    }
+    if (!response.ok) return null;
+    const type = (response.headers.get("Content-Type") ?? "").toLowerCase();
+    if (type.startsWith("image/")) {
+      return { url: target.toString(), title: target.hostname, description: "", imageUrl: target.toString(), siteName: target.hostname };
+    }
+    if (!type.includes("text/html") && !type.includes("application/xhtml")) {
+      return { url: target.toString(), title: target.hostname, description: "", imageUrl: "", siteName: target.hostname };
+    }
+    const html = await readPreviewHtml(response);
+    const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.replace(/<[^>]+>/g, " ").trim() ?? "";
+    const title = readPreviewMeta(html, "og:title") ?? readPreviewMeta(html, "twitter:title") ??
+      (decodePreviewEntities(titleTag).trim() || target.hostname);
+    const description = readPreviewMeta(html, "og:description") ?? readPreviewMeta(html, "description") ??
+      readPreviewMeta(html, "twitter:description") ?? "";
+    const rawImage = readPreviewMeta(html, "og:image") ?? readPreviewMeta(html, "twitter:image") ?? "";
+    const image = rawImage ? safePublicHttpsUrl(new URL(rawImage, target).toString()) : null;
+    const siteName = readPreviewMeta(html, "og:site_name") ?? target.hostname;
+    return {
+      url: target.toString(), title: title.slice(0, 180), description: description.slice(0, 360),
+      imageUrl: image?.toString() ?? "", siteName: siteName.slice(0, 80),
+    };
+  }
+  return null;
+}
+
 async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
@@ -1060,7 +1157,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       env.DB.prepare(
         `SELECT f.id, f.created_at,
                 CASE WHEN f.requester_uid = ? THEN f.addressee_uid ELSE f.requester_uid END AS uid,
-                u.pilot_name, u.pilot_handle,
+                u.pilot_name, u.pilot_handle, u.avatar_url,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
          FROM friendships f
          JOIN users u ON u.uid = CASE WHEN f.requester_uid = ? THEN f.addressee_uid ELSE f.requester_uid END
@@ -1069,7 +1166,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       ).bind(uid, uid, uid, uid).all(),
       env.DB.prepare(
         `SELECT f.id, f.requester_uid, f.addressee_uid, f.created_at,
-                u.pilot_name, u.pilot_handle,
+                u.pilot_name, u.pilot_handle, u.avatar_url,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
          FROM friendships f
          JOIN users u ON u.uid = f.requester_uid
@@ -1083,7 +1180,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   if (method === "GET" && path === "/v1/friends/requests") {
     const [incoming, outgoing] = await Promise.all([
       env.DB.prepare(
-        `SELECT f.id, f.requester_uid AS uid, u.pilot_name, u.pilot_handle,
+        `SELECT f.id, f.requester_uid AS uid, u.pilot_name, u.pilot_handle, u.avatar_url,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
                 f.created_at
          FROM friendships f JOIN users u ON u.uid = f.requester_uid
@@ -1091,7 +1188,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
          ORDER BY f.created_at ASC LIMIT 100`,
       ).bind(uid).all(),
       env.DB.prepare(
-        `SELECT f.id, f.addressee_uid AS uid, u.pilot_name, u.pilot_handle,
+        `SELECT f.id, f.addressee_uid AS uid, u.pilot_name, u.pilot_handle, u.avatar_url,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
                 f.created_at
          FROM friendships f JOIN users u ON u.uid = f.addressee_uid
@@ -1106,7 +1203,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const query = normalizePilotHandle(url.searchParams.get("q"));
     if (query.length < 2) return json({ items: [] });
     const people = await env.DB.prepare(
-      `SELECT uid, pilot_name, pilot_handle,
+      `SELECT uid, pilot_name, pilot_handle, avatar_url,
               CASE WHEN country_visible = 1 THEN country_code ELSE NULL END AS country_code
        FROM users
        WHERE status = 'ACTIVE' AND profile_completed = 1
@@ -1201,10 +1298,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const rows = await env.DB.prepare(
       `SELECT c.id AS conversation_id, c.kind,
               CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
-              u.pilot_name, u.pilot_handle,
+              u.pilot_name, u.pilot_handle, u.avatar_url,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
               (SELECT m.message_text FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
               (SELECT m.created_at FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at,
+              (SELECT m.read_at FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_read_at,
+              c.ended_at,
               c.created_at,
               (SELECT COUNT(*) FROM airplanes a WHERE a.sender_uid IN (c.user_a, c.user_b)
                 AND a.recipient_uid IN (c.user_a, c.user_b)
@@ -1270,9 +1369,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const message = text(body.message, 1000);
     if (!message) return json({ error: "MESSAGE_LENGTH" }, 400);
     const conversation = await env.DB.prepare(
-      "SELECT id, user_a, user_b FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
-    ).bind(chatMessagesMatch[1], uid, uid).first<{ id: string; user_a: string; user_b: string }>();
+      "SELECT id, user_a, user_b, kind FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
+    ).bind(chatMessagesMatch[1], uid, uid).first<{ id: string; user_a: string; user_b: string; kind: string }>();
     if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    if (conversation.kind !== "CHAT") return json({ error: "CHAMA_USES_PLANES", message: "A Chama comunica através de aviões de resposta." }, 409);
     const otherUid = conversation.user_a === uid ? conversation.user_b : conversation.user_a;
     const blocked = await env.DB.prepare(
       "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
@@ -1283,13 +1383,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ).bind(uid).first<{ count: number }>();
     if (Number(recent?.count ?? 0) >= 40) return json({ error: "CHAT_RATE_LIMIT" }, 429);
 
-    const moderation = await moderate(env, message);
-    if (moderation.state === "UNSAFE" || moderation.state === "REVIEW") {
-      return json({ error: "MESSAGE_NOT_ALLOWED", message: "Esta mensagem precisa de ser alterada antes de ser enviada." }, 422);
-    }
-    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
-      return json({ error: "MODERATION_TEMPORARILY_UNAVAILABLE", message: "A verificação de segurança está temporariamente indisponível. Tenta novamente." }, 503);
-    }
     const id = uuid();
     const createdAt = isoNow();
     await env.DB.batch([
@@ -1308,17 +1401,22 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const chatMatch = path.match(/^\/v1\/chats\/([^/]+)$/);
   if (method === "GET" && chatMatch) {
     const conversation = await env.DB.prepare(
-      `SELECT c.id, c.user_a, c.user_b, c.kind,
+      `SELECT c.id, c.user_a, c.user_b, c.kind, c.ended_at,
               CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
-              u.pilot_name, u.pilot_handle,
+              u.pilot_name, u.pilot_handle, u.avatar_url,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
        FROM conversations c
        JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
        WHERE c.id = ? AND (c.user_a = ? OR c.user_b = ?) LIMIT 1`,
     ).bind(uid, uid, chatMatch[1], uid, uid).first();
     if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    if ((conversation as { kind?: string }).kind === "CHAT") {
+      await env.DB.prepare(
+        "UPDATE chat_messages SET read_at = ? WHERE conversation_id = ? AND sender_uid <> ? AND read_at IS NULL",
+      ).bind(isoNow(), chatMatch[1], uid).run();
+    }
     const messages = await env.DB.prepare(
-      "SELECT id, sender_uid, message_text, created_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 150",
+      "SELECT id, sender_uid, message_text, created_at, read_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 150",
     ).bind(chatMatch[1]).all();
     let chama: Record<string, unknown> | null = null;
     if ((conversation as { kind?: string }).kind === "CHAMA") {
@@ -1326,7 +1424,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         `SELECT id, sender_uid, recipient_uid, reply_to_id, message_text, status, created_at, delivered_at
          FROM airplanes
          WHERE ((sender_uid = ? AND recipient_uid = ?) OR (sender_uid = ? AND recipient_uid = ?))
-           AND status IN ('DELIVERED','READ','RESPONDED')
+           AND status IN ('FLYING','DELIVERED','READ','RESPONDED')
          ORDER BY created_at ASC LIMIT 120`,
       ).bind(
         (conversation as { user_a: string }).user_a,
@@ -1349,11 +1447,18 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         streak++;
         cursor -= 24 * 60 * 60 * 1000;
       }
+      const lastPlaneAt = planes.length ? planes[planes.length - 1].created_at : null;
+      const expiresAt = lastPlaneAt
+        ? new Date(Date.parse(lastPlaneAt) + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
       chama = {
         planeCount: planes.length,
         exchangeCount: planes.filter((plane) => plane.reply_to_id !== null).length,
         streak,
         lastExchangeAt: [...planes].reverse().find((plane) => plane.reply_to_id !== null)?.created_at ?? null,
+        lastPlaneAt,
+        expiresAt,
+        endedAt: (conversation as { ended_at?: string | null }).ended_at ?? null,
         history: planes,
       };
     }
@@ -1362,6 +1467,15 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       items: (messages.results ?? []).reverse(),
       ...(chama ? { chama } : {}),
     });
+  }
+
+  const endChamaMatch = path.match(/^\/v1\/chamas\/([^/]+)\/end$/);
+  if (method === "POST" && endChamaMatch) {
+    const result = await env.DB.prepare(
+      "UPDATE conversations SET ended_at = ? WHERE id = ? AND kind = 'CHAMA' AND (user_a = ? OR user_b = ?) AND ended_at IS NULL",
+    ).bind(isoNow(), endChamaMatch[1], uid, uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "CHAMA_NOT_FOUND_OR_ENDED" }, 404);
+    return json({ ok: true, endedAt: isoNow() });
   }
 
   if (path === "/v1/admin/reports" && method === "GET") {
@@ -1710,6 +1824,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const birthDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateText);
     const countryCode = text(body.countryCode, 2).toUpperCase();
     const language = body.language === "en" ? "en" : "pt";
+    const avatarInput = text(body.avatarUrl, 900);
+    const avatarUrl = avatarInput ? safePublicHttpsUrl(avatarInput)?.toString() : null;
+    if (avatarInput && !avatarUrl) return json({ error: "INVALID_AVATAR_URL", message: "Use um link HTTPS público para a tua foto ou perfil." }, 400);
     if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
     if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
     if (!birthDateMatch) return json({ error: "INVALID_BIRTH_DATE" }, 400);
@@ -1736,8 +1853,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
     try {
       await env.DB.prepare(
-        "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
-      ).bind(pilotName, handle, birthYear, declaredAgeBand, isoNow(), countryCode, language, isoNow(), uid).run();
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, avatarUrl, birthYear, declaredAgeBand, isoNow(), countryCode, language, isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
         return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
@@ -1750,6 +1867,24 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       canSend: !!pilot && ["UNDER_18", "ADULT"].includes(pilot.declared_age_band),
       ageDeclaration: "SELF_DECLARED",
     });
+  }
+
+  if (method === "POST" && path === "/v1/profile/avatar") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const input = text(body.avatarUrl, 900);
+    const avatarUrl = input ? safePublicHttpsUrl(input)?.toString() : null;
+    if (input && !avatarUrl) return json({ error: "INVALID_AVATAR_URL" }, 400);
+    await env.DB.prepare("UPDATE users SET avatar_url = ?, updated_at = ? WHERE uid = ?")
+      .bind(avatarUrl, isoNow(), uid).run();
+    return json({ ok: true, avatarUrl });
+  }
+
+  if (method === "GET" && path === "/v1/link-preview") {
+    const input = url.searchParams.get("url") ?? "";
+    const preview = await buildLinkPreview(input);
+    if (!preview) return json({ error: "PREVIEW_UNAVAILABLE" }, 422);
+    return json({ preview }, 200, { "Cache-Control": "private, max-age=1800" });
   }
 
   if (method === "POST" && path === "/v1/airplanes") {
@@ -1809,30 +1944,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }>();
     let plane = await loadFlightPlane();
     if (!plane) return json({ error: "NOT_FOUND" }, 404);
-
-    // Shorten legacy long-duration flights without resetting their visible progress.
-    if (
-      plane.status === "FLYING" &&
-      plane.flight_distance_km != null &&
-      plane.flight_started_at &&
-      plane.flight_duration_seconds != null &&
-      plane.flight_duration_seconds > 12
-    ) {
-      const progressBeforeUpdate = flightProgress(
-        plane.flight_started_at,
-        plane.estimated_arrival_at,
-        plane.status,
-      );
-      const durationSeconds = flightDurationForDistance(plane.flight_distance_km);
-      const startedAt = new Date(Date.now() - progressBeforeUpdate * durationSeconds * 1000).toISOString();
-      const estimatedArrivalAt = new Date(Date.parse(startedAt) + durationSeconds * 1000).toISOString();
-      await env.DB.prepare(
-        "UPDATE airplanes SET flight_duration_seconds = ?, flight_started_at = ?, estimated_arrival_at = ? WHERE id = ? AND status = 'FLYING'",
-      ).bind(durationSeconds, startedAt, estimatedArrivalAt, plane.id).run();
-      plane.flight_duration_seconds = durationSeconds;
-      plane.flight_started_at = startedAt;
-      plane.estimated_arrival_at = estimatedArrivalAt;
-    }
 
     // The sender's live tracker also nudges matching. Queue + cron remain the
     // background retry paths, but an open flight screen no longer waits for cron.
@@ -1966,6 +2077,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!original || original.recipient_uid !== uid || original.allow_reply !== 1 || !["DELIVERED","READ"].includes(original.status)) {
       return json({ error: "REPLY_NOT_ALLOWED" }, 403);
     }
+    const pairA = uid < original.sender_uid ? uid : original.sender_uid;
+    const pairB = uid < original.sender_uid ? original.sender_uid : uid;
+    const activeChama = await env.DB.prepare(
+      "SELECT ended_at FROM conversations WHERE user_a = ? AND user_b = ? AND kind = 'CHAMA' LIMIT 1",
+    ).bind(pairA, pairB).first<{ ended_at: string | null }>();
+    if (activeChama?.ended_at) return json({ error: "CHAMA_ENDED", message: "Esta Chama já foi encerrada." }, 409);
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) return json({ error: "INVALID_JSON" }, 400);
     const replyResponse = await createAirplane(uid, body, env, ctx, original.sender_uid, privateReplyMatch[1]);
@@ -2074,9 +2191,11 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const language = url.searchParams.get("language") === "en" ? "en" : url.searchParams.get("language") === "pt" ? "pt" : null;
     const rows = await env.DB.prepare(
       `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at, p.likes_count,
+              u.pilot_name, u.pilot_handle, u.avatar_url,
               CASE WHEN a.sender_uid = ? THEN 1 ELSE 0 END AS is_own,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
        FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       JOIN users u ON u.uid = a.sender_uid
        WHERE a.audience = 'PUBLIC' AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED'
          AND (? IS NULL OR a.sender_country_code = ?)
          AND (? IS NULL OR a.message_language = ?)
@@ -2198,6 +2317,19 @@ export default {
     // Expire stale unmatched planes and unresolved manual reviews before another matching pass.
     await env.DB.prepare(
       "UPDATE airplanes SET status = 'EXPIRED' WHERE status IN ('QUEUED','HELD_REVIEW') AND expires_at IS NOT NULL AND expires_at <= ?",
+    ).bind(isoNow()).run();
+
+    await env.DB.prepare(
+      `UPDATE conversations
+       SET ended_at = ?
+       WHERE kind = 'CHAMA' AND ended_at IS NULL
+         AND COALESCE(
+           (SELECT MAX(a.created_at) FROM airplanes a
+            WHERE ((a.sender_uid = conversations.user_a AND a.recipient_uid = conversations.user_b)
+                OR (a.sender_uid = conversations.user_b AND a.recipient_uid = conversations.user_a))
+              AND a.status IN ('DELIVERED','READ','RESPONDED')),
+           conversations.created_at
+         ) <= strftime('%Y-%m-%dT%H:%M:%fZ','now','-7 days')`,
     ).bind(isoNow()).run();
 
     // Retry saved airplanes when the moderation provider was temporarily unavailable.

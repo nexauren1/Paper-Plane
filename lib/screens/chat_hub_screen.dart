@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../services/paper_plane_api.dart';
+import '../widgets/chat_link_preview.dart';
+import '../widgets/pilot_avatar.dart';
+import '../widgets/report_dialog.dart';
 
 const Color _chatNavy = Color(0xFF071225);
 const Color _chatGold = Color(0xFFF0CE7C);
@@ -526,10 +529,21 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         highlight: true,
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 26,
-              backgroundColor: const Color(0xFF304C77),
-              child: Icon(chama ? Icons.local_fire_department_rounded : Icons.chat_bubble_rounded, color: chama ? const Color(0xFFFFB66E) : _chatGoldBright, size: 25),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                PilotAvatar(url: chat['avatar_url']?.toString(), size: 52),
+                if (chama)
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Color(0xFF263D66), shape: BoxShape.circle),
+                      child: const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB66E), size: 15),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -596,10 +610,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     final country = person['country_code']?.toString();
     return _panel(
       child: Row(children: [
-        const CircleAvatar(
-          backgroundColor: Color(0xFF263F68),
-          child: Icon(Icons.person_outline_rounded, color: _chatGoldBright),
-        ),
+        PilotAvatar(url: person['avatar_url']?.toString(), size: 42),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -709,7 +720,9 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   String _name = '';
   String _handle = '';
   String? _countryCode;
+  String? _avatarUrl;
   String? _otherUid;
+  bool _chamaEnded = false;
   String? _error;
   List<Map<String, dynamic>> _messages = [];
   Map<String, dynamic>? _chamaStats;
@@ -757,7 +770,9 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         _name = conversation['pilot_name']?.toString() ?? _name;
         _handle = conversation['pilot_handle']?.toString() ?? _handle;
         _countryCode = conversation['country_code']?.toString() ?? _countryCode;
+        _avatarUrl = conversation['avatar_url']?.toString() ?? _avatarUrl;
         _otherUid = conversation['other_uid']?.toString();
+        _chamaEnded = conversation['ended_at'] != null;
         _messages = messages;
         _chamaStats = chamaData;
         _chamaHistory = history;
@@ -783,6 +798,10 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     final exchanges = int.tryParse(stats['exchangeCount']?.toString() ?? '') ?? 0;
     final streak = int.tryParse(stats['streak']?.toString() ?? '') ?? 0;
     final last = DateTime.tryParse(stats['lastExchangeAt']?.toString() ?? '');
+    final expiry = DateTime.tryParse(stats['expiresAt']?.toString() ?? '');
+    final ended = _chamaEnded || stats['endedAt'] != null;
+    final daysLeft = expiry == null ? 7 : expiry.difference(DateTime.now()).inHours <= 0
+        ? 0 : (expiry.difference(DateTime.now()).inHours / 24).ceil();
     final lastLabel = last == null
         ? 'Ainda sem nova troca'
         : 'Última troca · ${last.toLocal().day.toString().padLeft(2, '0')}/${last.toLocal().month.toString().padLeft(2, '0')}';
@@ -800,7 +819,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           SizedBox(width: 7),
           Text('A Chama do Deserto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
           Spacer(),
-          Text('ACTIVA', style: TextStyle(color: _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+          Text(ended ? 'ENCERRADA' : 'ACTIVA', style: TextStyle(color: ended ? Colors.white54 : _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -810,6 +829,32 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         ]),
         const SizedBox(height: 7),
         Text(lastLabel, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+        const SizedBox(height: 9),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: ended ? Colors.white.withOpacity(0.06) : (daysLeft <= 2 ? const Color(0xFF754B42) : const Color(0xFF172844)),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: ended ? Colors.white12 : _chatGold.withOpacity(0.2)),
+          ),
+          child: Row(children: [
+            Icon(ended ? Icons.do_not_disturb_on_outlined : Icons.hourglass_bottom_rounded,
+                color: ended ? Colors.white54 : _chatGoldBright, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                ended
+                    ? 'Esta rota foi encerrada. O histórico permanece guardado.'
+                    : daysLeft <= 0
+                        ? 'A Chama está sem actividade e vai expirar.'
+                        : daysLeft <= 2
+                            ? 'A chama está a enfraquecer. Responde antes de apagar!'
+                            : 'Chama apaga em $daysLeft dias sem resposta.',
+                style: TextStyle(color: ended ? Colors.white60 : _chatGoldBright, fontSize: 10, height: 1.35, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ]),
+        ),
       ]),
     );
   }
@@ -883,11 +928,43 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
-      await PaperPlaneApi.instance.sendChatMessage(widget.conversationId, text);
+      if (widget.isChama) {
+        if (_chamaEnded) throw const PaperPlaneApiException('CHAMA_ENDED', 'Esta Chama foi encerrada.');
+        final myUid = FirebaseAuth.instance.currentUser?.uid;
+        Map<String, dynamic>? incoming;
+        for (final plane in _chamaHistory.reversed) {
+          final isMineToReceive = plane['recipient_uid']?.toString() == myUid;
+          final status = plane['status']?.toString();
+          if (isMineToReceive && (status == 'DELIVERED' || status == 'READ')) {
+            incoming = plane;
+            break;
+          }
+        }
+        final planeId = incoming?['id']?.toString() ?? '';
+        if (planeId.isEmpty) {
+          throw const PaperPlaneApiException(
+            'REPLY_NOT_ALLOWED',
+            'Aguarda o avião da outra pessoa chegar. Depois podes lançar a tua resposta.',
+          );
+        }
+        await PaperPlaneApi.instance.replyToPlane(
+          planeId,
+          message: text,
+          language: 'pt',
+          allowReply: true,
+        );
+      } else {
+        await PaperPlaneApi.instance.sendChatMessage(widget.conversationId, text);
+      }
       _message.clear();
       await _refresh(silent: true);
       if (!mounted) return;
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToEnd());
+      if (widget.isChama && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A tua resposta está a voar pela rota da Chama — 3× mais rápida.')),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException
@@ -896,6 +973,61 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _reportLatestPlane() async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    Map<String, dynamic>? latest;
+    for (final plane in _chamaHistory.reversed) {
+      if (plane['sender_uid']?.toString() != myUid) {
+        latest = plane;
+        break;
+      }
+    }
+    final planeId = latest?['id']?.toString() ?? '';
+    if (planeId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ainda não há aviões nesta Chama para denunciar.')),
+      );
+      return;
+    }
+    await showReportDialog(context, planeId);
+  }
+
+  Future<void> _endChama() async {
+    if (_chamaEnded) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF172844),
+        title: const Text('Encerrar esta Chama?'),
+        content: const Text('A troca de aviões nesta rota será encerrada. O histórico ficará guardado para consulta.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Continuar Chama')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFC47A), foregroundColor: _chatNavy),
+            child: const Text('Encerrar rota'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await PaperPlaneApi.instance.endChama(widget.conversationId);
+      if (!mounted) return;
+      setState(() => _chamaEnded = true);
+      await _refresh(silent: true);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Rota encerrada. O histórico continua disponível.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível encerrar a rota.')),
+      );
     }
   }
 
@@ -940,7 +1072,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         backgroundColor: const Color(0xFF0B1B31),
         foregroundColor: _chatGoldBright,
         title: Row(children: [
-          const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB36F)),
+          if (_avatarUrl?.isNotEmpty == true)
+            PilotAvatar(url: _avatarUrl, size: 36)
+          else
+            Icon(widget.isChama ? Icons.local_fire_department_rounded : Icons.chat_bubble_rounded,
+                color: widget.isChama ? const Color(0xFFFFB36F) : _chatGoldBright),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(_name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
@@ -961,6 +1097,29 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       ),
       body: Column(children: [
         if (widget.isChama && _chamaStats != null) _chamaOverview(),
+        if (widget.isChama) Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 7),
+          child: Row(children: [
+            Expanded(child: _conversationAction(
+              icon: Icons.flag_outlined,
+              label: 'Denunciar',
+              onTap: _reportLatestPlane,
+            )),
+            const SizedBox(width: 6),
+            Expanded(child: _conversationAction(
+              icon: Icons.shield_outlined,
+              label: 'Bloquear',
+              onTap: _block,
+            )),
+            const SizedBox(width: 6),
+            Expanded(child: _conversationAction(
+              icon: Icons.route_outlined,
+              label: _chamaEnded ? 'Encerrada' : 'Encerrar rota',
+              onTap: _chamaEnded ? null : _endChama,
+              emphasis: true,
+            )),
+          ]),
+        ),
         if (!widget.isChama) Container(
           margin: const EdgeInsets.fromLTRB(14, 12, 14, 6),
           padding: const EdgeInsets.all(12),
@@ -1028,11 +1187,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                   controller: _message,
                   minLines: 1,
                   maxLines: 4,
-                  maxLength: 1000,
+                  maxLength: widget.isChama ? 200 : 1000,
                   textCapitalization: TextCapitalization.sentences,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: 'Enviar mensagem em papel…',
+                    hintText: widget.isChama ? (_chamaEnded ? 'Chama encerrada' : 'Enviar próximo avião…') : 'Mensagem instantânea…',
                     counterText: '',
                     filled: true,
                     fillColor: const Color(0xFF1B2A43),
@@ -1040,13 +1199,14 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
                   ),
                   onSubmitted: (_) => _send(),
+                  enabled: !widget.isChama || !_chamaEnded,
                 ),
               ),
               const SizedBox(width: 8),
               CircleAvatar(
                 backgroundColor: _chatGold,
                 child: IconButton(
-                  onPressed: _sending ? null : _send,
+                  onPressed: _sending || (widget.isChama && _chamaEnded) ? null : _send,
                   icon: _sending
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _chatNavy))
                       : const Icon(Icons.send_rounded, color: _chatNavy),
@@ -1058,6 +1218,24 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       ]),
     );
   }
+
+  Widget _conversationAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+    bool emphasis = false,
+  }) => OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 15),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: emphasis ? _chatGoldBright : Colors.white70,
+          side: BorderSide(color: emphasis ? _chatGold.withOpacity(0.5) : Colors.white12),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          textStyle: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+        ),
+      );
 
   Widget _messageBubble(Map<String, dynamic> message) {
     final isOwn = message['sender_uid']?.toString() == FirebaseAuth.instance.currentUser?.uid;
@@ -1093,9 +1271,34 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             ]),
             const SizedBox(height: 6),
           ],
+          if (widget.isChama) ...[
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.send_rounded, color: _chatGoldBright.withOpacity(0.9), size: 12),
+              const SizedBox(width: 5),
+              Text(isOwn ? 'AVIÃO ENVIADO' : 'AVIÃO RECEBIDO',
+                  style: const TextStyle(color: _chatGoldBright, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+            ]),
+            const SizedBox(height: 6),
+          ],
           Text(content, style: const TextStyle(fontSize: 14, height: 1.42)),
+          ChatLinkPreview(key: ValueKey(message['id']?.toString() ?? content), message: content),
           const SizedBox(height: 5),
-          Text(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
+            if (isOwn && !widget.isChama) ...[
+              const SizedBox(width: 6),
+              Icon(
+                message['read_at'] == null ? Icons.done_rounded : Icons.done_all_rounded,
+                size: 13,
+                color: message['read_at'] == null ? Colors.white54 : const Color(0xFF8BE0FF),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                message['read_at'] == null ? 'Enviada' : 'Lida',
+                style: TextStyle(fontSize: 8, color: message['read_at'] == null ? Colors.white54 : const Color(0xFF8BE0FF)),
+              ),
+            ],
+          ]),
         ]),
       ),
     );

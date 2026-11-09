@@ -299,3 +299,22 @@ try:
     raise AssertionError("Mission reward was claimed twice")
 except sqlite3.IntegrityError:
     pass
+
+
+# External profile photos, private Chat read receipts and Chama closure.
+user_columns = {row[1] for row in DB.execute("PRAGMA table_info(users)").fetchall()}
+chat_message_columns = {row[1] for row in DB.execute("PRAGMA table_info(chat_messages)").fetchall()}
+conversation_columns = {row[1] for row in DB.execute("PRAGMA table_info(conversations)").fetchall()}
+assert "avatar_url" in user_columns, "Missing public profile avatar URL"
+assert "read_at" in chat_message_columns, "Missing private Chat read receipt"
+assert "ended_at" in conversation_columns, "Missing Chama route closure field"
+DB.execute("UPDATE users SET avatar_url = ? WHERE uid = ?", ("https://images.example.test/pilot.jpg", "pilot-a"))
+assert DB.execute("SELECT avatar_url FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "https://images.example.test/pilot.jpg"
+DB.execute(
+    "UPDATE chat_messages SET read_at = '2026-11-09T12:00:00.000Z' WHERE id = 'chat-1'"
+)
+assert DB.execute("SELECT read_at FROM chat_messages WHERE id = 'chat-1'").fetchone()[0] == "2026-11-09T12:00:00.000Z"
+DB.execute(
+    "UPDATE conversations SET ended_at = '2026-11-09T12:05:00.000Z' WHERE id = 'chama-1'"
+)
+assert DB.execute("SELECT ended_at FROM conversations WHERE id = 'chama-1'").fetchone()[0] == "2026-11-09T12:05:00.000Z"
