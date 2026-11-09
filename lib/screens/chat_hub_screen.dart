@@ -147,6 +147,33 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     }
   }
 
+  Future<void> _deleteConversation(String id, {required bool chama, required String name}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF172844),
+        title: const Text('Eliminar conversa?'),
+        content: Text('A conversa com $name será removida da tua lista. A outra pessoa continuará a ter a sua cópia.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await PaperPlaneApi.instance.deleteConversation(id, chama: chama);
+      await _refresh(silent: true);
+      _notice('Conversa removida da tua lista.');
+    } catch (error) {
+      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar a conversa.');
+    }
+  }
+
   Future<void> _removeFriend(String uid, String handle) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -563,7 +590,22 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                 ],
               ]),
             ),
-            const Icon(Icons.chevron_right_rounded, color: _chatGold),
+            PopupMenuButton<String>(
+              tooltip: 'Opções da conversa',
+              onSelected: (value) {
+                if (value == 'delete' && conversationId.isNotEmpty) {
+                  _deleteConversation(conversationId, chama: chama, name: name);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'delete', child: Row(children: [
+                  Icon(Icons.delete_outline_rounded, size: 18),
+                  SizedBox(width: 8),
+                  Text('Eliminar conversa'),
+                ])),
+              ],
+              icon: const Icon(Icons.more_vert_rounded, color: _chatGold),
+            ),
           ],
         ),
       ),

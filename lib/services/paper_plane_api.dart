@@ -56,6 +56,9 @@ class PaperPlaneApi {
       if (method == 'POST') {
         return _client.post(uri, headers: headers, body: jsonEncode(body ?? const {}));
       }
+      if (method == 'DELETE') {
+        return _client.delete(uri, headers: headers);
+      }
       return _client.get(uri, headers: headers);
     }
 
@@ -107,7 +110,10 @@ class PaperPlaneApi {
         'PILOT_HANDLE_TAKEN' => 'Esse nome de copiloto já existe. Escolhe outro.',
         'PILOT_NOT_FOUND' => 'Não encontrámos um copiloto ativo com esse @nome.',
         'FRIEND_AGE_GROUP_MISMATCH' => 'Por segurança, só podes adicionar pessoas da mesma faixa etária declarada.',
-        'CHAT_NOT_FOUND' => 'Esta Chama já não está disponível.',
+        'CHAT_NOT_FOUND' => 'Esta conversa já não está disponível.',
+        'CONVERSATION_NOT_FOUND' => 'Esta conversa já não está disponível.',
+        'AIRPLANE_NOT_FOUND' => 'Este avião já não está disponível.',
+        'FLIGHT_CANNOT_BE_CANCELLED' => 'Este voo já chegou ou não pode ser cancelado.',
         'CHAT_UNAVAILABLE' => 'Não é possível enviar mensagens nesta conversa.',
         'CHAT_RATE_LIMIT' => 'Atingiste o limite temporário de mensagens. Tenta novamente mais tarde.',
         'FRIENDSHIP_REQUIRED' => 'Aceitem primeiro o pedido de amizade para abrir um Chat privado.',
@@ -207,6 +213,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> removeFriend(String uid) =>
       _request('/v1/friends/remove', method: 'POST', body: {'uid': uid});
 
+  Future<Map<String, dynamic>> deleteConversation(String id, {required bool chama}) =>
+      _request('/v1/${chama ? 'chamas' : 'chats'}/$id', method: 'DELETE');
+
   Future<Map<String, dynamic>> getChats() => _request('/v1/chats');
 
   Future<Map<String, dynamic>> getChamas() => _request('/v1/chamas');
@@ -284,6 +293,12 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> openIncomingPlane(String id) =>
       _request('/v1/inbox/$id');
+
+  Future<Map<String, dynamic>> deleteAirplane(String id) =>
+      _request('/v1/airplanes/$id', method: 'DELETE');
+
+  Future<Map<String, dynamic>> cancelAirplane(String id) =>
+      _request('/v1/airplanes/$id/cancel', method: 'POST');
 
   Future<Map<String, dynamic>> releasePlane(String id) =>
       _request('/v1/airplanes/$id/release', method: 'POST');

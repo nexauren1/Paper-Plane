@@ -555,11 +555,9 @@ class _LaunchRouterState extends State<LaunchRouter> {
       await PaperPlaneApi.instance.bootstrapPilot();
       final profileResult = await PaperPlaneApi.instance.getProfile();
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
-      final stats = profileResult['stats'] as Map<String, dynamic>? ?? const {};
-      final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
-
-      // Returning pilots who finished their first flight should open directly at Home.
-      if (pilot['profile_completed'] == 1 && sent > 0) return const MainShell();
+      // A completed profile is enough to enter the app. The first-flight
+      // workshop belongs to registration, never to every app reopening.
+      if (pilot['profile_completed'] == 1) return const MainShell();
     } catch (_) {
       // Keep the account entry available when the session needs to be retried online.
     }
@@ -2183,6 +2181,67 @@ class _FlightScreenState extends State<FlightScreen> {
     super.dispose();
   }
 
+  Future<void> _cancelFlight() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF172844),
+        title: const Text('Cancelar avião?'),
+        content: const Text('O servidor vai parar a procura ou o voo antes da entrega.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Continuar voo')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB94E64)),
+            child: const Text('Cancelar voo'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await PaperPlaneApi.instance.cancelAirplane(widget.airplaneId);
+      if (!mounted) return;
+      await _refresh();
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O avião foi cancelado.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível cancelar o avião.'),
+      ));
+    }
+  }
+
+  Future<void> _deleteFlight() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF172844),
+        title: const Text('Eliminar do histórico?'),
+        content: const Text('O avião deixa de aparecer no teu histórico. A cópia já entregue à outra pessoa mantém-se.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Manter')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB94E64)),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await PaperPlaneApi.instance.deleteAirplane(widget.airplaneId);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar o avião.'),
+      ));
+    }
+  }
+
   Future<void> _refresh() async {
     try {
       final response = await PaperPlaneApi.instance.getAirplaneFlight(widget.airplaneId);
@@ -2275,6 +2334,7 @@ class _FlightScreenState extends State<FlightScreen> {
                     ? 'Em rota para ' + (destinationName?.trim().isNotEmpty == true ? destinationName! : _countryName(destinationCode))
                     : ['DELIVERED', 'READ', 'RESPONDED'].contains(status)
                         ? 'O avião chegou ao destino'
+                        : status == 'CANCELLED' ? 'Voo cancelado'
                         : status == 'HELD_REVIEW' ? 'A preparar o teu avião' : 'Estado: ' + status,
             style: const TextStyle(color: ppGoldBright, fontSize: 17, fontWeight: FontWeight.w700),
           ),
@@ -2427,6 +2487,9 @@ class _FlightScreenState extends State<FlightScreen> {
           const SizedBox(height: 14),
           const Text('O globo mostra uma rota digital estimada entre os centros geográficos dos países. O avião acompanha o progresso guardado pelo servidor; não usa GPS nem representa a posição de uma aeronave física.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45)),
           const SizedBox(height: 14),
+          if (['QUEUED', 'FLYING'].contains(status))
+            SoftButton(label: 'Cancelar voo', icon: Icons.cancel_outlined, onPressed: _cancelFlight),
+          SoftButton(label: 'Eliminar do meu histórico', icon: Icons.delete_outline_rounded, onPressed: _deleteFlight),
           SoftButton(label: 'Voltar ao início', icon: Icons.home_outlined, onPressed: () => Navigator.popUntil(context, (route) => route.isFirst)),
         ],
       ),
@@ -2656,6 +2719,39 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
     }
   }
 
+  Future<void> _deleteReceivedPlane() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF172844),
+        title: const Text('Eliminar este avião?'),
+        content: const Text('A carta será removida apenas da tua Caixa.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Manter')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB94E64)),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _busy = true);
+    try {
+      await PaperPlaneApi.instance.deleteAirplane(widget.airplaneId);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar este avião.'),
+      ));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _reportOrBlock({required bool block}) async {
     if (!block) {
       await showReportDialog(context, widget.airplaneId);
@@ -2708,7 +2804,13 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
           GoldButton(label: _busy ? 'A abrir…' : 'Abrir devagar', icon: Icons.mail_outline, onPressed: _busy ? () {} : _open),
           const SizedBox(height: 12),
           SoftButton(label: 'Libertar avião', icon: Icons.airplanemode_active_rounded, onPressed: _busy ? () {} : _release),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: _busy ? null : _deleteReceivedPlane,
+            icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54),
+            label: const Text('Eliminar da minha Caixa', style: TextStyle(color: Colors.white54)),
+          ),
+          const SizedBox(height: 8),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: false), icon: const Icon(Icons.flag_outlined, color: Colors.white54), label: const Text('Denunciar', style: TextStyle(color: Colors.white54))),
             TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: true), icon: const Icon(Icons.block_rounded, color: Colors.white54), label: const Text('Bloquear', style: TextStyle(color: Colors.white54))),
