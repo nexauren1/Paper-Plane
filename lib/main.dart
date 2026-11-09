@@ -684,6 +684,7 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
     PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
     PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
+    PaperPlaneNotifications.onOpenOpenSky = _openOpenSkyAfterPublish;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
@@ -707,6 +708,10 @@ class _MainShellState extends State<MainShell> {
 
   void _openChatFromNotification() {
     if (mounted) setState(() => _index = 3);
+  }
+
+  void _openOpenSkyAfterPublish() {
+    if (mounted) setState(() => _index = 2);
   }
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
@@ -741,6 +746,7 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenInbox = null;
     PaperPlaneNotifications.onOpenPlane = null;
     PaperPlaneNotifications.onOpenChat = null;
+    PaperPlaneNotifications.onOpenOpenSky = null;
     super.dispose();
   }
 
@@ -1164,6 +1170,23 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
       final id = airplane['id']?.toString();
       if (id == null || id.isEmpty) {
         throw const PaperPlaneApiException('AIRPLANE_NOT_CREATED', 'O servidor não confirmou a criação do avião.');
+      }
+      final isPublic = _visibility == 'Público';
+      if (isPublic) {
+        Navigator.of(context).pop();
+        final published = airplane['status']?.toString() == 'DELIVERED' &&
+            airplane['moderation']?.toString() == 'SAFE';
+        if (published) {
+          PaperPlaneNotifications.onOpenOpenSky?.call();
+          PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: Text('Avião publicado no Open Sky.')),
+          );
+        } else {
+          PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: Text('Avião recebido e colocado em revisão de segurança. Só será mostrado no Open Sky depois de aprovado.')),
+          );
+        }
+        return;
       }
       ppPush(context, FlightScreen(airplaneId: id));
     } catch (error) {
