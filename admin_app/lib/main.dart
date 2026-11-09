@@ -476,7 +476,7 @@ class _SafetyPageState extends State<SafetyPage> {
 
   Future<void> reviewAction(String id, String actionName, {bool reply = false}) async {
     final path = reply
-      ? '/v1/admin/review/replies/' + Uri.encodeComponent(id)
+      ? '/v1/admin/replies/' + Uri.encodeComponent(id)
       : '/v1/admin/review/' + Uri.encodeComponent(id);
     try { await widget.api.post(path, {'action': actionName}); await load(); }
     catch (e) { toast(e.toString()); }
