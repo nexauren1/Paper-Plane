@@ -1,0 +1,45 @@
+name: Publish Android APK release
+
+on:
+  workflow_run:
+    workflows: ["Android build"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK from the completed Android build
+        uses: actions/download-artifact@v4
+        with:
+          name: paper-plane-android-release
+          path: release-assets
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish APK as a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_PATH="$(find release-assets -type f -name '*.apk' -print -quit)"
+          if [[ -z "$APK_PATH" ]]; then
+            echo "No APK found in the Android build artifact."
+            exit 1
+          fi
+
+          TAG="android-build-${RUN_ID}"
+          TITLE="Paper Plane Android build #${RUN_NUMBER}"
+          gh release create "$TAG" "$APK_PATH" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "$TITLE" \
+            --notes "APK gerado automaticamente pelo workflow Android do Paper Plane. Build #${RUN_NUMBER} (run ${RUN_ID})."
