@@ -1728,19 +1728,19 @@ class GlobeFlightPainter extends CustomPainter {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0xFF2D749B),
-            Color(0xFF164569),
-            Color(0xFF0A2746),
+            Color(0xFF214568),
+            Color(0xFF112F50),
+            Color(0xFF071A32),
           ],
         ).createShader(bounds),
     );
     canvas.drawPath(
       path,
       Paint()
-        ..color = const Color(0xFFFFD88A).withOpacity(0.42)
+        ..color = const Color(0xFFFFD88A).withOpacity(0.62)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 4.2
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+        ..strokeWidth = 5.2
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
     );
     canvas.drawPath(
       path,
@@ -1889,7 +1889,7 @@ class GlobeFlightPainter extends CustomPainter {
       center,
       radius + 8,
       Paint()
-        ..color = const Color(0xFF168BFF).withOpacity(0.19)
+        ..color = const Color(0xFFFFC86E).withOpacity(0.13)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 31),
     );
     canvas.drawCircle(
@@ -1973,7 +1973,7 @@ class GlobeFlightPainter extends CustomPainter {
       canvas.drawPath(
         metric.extractPath(0, metric.length),
         Paint()
-          ..color = const Color(0xFF24C9FF).withOpacity(0.22)
+          ..color = const Color(0xFFFFCA73).withOpacity(0.28)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 12
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
@@ -1981,7 +1981,7 @@ class GlobeFlightPainter extends CustomPainter {
       canvas.drawPath(
         metric.extractPath(0, metric.length),
         Paint()
-          ..color = const Color(0xFF9ABBD0).withOpacity(0.62)
+          ..color = const Color(0xFFFFE7A8).withOpacity(0.82)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.1
           ..strokeCap = StrokeCap.round,
@@ -2115,7 +2115,7 @@ class GlobeFlightPainter extends CustomPainter {
       center,
       radius + 9,
       Paint()
-        ..color = const Color(0xFF20AFFF).withOpacity(0.16)
+        ..color = const Color(0xFFFFC86E).withOpacity(0.22)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 7
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9),
