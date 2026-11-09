@@ -722,16 +722,16 @@ async function processPendingAirplane(airplaneId: string, env: Env): Promise<boo
 }
 
 async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
-  // Retry only exact greetings previously held by an uncertain/failed moderation pass.
-  // A fresh primary safety-guard SAFE result is required before anything is released.
+  // Re-evaluate all messages left in review by the old remote AI moderation path.
+  // Only explicit high-confidence abuse patterns remain blocked by the local filter.
   const rows = await env.DB.prepare(
-    \`SELECT a.id, a.sender_uid, a.recipient_uid, a.reply_to_id, a.audience, a.message_text,
+    `SELECT a.id, a.sender_uid, a.recipient_uid, a.reply_to_id, a.audience, a.message_text,
             s.country_code AS sender_country, r.country_code AS recipient_country
      FROM airplanes a
      JOIN users s ON s.uid = a.sender_uid
      LEFT JOIN users r ON r.uid = a.recipient_uid
      WHERE a.status = 'HELD_REVIEW'
-     ORDER BY a.created_at ASC LIMIT 100\`,
+     ORDER BY a.created_at ASC LIMIT 100`,
   ).all<{
     id: string; sender_uid: string; recipient_uid: string | null; reply_to_id: string | null; audience: string;
     message_text: string; sender_country: string | null; recipient_country: string | null;
