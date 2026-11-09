@@ -14,6 +14,7 @@ class PaperPlaneNotifications {
   static VoidCallback? onOpenInbox;
   static ValueChanged<String>? onOpenPlane;
   static VoidCallback? onOpenChat;
+  static VoidCallback? onOpenOpenSky;
   static bool _pendingInboxOpen = false;
   static bool _pendingChatOpen = false;
   static String? _pendingAirplaneId;
