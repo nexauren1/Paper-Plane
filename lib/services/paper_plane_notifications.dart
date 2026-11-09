@@ -148,16 +148,10 @@ class PaperPlaneNotifications {
   }
 
   static void _rememberMessage(RemoteMessage message) {
-    if (message.data['type'] == 'CHAT_MESSAGE') {
-      _pendingChatOpen = true;
-      return;
-    }
-    final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
-    if (airplaneId.isNotEmpty) {
-      _pendingAirplaneId = airplaneId;
-    } else {
-      _pendingInboxOpen = true;
-    }
+    // Notification initialization now runs after runApp. The authenticated
+    // shell may already be mounted when FCM returns the initial message, so
+    // route immediately when callbacks exist and retain it only when they do not.
+    _routeMessage(message);
   }
 
   static void _routeMessage(RemoteMessage message) {
