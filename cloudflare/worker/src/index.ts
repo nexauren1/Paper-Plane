@@ -135,7 +135,7 @@ async function requireUser(uid: string, env: Env) {
   }>();
 }
 
-async function moderate(_env: Env, _message: string): Promise<{ state: "SAFE"; categories: string[] }> {
+async function moderate(_env: Env, _message: string): Promise<{ state: "SAFE" | "REVIEW" | "UNSAFE" | "TEMPORARY_UNAVAILABLE"; categories: string[] }> {
   // Users can write freely. Blocking and reporting remain available as user controls.
   return { state: "SAFE", categories: [] };
 }
