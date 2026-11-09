@@ -32,14 +32,62 @@ const Color ppPanel = Color(0xCC172844);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await FirebaseRuntime.initialize();
-  await PaperPlaneNotifications.initializeMessageHandlers();
-  await PaperPlaneAnalytics.initialize();
+
+  // Paint the Flutter UI immediately. Firebase and notification plugins must
+  // never hold the native launch screen open while awaiting platform channels.
   runApp(const PaperPlaneApp());
 }
 
-class PaperPlaneApp extends StatelessWidget {
+class PaperPlaneApp extends StatefulWidget {
   const PaperPlaneApp({super.key});
+
+  @override
+  State<PaperPlaneApp> createState() => _PaperPlaneAppState();
+}
+
+class _PaperPlaneAppState extends State<PaperPlaneApp> {
+  bool _firebaseReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlatformServices();
+  }
+
+  Future<void> _initializePlatformServices() async {
+    try {
+      await FirebaseRuntime.initialize().timeout(const Duration(seconds: 15));
+    } catch (error) {
+      debugPrint('Paper Plane: Firebase startup timed out or failed: $error');
+    }
+
+    if (!mounted) return;
+    final ready = FirebaseRuntime.isInitialized;
+    if (ready) setState(() => _firebaseReady = true);
+    if (!ready) return;
+
+    // These are optional enhancements. The app remains usable when notification
+    // permissions, FCM, or Analytics are slow or temporarily unavailable.
+    unawaited(_initializeNotificationsSafely());
+    unawaited(_initializeAnalyticsSafely());
+  }
+
+  Future<void> _initializeNotificationsSafely() async {
+    try {
+      await PaperPlaneNotifications.initializeMessageHandlers()
+          .timeout(const Duration(seconds: 8));
+    } catch (error) {
+      debugPrint('Paper Plane: notification handlers unavailable at startup: $error');
+    }
+  }
+
+  Future<void> _initializeAnalyticsSafely() async {
+    try {
+      await PaperPlaneAnalytics.initialize().timeout(const Duration(seconds: 8));
+    } catch (error) {
+      debugPrint('Paper Plane: Analytics startup skipped: $error');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +96,7 @@ class PaperPlaneApp extends StatelessWidget {
       title: 'Paper Plane',
       debugShowCheckedModeBanner: false,
       navigatorObservers: [
-        if (FirebaseRuntime.isInitialized)
+        if (_firebaseReady)
           FirebaseAnalyticsObserver(
             analytics: FirebaseAnalytics.instance,
             nameExtractor: (settings) => settings.name ?? 'PaperPlaneScreen',
@@ -547,13 +595,27 @@ class _LaunchRouterState extends State<LaunchRouter> {
   }
 
   Future<Widget> _resolveDestination() async {
-    if (!FirebaseRuntime.isInitialized) return const SplashScreen();
     try {
-      final user = await FirebaseAuth.instance.authStateChanges().first;
+      await FirebaseRuntime.initialize().timeout(const Duration(seconds: 15));
+    } catch (error) {
+      debugPrint('Paper Plane: launch initialization did not complete: $error');
+      return const SplashScreen();
+    }
+    if (!FirebaseRuntime.isInitialized) return const SplashScreen();
+
+    try {
+      final user = await FirebaseAuth.instance
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 8));
       if (user == null || user.isAnonymous) return const SplashScreen();
 
-      await PaperPlaneApi.instance.bootstrapPilot();
-      final profileResult = await PaperPlaneApi.instance.getProfile();
+      await PaperPlaneApi.instance
+          .bootstrapPilot()
+          .timeout(const Duration(seconds: 8));
+      final profileResult = await PaperPlaneApi.instance
+          .getProfile()
+          .timeout(const Duration(seconds: 8));
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       // A completed profile is enough to enter the app. The first-flight
       // workshop belongs to registration, never to every app reopening.
