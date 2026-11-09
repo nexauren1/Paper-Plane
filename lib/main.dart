@@ -648,12 +648,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        'Send a message to a stranger',
+                        'Envia um avião de papel. Alguém, em algum lugar, vai recebê-lo.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 17, color: Colors.white70),
                       ),
                       const Spacer(flex: 3),
-                      GoldButton(label: 'Start Flying', icon: Icons.flight_takeoff_rounded, onPressed: _start, height: 66),
+                      GoldButton(label: 'Começar a voar', icon: Icons.flight_takeoff_rounded, onPressed: _start, height: 66),
                       const SizedBox(height: 18),
                       const Text('Um pensamento. Um avião. O mundo inteiro.', style: TextStyle(color: Colors.white38, fontSize: 12)),
                     ],
@@ -784,10 +784,10 @@ class _MainShellState extends State<MainShell> {
           child: SizedBox(
             height: 66,
             child: Row(children: [
-              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
               _navItem(1, Icons.inbox_outlined, Icons.inbox_rounded, 'Caixa'),
               _navItem(2, Icons.public_outlined, Icons.public_rounded, 'Open Sky'),
-              _navItem(3, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chat'),
+              _navItem(3, Icons.flight_rounded, Icons.flight_takeoff_rounded, 'Pilotos'),
               _navItem(4, Icons.quiz_outlined, Icons.quiz_rounded, 'Quiz'),
               _navItem(5, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
             ]),
@@ -4464,223 +4464,6 @@ class _ProfileLink extends StatelessWidget {
   );
 }
 
-
-class ChamaScreen extends StatelessWidget {
-  const ChamaScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ScreenFrame(
-      title: 'Chama do Deserto',
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(17, 0, 17, 12),
-            child: GlassPanel(
-              highlight: true,
-              child: Row(children: [
-                const CircleAvatar(
-                  radius: 27,
-                  backgroundColor: Color(0xFF344C77),
-                  child: Icon(Icons.person_rounded, color: ppGoldBright, size: 31),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Piloto associado', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                  Text('Ligação privada de demonstração', style: TextStyle(color: Colors.white60, fontSize: 11)),
-                ])),
-                const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFA15A), size: 29),
-              ]),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 17),
-            child: GlassPanel(
-              color: const Color(0xFF263D66),
-              child: const Row(children: [
-                Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFAA65), size: 30),
-                SizedBox(width: 10),
-                Expanded(child: Text('Uma chama precisa de respeito, cuidado e consentimento dos dois pilotos.', style: TextStyle(fontWeight: FontWeight.w700))),
-              ]),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              children: const [
-                _FlameBubble(text: 'Olá! Como está o teu dia? Espero que o deserto esteja mais calmo hoje ✨', time: 'ontem · 22:12', mine: false),
-                Padding(
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  child: Center(
-                    child: Text('A conversa só continua com a escolha livre dos dois.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontSize: 11)),
-                  ),
-                ),
-                _FlameBubble(text: 'Consegui ver as estrelas aqui esta noite. Foi muito bonito!', time: 'hoje · 09:34', mine: true),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(15, 8, 15, 17),
-            child: GlassPanel(
-              padding: const EdgeInsets.all(12),
-              child: Column(children: [
-                const Text('Pré-visualização — mensagens privadas ainda desativadas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
-                const SizedBox(height: 10),
-                Row(children: [
-                  const Expanded(
-                    child: TextField(
-                      enabled: false,
-                      decoration: InputDecoration(
-                        hintText: 'Enviar mensagem em papel...',
-                        filled: true,
-                        fillColor: Color(0x3310182A),
-                        border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.all(Radius.circular(18))),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(onPressed: null, icon: const Icon(Icons.send_rounded, color: ppGold)),
-                ]),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 7,
-                  children: [
-                    TextButton.icon(onPressed: () => ppPush(context, const SupportScreen()), icon: const Icon(Icons.support_agent_rounded), label: const Text('Comunicar problema')),
-                    TextButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded), label: const Text('Sair')),
-                  ],
-                ),
-              ]),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FlameBubble extends StatelessWidget {
-  const _FlameBubble({required this.text, required this.time, required this.mine});
-  final String text;
-  final String time;
-  final bool mine;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 300),
-        margin: const EdgeInsets.symmetric(vertical: 7),
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: mine ? const Color(0xFF385C9A) : const Color(0xFF1A2B49),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(mine ? 18 : 4),
-            bottomRight: Radius.circular(mine ? 4 : 18),
-          ),
-          border: Border.all(color: Colors.white.withOpacity(0.10)),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(text, style: const TextStyle(fontSize: 15, height: 1.4)),
-          const SizedBox(height: 6),
-          Text(time, style: const TextStyle(fontSize: 10, color: Colors.white60)),
-        ]),
-      ),
-    );
-  }
-}
-
-class InviteScreen extends StatelessWidget {
-  const InviteScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return ScreenFrame(
-      title: 'Convidar e partilhar',
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 25),
-        children: [
-          const SizedBox(height: 8),
-          const Center(child: PlaneMark(width: 120)),
-          const SizedBox(height: 20),
-          const Text('Convida amigos para voar', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 7),
-          const Text('Partilha o teu convite e espalha palavras gentis.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 24),
-          GlassPanel(
-            highlight: true,
-            child: Column(children: [
-              const Text('O teu link de convite', style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 9),
-              Row(children: [
-                const Expanded(child: SelectableText('paperplane.app/invite/P7X9K2', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700))),
-                IconButton(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O link será disponibilizado após configurar os convites.'))),
-                  icon: const Icon(Icons.copy_rounded, color: ppGold),
-                ),
-              ]),
-            ]),
-          ),
-          const SizedBox(height: 22),
-          Center(
-            child: GlassPanel(
-              padding: const EdgeInsets.all(18),
-              child: SizedBox(
-                width: 155,
-                height: 155,
-                child: CustomPaint(painter: QrPlaceholderPainter()),
-              ),
-            ),
-          ),
-          const SizedBox(height: 9),
-          const Text('Código QR de convite (pré-visualização)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
-          const SizedBox(height: 22),
-          GoldButton(label: 'Partilhar convite', icon: Icons.ios_share_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A partilha será ligada quando o link estiver ativo.')))),
-          const SizedBox(height: 12),
-          SoftButton(label: 'Copiar link', icon: Icons.copy_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link de demonstração — ainda não ativo.')))),
-          const SizedBox(height: 15),
-          const Text('Os convites e recompensas serão ativados após a configuração da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
-        ],
-      ),
-    );
-  }
-}
-
-class QrPlaceholderPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cell = size.width / 21;
-    final bg = Paint()..color = Colors.white;
-    final dark = Paint()..color = const Color(0xFF13203A);
-    canvas.drawRect(Offset.zero & size, bg);
-    final random = math.Random(42);
-    for (var y = 0; y < 21; y++) {
-      for (var x = 0; x < 21; x++) {
-        final inFinder = _finder(x, y, 0, 0) || _finder(x, y, 14, 0) || _finder(x, y, 0, 14);
-        if (inFinder) continue;
-        if (random.nextBool()) canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, cell, cell), dark);
-      }
-    }
-    _drawFinder(canvas, cell, 0, 0, dark, bg);
-    _drawFinder(canvas, cell, 14, 0, dark, bg);
-    _drawFinder(canvas, cell, 0, 14, dark, bg);
-  }
-
-  bool _finder(int x, int y, int fx, int fy) => x >= fx && x < fx + 7 && y >= fy && y < fy + 7;
-
-  void _drawFinder(Canvas canvas, double cell, int x, int y, Paint dark, Paint bg) {
-    canvas.drawRect(Rect.fromLTWH(x * cell, y * cell, 7 * cell, 7 * cell), dark);
-    canvas.drawRect(Rect.fromLTWH((x + 1) * cell, (y + 1) * cell, 5 * cell, 5 * cell), bg);
-    canvas.drawRect(Rect.fromLTWH((x + 2) * cell, (y + 2) * cell, 3 * cell, 3 * cell), dark);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
 
 class CollectionScreen extends StatefulWidget {
   const CollectionScreen({super.key});
