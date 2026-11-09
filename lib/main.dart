@@ -677,6 +677,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  final GlobalKey<_OpenSkyPageState> _openSkyKey = GlobalKey<_OpenSkyPageState>();
 
   @override
   void initState() {
@@ -711,7 +712,11 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openOpenSkyAfterPublish() {
-    if (mounted) setState(() => _index = 2);
+    if (!mounted) return;
+    setState(() => _index = 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openSkyKey.currentState?._refresh();
+    });
   }
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
@@ -755,7 +760,7 @@ class _MainShellState extends State<MainShell> {
     final pages = [
       HomePage(onWrite: () => ppPush(context, const WritePlaneScreen()), onOpenInbox: () => setState(() => _index = 1)),
       const InboxPage(),
-      const OpenSkyPage(),
+      OpenSkyPage(key: _openSkyKey),
       const ChatHubScreen(),
       const QuizScreen(),
       const ProfilePage(),
