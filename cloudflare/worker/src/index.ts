@@ -793,7 +793,7 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
 }
 
 
-type EngagementMetric = "sent" | "received" | "replies" | "friends" | "publicReplies" | "quizRounds" | "correctAnswers" | "perfectQuizzes";
+type EngagementMetric = "sent" | "received" | "replies" | "friends" | "publicReplies" | "quizRounds" | "correctAnswers" | "perfectQuizzes" | "chamas" | "chats" | "chamaMessages" | "chatMessages" | "totalXp";
 const ENGAGEMENT_MISSIONS: Array<{ key: string; title: string; description: string; target: number; xp: number; metric: EngagementMetric }> = [
   { key: "first_flight", title: "Primeiro voo", description: "Lança o teu primeiro avião.", target: 1, xp: 25, metric: "sent" },
   { key: "send_five", title: "Mensageiro ativo", description: "Envia cinco aviões para o mundo.", target: 5, xp: 60, metric: "sent" },
@@ -808,7 +808,23 @@ const ENGAGEMENT_MISSIONS: Array<{ key: string; title: string; description: stri
   { key: "quiz_three", title: "Aprendiz do céu", description: "Termina três rondas de Quiz.", target: 3, xp: 65, metric: "quizRounds" },
   { key: "quiz_ten", title: "Mestre das perguntas", description: "Termina dez rondas de Quiz.", target: 10, xp: 180, metric: "quizRounds" },
   { key: "quiz_fifty_answers", title: "Curiosidade sem limites", description: "Acerta 50 respostas no Quiz.", target: 50, xp: 130, metric: "correctAnswers" },
-  { key: "perfect_quiz", title: "Ronda perfeita", description: "Termina uma ronda sem errar.", target: 1, xp: 100, metric: "perfectQuizzes" }
+  { key: "perfect_quiz", title: "Ronda perfeita", description: "Termina uma ronda sem errar.", target: 1, xp: 100, metric: "perfectQuizzes" },
+  { key: "receive_first", title: "Primeira carta recebida", description: "Recebe o teu primeiro avião.", target: 1, xp: 25, metric: "received" },
+  { key: "receive_twenty_five", title: "Caixa do mundo", description: "Recebe 25 aviões.", target: 25, xp: 200, metric: "received" },
+  { key: "send_fifty", title: "Piloto incansável", description: "Envia 50 aviões.", target: 50, xp: 300, metric: "sent" },
+  { key: "reply_twenty", title: "Sempre com resposta", description: "Responde a 20 aviões recebidos.", target: 20, xp: 260, metric: "replies" },
+  { key: "friend_ten", title: "Embaixador mundial", description: "Confirma amizade com dez copilotos.", target: 10, xp: 350, metric: "friends" },
+  { key: "chama_first", title: "Primeira chama", description: "Acende a tua primeira Chama através de uma resposta em avião.", target: 1, xp: 90, metric: "chamas" },
+  { key: "chama_three", title: "Três laços de fogo", description: "Acende três Chamas com diferentes copilotos.", target: 3, xp: 240, metric: "chamas" },
+  { key: "chat_first", title: "Uma nova amizade", description: "Abre o teu primeiro Chat privado com um amigo aceite.", target: 1, xp: 45, metric: "chats" },
+  { key: "chat_ten", title: "Conversador", description: "Abre Chats privados com dez amigos.", target: 10, xp: 210, metric: "chats" },
+  { key: "chama_ten_messages", title: "Alimenta a chama", description: "Envia dez mensagens nas tuas Chamas.", target: 10, xp: 120, metric: "chamaMessages" },
+  { key: "chat_twenty_messages", title: "Papo pelo mundo", description: "Envia 20 mensagens em Chats privados.", target: 20, xp: 140, metric: "chatMessages" },
+  { key: "open_sky_five", title: "Voz da comunidade", description: "Publica cinco respostas no Open Sky.", target: 5, xp: 110, metric: "publicReplies" },
+  { key: "quiz_twenty_five", title: "Enciclopédia ambulante", description: "Termina 25 rondas de Quiz.", target: 25, xp: 350, metric: "quizRounds" },
+  { key: "quiz_hundred_correct", title: "Mente brilhante", description: "Acerta 100 respostas no Quiz.", target: 100, xp: 240, metric: "correctAnswers" },
+  { key: "three_perfect_quizzes", title: "Perfeição tripla", description: "Conclui três rondas sem errar.", target: 3, xp: 300, metric: "perfectQuizzes" },
+  { key: "xp_five_hundred", title: "A caminho da lenda", description: "Acumula 500 XP entre Quiz e missões.", target: 500, xp: 200, metric: "totalXp" }
 ];
 
 async function loadEngagementStats(uid: string, env: Env): Promise<Record<EngagementMetric, number> & { quizXp: number; missionXp: number }> {
@@ -823,14 +839,22 @@ async function loadEngagementStats(uid: string, env: Env): Promise<Record<Engage
       (SELECT COALESCE(SUM(correct_count), 0) FROM quiz_attempts WHERE uid = ?) AS correctAnswers,
       (SELECT COUNT(*) FROM quiz_attempts WHERE uid = ? AND correct_count = question_count) AS perfectQuizzes,
       (SELECT COALESCE(SUM(xp_awarded), 0) FROM quiz_attempts WHERE uid = ?) AS quizXp,
-      (SELECT COALESCE(SUM(xp), 0) FROM pilot_reward_claims WHERE uid = ?) AS missionXp`,
-  ).bind(uid, uid, uid, uid, uid, uid, uid, uid, uid, uid).first<Record<string, number>>();
+      (SELECT COALESCE(SUM(xp), 0) FROM pilot_reward_claims WHERE uid = ?) AS missionXp,
+      (SELECT COUNT(*) FROM conversations WHERE kind = 'CHAMA' AND (user_a = ? OR user_b = ?)) AS chamas,
+      (SELECT COUNT(*) FROM conversations WHERE kind = 'CHAT' AND (user_a = ? OR user_b = ?)) AS chats,
+      (SELECT COUNT(*) FROM chat_messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.sender_uid = ? AND c.kind = 'CHAMA') AS chamaMessages,
+      (SELECT COUNT(*) FROM chat_messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.sender_uid = ? AND c.kind = 'CHAT') AS chatMessages`,
+  ).bind(uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid, uid).first<Record<string, number>>();
+  const quizXp = Number(row?.quizXp ?? 0);
+  const missionXp = Number(row?.missionXp ?? 0);
   return {
     sent: Number(row?.sent ?? 0), received: Number(row?.received ?? 0),
     replies: Number(row?.replies ?? 0), friends: Number(row?.friends ?? 0),
     publicReplies: Number(row?.publicReplies ?? 0), quizRounds: Number(row?.quizRounds ?? 0),
     correctAnswers: Number(row?.correctAnswers ?? 0), perfectQuizzes: Number(row?.perfectQuizzes ?? 0),
-    quizXp: Number(row?.quizXp ?? 0), missionXp: Number(row?.missionXp ?? 0),
+    chamas: Number(row?.chamas ?? 0), chats: Number(row?.chats ?? 0),
+    chamaMessages: Number(row?.chamaMessages ?? 0), chatMessages: Number(row?.chatMessages ?? 0),
+    quizXp, missionXp, totalXp: quizXp + missionXp,
   };
 }
 
@@ -852,7 +876,7 @@ async function loadGamification(uid: string, env: Env) {
       claimed: alreadyClaimed, claimable: stats[mission.metric] >= mission.target && !alreadyClaimed,
     };
   });
-  const xp = stats.quizXp + stats.missionXp;
+  const xp = stats.totalXp;
   const level = Math.floor(Math.sqrt(xp / 100)) + 1;
   const levelStartXp = (level - 1) * (level - 1) * 100;
   const nextLevelXp = level * level * 100;
@@ -868,6 +892,11 @@ async function loadGamification(uid: string, env: Env) {
     { key: "curious_mind", title: "Mente curiosa", icon: "quiz", description: "Terminaste três rondas de Quiz.", unlocked: stats.quizRounds >= 3 },
     { key: "perfect_round", title: "Ronda perfeita", icon: "star", description: "Acertaste todas as perguntas de uma ronda.", unlocked: stats.perfectQuizzes >= 1 },
     { key: "quiz_master", title: "Mestre do Quiz", icon: "school", description: "Terminaste dez rondas de Quiz.", unlocked: stats.quizRounds >= 10 },
+    { key: "first_flame", title: "Primeira Chama", icon: "flame", description: "Criaste a tua primeira Chama.", unlocked: stats.chamas >= 1 },
+    { key: "chat_starter", title: "Conversador", icon: "chat", description: "Abriste o teu primeiro Chat privado.", unlocked: stats.chats >= 1 },
+    { key: "fire_keeper", title: "Guardião da Chama", icon: "flame", description: "Enviaste dez mensagens em Chamas.", unlocked: stats.chamaMessages >= 10 },
+    { key: "world_friend", title: "Embaixador", icon: "globe", description: "Confirmaste amizade com dez copilotos.", unlocked: stats.friends >= 10 },
+    { key: "curiosity_hundred", title: "Curiosidade sem fim", icon: "brain", description: "Acertaste 100 respostas no Quiz.", unlocked: stats.correctAnswers >= 100 },
   ];
   return {
     xp, level, title: titles[Math.min(titles.length - 1, level - 1)],
@@ -1176,7 +1205,18 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
               (SELECT m.message_text FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
               (SELECT m.created_at FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at,
-              c.created_at
+              c.created_at,
+              (SELECT COUNT(*) FROM airplanes a WHERE a.sender_uid IN (c.user_a, c.user_b)
+                AND a.recipient_uid IN (c.user_a, c.user_b)
+                AND a.sender_uid <> a.recipient_uid
+                AND a.status IN ('DELIVERED','READ','RESPONDED')) AS plane_count,
+              (SELECT COUNT(*) FROM airplanes a WHERE a.sender_uid IN (c.user_a, c.user_b)
+                AND a.recipient_uid IN (c.user_a, c.user_b)
+                AND a.sender_uid <> a.recipient_uid AND a.reply_to_id IS NOT NULL
+                AND a.status IN ('DELIVERED','READ','RESPONDED')) AS exchange_count,
+              (SELECT MAX(a.created_at) FROM airplanes a WHERE a.sender_uid IN (c.user_a, c.user_b)
+                AND a.recipient_uid IN (c.user_a, c.user_b)
+                AND a.sender_uid <> a.recipient_uid AND a.status IN ('DELIVERED','READ','RESPONDED')) AS last_plane_at
        FROM conversations c
        JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
        WHERE (c.user_a = ? OR c.user_b = ?) AND c.kind = ?
@@ -1280,9 +1320,47 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const messages = await env.DB.prepare(
       "SELECT id, sender_uid, message_text, created_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 150",
     ).bind(chatMatch[1]).all();
+    let chama: Record<string, unknown> | null = null;
+    if ((conversation as { kind?: string }).kind === "CHAMA") {
+      const history = await env.DB.prepare(
+        `SELECT id, sender_uid, recipient_uid, reply_to_id, message_text, status, created_at, delivered_at
+         FROM airplanes
+         WHERE ((sender_uid = ? AND recipient_uid = ?) OR (sender_uid = ? AND recipient_uid = ?))
+           AND status IN ('DELIVERED','READ','RESPONDED')
+         ORDER BY created_at ASC LIMIT 120`,
+      ).bind(
+        (conversation as { user_a: string }).user_a,
+        (conversation as { user_b: string }).user_b,
+        (conversation as { user_b: string }).user_b,
+        (conversation as { user_a: string }).user_a,
+      ).all<{
+        id: string; sender_uid: string; recipient_uid: string; reply_to_id: string | null;
+        message_text: string; status: string; created_at: string; delivered_at: string | null;
+      }>();
+      const planes = history.results ?? [];
+      const exchangeDays = new Set(
+        planes.filter((plane) => plane.reply_to_id !== null).map((plane) => plane.created_at.slice(0, 10)),
+      );
+      let streak = 0;
+      let cursor = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+      const dayKey = (stamp: number) => new Date(stamp).toISOString().slice(0, 10);
+      if (!exchangeDays.has(dayKey(cursor))) cursor -= 24 * 60 * 60 * 1000;
+      while (exchangeDays.has(dayKey(cursor)) && streak < 365) {
+        streak++;
+        cursor -= 24 * 60 * 60 * 1000;
+      }
+      chama = {
+        planeCount: planes.length,
+        exchangeCount: planes.filter((plane) => plane.reply_to_id !== null).length,
+        streak,
+        lastExchangeAt: [...planes].reverse().find((plane) => plane.reply_to_id !== null)?.created_at ?? null,
+        history: planes,
+      };
+    }
     return json({
       conversation,
       items: (messages.results ?? []).reverse(),
+      ...(chama ? { chama } : {}),
     });
   }
 

@@ -27,6 +27,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   final TextEditingController _search = TextEditingController();
   Timer? _poller;
   List<Map<String, dynamic>> _chats = [];
+  List<Map<String, dynamic>> _chamas = [];
   List<Map<String, dynamic>> _friends = [];
   List<Map<String, dynamic>> _incoming = [];
   List<Map<String, dynamic>> _outgoing = [];
@@ -60,21 +61,23 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     try {
       final responses = await Future.wait([
         PaperPlaneApi.instance.getChats(),
+        PaperPlaneApi.instance.getChamas(),
         PaperPlaneApi.instance.getFriends(),
         PaperPlaneApi.instance.getFriendRequests(),
         PaperPlaneApi.instance.getProfile(),
       ]);
       if (!mounted) return;
-      final pilot = responses[3]['pilot'] as Map<String, dynamic>? ?? const {};
-      final accepted = _items(responses[1], 'items');
-      final friendRequests = _items(responses[2], 'incoming');
-      final pending = _items(responses[1], 'incomingRequests');
+      final pilot = responses[4]['pilot'] as Map<String, dynamic>? ?? const {};
+      final accepted = _items(responses[2], 'items');
+      final friendRequests = _items(responses[3], 'incoming');
+      final pending = _items(responses[2], 'incomingRequests');
       final incomingById = <String, Map<String, dynamic>>{
         for (final item in [...pending, ...friendRequests])
           item['id']?.toString() ?? '': item,
       }..remove('');
       setState(() {
         _chats = _items(responses[0], 'items');
+        _chamas = _items(responses[1], 'items');
         _friends = accepted;
         _incoming = incomingById.values.toList();
         _outgoing = _items(responses[2], 'outgoing');
@@ -224,8 +227,10 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             child: Row(
               children: [
                 Expanded(child: _sectionChip(0, 'Chamas', Icons.local_fire_department_rounded)),
-                const SizedBox(width: 8),
-                Expanded(child: _sectionChip(1, 'Amigos', Icons.people_alt_outlined)),
+                const SizedBox(width: 6),
+                Expanded(child: _sectionChip(1, 'Chat', Icons.chat_bubble_outline_rounded)),
+                const SizedBox(width: 6),
+                Expanded(child: _sectionChip(2, 'Amigos', Icons.people_alt_outlined)),
               ],
             ),
           ),
@@ -255,7 +260,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                         child: ListView(
                           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                           padding: const EdgeInsets.fromLTRB(18, 4, 18, 26),
-                          children: _section == 0 ? _buildFlames() : _buildFriends(),
+                          children: _section == 0 ? _buildFlames() : _section == 1 ? _buildChats() : _buildFriends(),
                         ),
                       ),
           ),
@@ -294,21 +299,21 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       _infoPanel(
         icon: Icons.local_fire_department_rounded,
         title: 'A Chama do Deserto',
-        body: 'Quando a tua resposta passa na segurança, a Chama acende logo. Os dois aviões ficam guardados no início da conversa e podem continuar a falar aqui, sem esperar por outra viagem.',
+        body: 'A Chama só acende quando a resposta em avião chega ao remetente original. Os dois aviões ficam no início da conversa e o Chat permanece separado.',
         highlight: true,
       ),
       const SizedBox(height: 15),
-      _sectionTitle('As tuas Chamas', _chats.length.toString()),
-      if (_chats.isEmpty)
+      _sectionTitle('As tuas Chamas', _chamas.length.toString()),
+      if (_chamas.isEmpty)
         _emptyPanel(
           icon: Icons.flight_takeoff_rounded,
           title: 'Ainda não tens uma Chama acesa',
-          body: 'Envia um avião, recebe uma resposta e a Chama abre automaticamente. Não é preciso adicionar a pessoa primeiro.',
+          body: 'Quando alguém te responde com um avião e essa resposta é entregue, a Chama abre automaticamente. Não é preciso adicionar a pessoa primeiro.',
         )
       else
-        for (final chat in _chats) ...[
+        for (final chama in _chamas) ...[
           const SizedBox(height: 9),
-          _chatTile(chat),
+          _chatTile(chama, chama: true),
         ],
       const SizedBox(height: 12),
       _infoPanel(
@@ -318,7 +323,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       ),
       const SizedBox(height: 10),
       OutlinedButton.icon(
-        onPressed: () => setState(() => _section = 1),
+        onPressed: () => setState(() => _section = 2),
         icon: const Icon(Icons.people_alt_outlined),
         label: const Text('Explorar amigos do mundo'),
         style: OutlinedButton.styleFrom(
@@ -329,6 +334,72 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         ),
       ),
     ];
+  }
+
+  List<Widget> _buildChats() {
+    return [
+      _infoPanel(
+        icon: Icons.chat_bubble_outline_rounded,
+        title: 'Chat privado',
+        body: 'Esta área é independente das Chamas. Abre um Chat com um amigo aceite, mesmo antes de trocarem aviões.',
+        highlight: true,
+      ),
+      const SizedBox(height: 14),
+      _sectionTitle('As tuas conversas', _chats.length.toString()),
+      if (_chats.isEmpty)
+        _emptyPanel(
+          icon: Icons.chat_bubble_outline_rounded,
+          title: 'Ainda não tens Chats',
+          body: 'Vai a Amigos, procura um copiloto e abre um Chat depois de aceitarem o pedido de amizade.',
+        )
+      else
+        for (final chat in _chats) ...[
+          const SizedBox(height: 9),
+          _chatTile(chat),
+        ],
+      const SizedBox(height: 14),
+      OutlinedButton.icon(
+        onPressed: () => setState(() => _section = 2),
+        icon: const Icon(Icons.people_alt_outlined),
+        label: const Text('Encontrar amigos'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _chatGoldBright,
+          side: BorderSide(color: _chatGold.withOpacity(0.55)),
+          minimumSize: const Size.fromHeight(49),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        ),
+      ),
+    ];
+  }
+
+  Future<void> _openPrivateChat(Map<String, dynamic> friend) async {
+    final uid = friend['uid']?.toString() ?? '';
+    if (uid.isEmpty) return;
+    try {
+      final result = await PaperPlaneApi.instance.createChat(uid);
+      if (!mounted) return;
+      final conversation = result['conversation'] as Map<String, dynamic>? ?? const {};
+      final id = conversation['id']?.toString() ?? '';
+      if (id.isEmpty) {
+        _notice('Não foi possível abrir o Chat.');
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChamaConversationScreen(
+            conversationId: id,
+            fallbackName: friend['pilot_name']?.toString() ?? 'Copiloto',
+            fallbackHandle: friend['pilot_handle']?.toString() ?? 'piloto',
+            fallbackCountry: friend['country_code']?.toString(),
+            isChama: false,
+          ),
+        ),
+      );
+      await _refresh(silent: true);
+    } catch (error) {
+      if (!mounted) return;
+      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível abrir o Chat.');
+    }
   }
 
   List<Widget> _buildFriends() {
@@ -405,12 +476,14 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           const SizedBox(height: 8),
           _personTile(
             friend,
-            action: 'Remover',
-            onTap: () => _removeFriend(
+            action: 'Abrir Chat',
+            onTap: () => _openPrivateChat(friend),
+            secondaryAction: 'Remover',
+            secondaryTap: () => _removeFriend(
               friend['uid']?.toString() ?? '',
               friend['pilot_handle']?.toString() ?? 'copiloto',
             ),
-            actionColor: const Color(0xFFFFB6A6),
+            actionColor: _chatGoldBright,
           ),
         ],
       const SizedBox(height: 10),
@@ -428,7 +501,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     ];
   }
 
-  Widget _chatTile(Map<String, dynamic> chat) {
+  Widget _chatTile(Map<String, dynamic> chat, {bool chama = false}) {
     final name = chat['pilot_name']?.toString() ?? 'Copiloto';
     final handle = chat['pilot_handle']?.toString() ?? 'piloto';
     final country = chat['country_code']?.toString();
@@ -444,6 +517,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                     fallbackName: name,
                     fallbackHandle: handle,
                     fallbackCountry: country,
+                    isChama: chama,
                   ),
                 ),
               ),
@@ -452,10 +526,10 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         highlight: true,
         child: Row(
           children: [
-            const CircleAvatar(
+            CircleAvatar(
               radius: 26,
-              backgroundColor: Color(0xFF304C77),
-              child: Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB66E), size: 27),
+              backgroundColor: const Color(0xFF304C77),
+              child: Icon(chama ? Icons.local_fire_department_rounded : Icons.chat_bubble_rounded, color: chama ? const Color(0xFFFFB66E) : _chatGoldBright, size: 25),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -464,8 +538,15 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                 const SizedBox(height: 3),
                 Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
                 const SizedBox(height: 5),
-                Text(last?.isNotEmpty == true ? last! : 'A Chama está acesa. Começa a conversa…',
+                Text(last?.isNotEmpty == true ? last! : (chama ? 'A Chama está acesa. Continuem a trocar aviões.' : 'O vosso Chat está pronto.'),
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _chatGoldBright, fontSize: 12)),
+                if (chama) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    ${chat['plane_count'] ?? 0} aviões · ${chat['exchange_count'] ?? 0} respostas,
+                    style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ]),
             ),
             const Icon(Icons.chevron_right_rounded, color: _chatGold),
@@ -507,6 +588,8 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     required String action,
     required VoidCallback? onTap,
     Color actionColor = _chatGoldBright,
+    String? secondaryAction,
+    VoidCallback? secondaryTap,
   }) {
     final name = person['pilot_name']?.toString() ?? 'Copiloto';
     final handle = person['pilot_handle']?.toString() ?? 'piloto';
@@ -523,9 +606,16 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           const SizedBox(height: 3),
           Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         ])),
+        if (secondaryAction != null)
+          PopupMenuButton<String>(
+            padding: EdgeInsets.zero,
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white60),
+            onSelected: (_) => secondaryTap?.call(),
+            itemBuilder: (_) => [PopupMenuItem(value: 'secondary', child: Text(secondaryAction))],
+          ),
         TextButton(
           onPressed: onTap,
-          child: Text(action, style: TextStyle(color: actionColor, fontWeight: FontWeight.w800, fontSize: 11)),
+          child: Text(action, style: TextStyle(color: actionColor, fontWeight: FontWeight.w800, fontSize: 10)),
         ),
       ]),
     );
@@ -597,12 +687,14 @@ class ChamaConversationScreen extends StatefulWidget {
     required this.fallbackName,
     required this.fallbackHandle,
     this.fallbackCountry,
+    this.isChama = true,
   });
 
   final String conversationId;
   final String fallbackName;
   final String fallbackHandle;
   final String? fallbackCountry;
+  final bool isChama;
 
   @override
   State<ChamaConversationScreen> createState() => _ChamaConversationScreenState();
@@ -620,6 +712,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   String? _otherUid;
   String? _error;
   List<Map<String, dynamic>> _messages = [];
+  Map<String, dynamic>? _chamaStats;
+  List<Map<String, dynamic>> _chamaHistory = [];
 
   @override
   void initState() {
@@ -648,6 +742,13 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           .whereType<Map>()
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
+      final chamaData = data['chama'] is Map
+          ? Map<String, dynamic>.from(data['chama'] as Map)
+          : null;
+      final history = (chamaData?['history'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
       if (!mounted) return;
       final hadNewMessages = messages.length > _messages.length;
       final wasNearBottom = !_scroll.hasClients ||
@@ -658,6 +759,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         _countryCode = conversation['country_code']?.toString() ?? _countryCode;
         _otherUid = conversation['other_uid']?.toString();
         _messages = messages;
+        _chamaStats = chamaData;
+        _chamaHistory = history;
         _loading = false;
         _error = null;
       });
@@ -671,6 +774,99 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         _error = error is PaperPlaneApiException ? error.message : 'Não foi possível carregar a conversa.';
       });
     }
+  }
+
+
+  Widget _chamaOverview() {
+    final stats = _chamaStats ?? const <String, dynamic>{};
+    final planes = int.tryParse(stats['planeCount']?.toString() ?? '') ?? 0;
+    final exchanges = int.tryParse(stats['exchangeCount']?.toString() ?? '') ?? 0;
+    final streak = int.tryParse(stats['streak']?.toString() ?? '') ?? 0;
+    final last = DateTime.tryParse(stats['lastExchangeAt']?.toString() ?? '');
+    final lastLabel = last == null
+        ? 'Ainda sem nova troca'
+        : 'Última troca · ${last.toLocal().day.toString().padLeft(2, '0')}/${last.toLocal().month.toString().padLeft(2, '0')}';
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: const Color(0xFF263D66),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _chatGold.withOpacity(0.38)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: const [
+          Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB36F), size: 21),
+          SizedBox(width: 7),
+          Text('A Chama do Deserto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+          Spacer(),
+          Text('ACTIVA', style: TextStyle(color: _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          _flameMetric(Icons.flight_rounded, planes.toString(), 'Aviões'),
+          _flameMetric(Icons.swap_horiz_rounded, exchanges.toString(), 'Respostas'),
+          _flameMetric(Icons.local_fire_department_rounded, streak.toString(), 'Dias seguidos'),
+        ]),
+        const SizedBox(height: 7),
+        Text(lastLabel, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+      ]),
+    );
+  }
+
+  Widget _flameMetric(IconData icon, String value, String label) => Expanded(
+    child: Column(children: [
+      Icon(icon, color: _chatGoldBright, size: 17),
+      const SizedBox(height: 3),
+      Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+      Text(label, style: const TextStyle(color: Colors.white60, fontSize: 9)),
+    ]),
+  );
+
+  Widget _chamaHistoryPanel() => Container(
+    margin: const EdgeInsets.only(bottom: 13),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFF172844),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: _chatGold.withOpacity(0.22)),
+    ),
+    child: Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 8),
+        iconColor: _chatGoldBright,
+        collapsedIconColor: _chatGoldBright,
+        title: const Text('Histórico dos aviões', style: TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w800, fontSize: 11)),
+        subtitle: Text('${_chamaHistory.length} aviões nesta Chama', style: const TextStyle(color: Colors.white54, fontSize: 9)),
+        children: [
+          for (final plane in _chamaHistory.reversed.take(12)) _chamaHistoryTile(plane),
+        ],
+      ),
+    ),
+  );
+
+  Widget _chamaHistoryTile(Map<String, dynamic> plane) {
+    final own = plane['sender_uid']?.toString() == FirebaseAuth.instance.currentUser?.uid;
+    final date = DateTime.tryParse(plane['created_at']?.toString() ?? '');
+    final time = date == null ? '' :
+        '${date.toLocal().day.toString().padLeft(2, '0')}/${date.toLocal().month.toString().padLeft(2, '0')} · ${date.toLocal().hour.toString().padLeft(2, '0')}:${date.toLocal().minute.toString().padLeft(2, '0')}';
+    return Container(
+      margin: const EdgeInsets.only(top: 5),
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(color: Colors.black.withOpacity(0.15), borderRadius: BorderRadius.circular(11)),
+      child: Row(children: [
+        Icon(own ? Icons.flight_takeoff_rounded : Icons.flight_land_rounded, color: _chatGoldBright, size: 16),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(own ? 'O teu avião' : 'Avião recebido', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: _chatGoldBright)),
+          Text(plane['message_text']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+        ])),
+        const SizedBox(width: 7),
+        Text(time, style: const TextStyle(fontSize: 8, color: Colors.white38)),
+      ]),
+    );
   }
 
   void _jumpToEnd() {
@@ -764,7 +960,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         ],
       ),
       body: Column(children: [
-        Container(
+        if (widget.isChama && _chamaStats != null) _chamaOverview(),
+        if (!widget.isChama) Container(
           margin: const EdgeInsets.fromLTRB(14, 12, 14, 6),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -773,10 +970,10 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             border: Border.all(color: _chatGold.withOpacity(0.22)),
           ),
           child: const Row(children: [
-            Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB36F), size: 26),
+            Icon(Icons.chat_bubble_outline_rounded, color: _chatGoldBright, size: 24),
             SizedBox(width: 9),
             Expanded(child: Text(
-              'Chama acesa: a conversa privada abriu depois da vossa troca de aviões.',
+              'Chat privado: esta conversa é independente da troca de aviões.',
               style: TextStyle(fontSize: 11, height: 1.4, fontWeight: FontWeight.w700),
             )),
           ]),
@@ -800,11 +997,14 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                         padding: const EdgeInsets.fromLTRB(14, 12, 14, 20),
                         children: [
+                          if (widget.isChama && _chamaHistory.isNotEmpty) _chamaHistoryPanel(),
                           if (_messages.isEmpty)
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 50, horizontal: 18),
                               child: Text(
-                                'A vossa primeira conversa começa aqui. Escreve algo simpático e mantém a Chama viva.',
+                                widget.isChama
+                                    ? 'A vossa primeira conversa começa aqui. Escreve algo simpático e mantém a Chama viva.'
+                                    : 'Este é o vosso espaço privado. Comecem a conversar quando quiserem.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.white60, height: 1.5),
                               ),
@@ -885,7 +1085,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           boxShadow: isOpeningPlane ? [BoxShadow(color: _chatGold.withOpacity(0.08), blurRadius: 12)] : const [],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          if (isOpeningPlane) ...[
+          if (widget.isChama && isOpeningPlane) ...[
             Row(mainAxisSize: MainAxisSize.min, children: const [
               Icon(Icons.local_fire_department_rounded, color: _chatGoldBright, size: 13),
               SizedBox(width: 5),
