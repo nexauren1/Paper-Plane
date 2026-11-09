@@ -1996,6 +1996,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         env.DB.prepare("UPDATE airplanes SET status = 'REJECTED', moderation_state = 'UNSAFE' WHERE sender_uid = ? AND status IN ('QUEUED','FLYING','HELD_REVIEW')")
           .bind(report.reported_uid),
         env.DB.prepare("UPDATE reports SET status = 'ACTIONED' WHERE id = ?").bind(report.id),
+        env.DB.prepare(
+          "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_REPORT_USER_SUSPENDED', ?, ?)",
+        ).bind(uuid(), uid, report.reported_uid, JSON.stringify({ reportId: report.id })),
       ]);
       return json({ ok: true, status: "SUSPENDED" });
     }
