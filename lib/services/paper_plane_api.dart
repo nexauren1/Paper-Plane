@@ -105,6 +105,7 @@ class PaperPlaneApi {
         'MESSAGE_NOT_ALLOWED' => 'A mensagem contém conteúdo que não é permitido.',
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
         'MODERATION_TEMPORARILY_UNAVAILABLE' => 'A verificação de segurança está temporariamente indisponível. A resposta não foi publicada; tenta novamente mais tarde.',
+        'MESSAGE_REQUIRES_REVIEW' => 'Esta mensagem não passou na verificação de segurança. Reformula o texto e tenta novamente.',
         'REPLY_LIMIT_REACHED' => 'Este avião já atingiu o limite de cinco respostas públicas.',
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
