@@ -1308,6 +1308,131 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   const isAdmin = admins.includes(uid);
 
+  // Permanently close and scrub a pilot account before the client removes the
+  // corresponding Firebase Authentication identity. A closed UID is retained as
+  // a minimal tombstone so the same Firebase identity cannot silently bootstrap again.
+  if (method === "DELETE" && path === "/v1/account") {
+    if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
+    if (pilotOnRoute.status === "CLOSED") return json({ ok: true, alreadyClosed: true });
+    await env.DB.batch([
+      env.DB.prepare(
+        "DELETE FROM reports WHERE reporter_uid = ? OR reported_uid = ? OR airplane_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?)",
+      ).bind(uid, uid, uid, uid),
+      env.DB.prepare("DELETE FROM public_replies WHERE sender_uid = ?").bind(uid),
+      env.DB.prepare("DELETE FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?").bind(uid, uid),
+      env.DB.prepare("DELETE FROM conversations WHERE user_a = ? OR user_b = ?").bind(uid, uid),
+      env.DB.prepare("DELETE FROM audit_events WHERE actor_uid = ?").bind(uid),
+      env.DB.prepare(
+        "UPDATE users SET pilot_code = ?, pilot_name = 'Conta eliminada', pilot_handle = NULL, avatar_url = NULL, birth_year = NULL, declared_age_band = 'UNVERIFIED', age_declaration_at = NULL, profile_completed = 0, language = 'pt', preferred_language = 'pt', country_code = NULL, country_visible = 0, status = 'CLOSED', accept_random_mail = 0, push_enabled = 0, last_received_at = NULL, updated_at = ? WHERE uid = ?",
+      ).bind(`PP-CLOSED-${uid.slice(0, 12)}`, isoNow(), uid),
+    ]);
+    return json({ ok: true, status: "CLOSED", firebaseIdentityMustBeDeleted: true });
+  }
+
+  if (path.startsWith("/v1/admin/") && !isAdmin) {
+    return json({ error: "FORBIDDEN" }, 403);
+  }
+
+  if (method === "GET" && path === "/v1/admin/dashboard") {
+    const [users, planes, reports, reviews, support, devices] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END) AS active, SUM(CASE WHEN status = 'SUSPENDED' THEN 1 ELSE 0 END) AS suspended FROM users").first(),
+      env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) AS delivered, SUM(CASE WHEN status IN ('QUEUED','FLYING') THEN 1 ELSE 0 END) AS in_flight FROM airplanes").first(),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM reports WHERE status IN ('OPEN','IN_REVIEW')").first(),
+      env.DB.prepare("SELECT (SELECT COUNT(*) FROM airplanes WHERE status = 'HELD_REVIEW') + (SELECT COUNT(*) FROM public_replies WHERE moderation_state = 'REVIEW') AS total").first(),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE status IN ('OPEN','IN_REVIEW')").first(),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM devices d JOIN users u ON u.uid = d.uid WHERE u.status = 'ACTIVE' AND u.push_enabled = 1").first(),
+    ]);
+    return json({ users, planes, openReports: reports, pendingReview: reviews, openSupport: support, activeDevices: devices });
+  }
+
+  if (method === "GET" && path === "/v1/admin/users") {
+    const query = text(url.searchParams.get("q"), 80).toLowerCase();
+    const status = text(url.searchParams.get("status"), 16).toUpperCase();
+    if (status && !["ACTIVE", "SUSPENDED", "CLOSED"].includes(status)) return json({ error: "INVALID_STATUS" }, 400);
+    const like = `%${query}%`;
+    const rows = await env.DB.prepare(
+      `SELECT u.uid, u.pilot_code, u.pilot_name, u.pilot_handle, u.avatar_url, u.country_code,
+              u.declared_age_band, u.status, u.profile_completed, u.push_enabled, u.created_at,
+              (SELECT COUNT(*) FROM devices d WHERE d.uid = u.uid) AS devices_count
+       FROM users u
+       WHERE (? = '' OR lower(u.uid) LIKE ? OR lower(u.pilot_name) LIKE ? OR lower(COALESCE(u.pilot_handle,'')) LIKE ?)
+         AND (? = '' OR u.status = ?)
+       ORDER BY u.created_at DESC LIMIT 100`,
+    ).bind(query, like, like, like, status, status).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  const adminUserMatch = path.match(/^\\/v1\\/admin\\/users\\/([^/]+)$/);
+  if (adminUserMatch && method === "GET") {
+    const targetUid = adminUserMatch[1];
+    const user = await env.DB.prepare(
+      `SELECT uid, pilot_code, pilot_name, pilot_handle, avatar_url, country_code,
+              declared_age_band, age_declaration_at, status, profile_completed, push_enabled, created_at, updated_at
+       FROM users WHERE uid = ? LIMIT 1`,
+    ).bind(targetUid).first();
+    if (!user) return json({ error: "USER_NOT_FOUND" }, 404);
+    const [sent, received, openReports, deviceCount] = await Promise.all([
+      env.DB.prepare("SELECT COUNT(*) AS total FROM airplanes WHERE sender_uid = ?").bind(targetUid).first(),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM airplanes WHERE recipient_uid = ?").bind(targetUid).first(),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM reports WHERE reported_uid = ? AND status IN ('OPEN','IN_REVIEW')").bind(targetUid).first(),
+      env.DB.prepare("SELECT COUNT(*) AS total FROM devices WHERE uid = ?").bind(targetUid).first(),
+    ]);
+    return json({ user, sent, received, openReports, deviceCount });
+  }
+
+  if (adminUserMatch && method === "POST") {
+    const targetUid = adminUserMatch[1];
+    if (targetUid === uid) return json({ error: "CANNOT_CHANGE_OWN_ADMIN_ACCOUNT" }, 409);
+    const target = await requireUser(targetUid, env);
+    if (!target) return json({ error: "USER_NOT_FOUND" }, 404);
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const action = text(body.action, 32);
+    if (action === "suspend") {
+      await env.DB.batch([
+        env.DB.prepare("UPDATE users SET status = 'SUSPENDED', accept_random_mail = 0, push_enabled = 0, updated_at = ? WHERE uid = ? AND status <> 'CLOSED'").bind(isoNow(), targetUid),
+        env.DB.prepare("DELETE FROM devices WHERE uid = ?").bind(targetUid),
+      ]);
+    } else if (action === "activate") {
+      const result = await env.DB.prepare("UPDATE users SET status = 'ACTIVE', updated_at = ? WHERE uid = ? AND status = 'SUSPENDED'").bind(isoNow(), targetUid).run();
+      if ((result.meta?.changes ?? 0) !== 1) return json({ error: "ACCOUNT_CANNOT_BE_ACTIVATED" }, 409);
+    } else if (action === "disable_random") {
+      await env.DB.prepare("UPDATE users SET accept_random_mail = 0, updated_at = ? WHERE uid = ?").bind(isoNow(), targetUid).run();
+    } else if (action === "enable_random") {
+      await env.DB.prepare("UPDATE users SET accept_random_mail = 1, updated_at = ? WHERE uid = ? AND status = 'ACTIVE'").bind(isoNow(), targetUid).run();
+    } else {
+      return json({ error: "INVALID_ACTION" }, 400);
+    }
+    await env.DB.prepare(
+      "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, ?, ?, ?)",
+    ).bind(uuid(), uid, "ADMIN_USER_" + action.toUpperCase(), targetUid, JSON.stringify({ action })).run();
+    return json({ ok: true, status: (await requireUser(targetUid, env))?.status ?? "UNKNOWN" });
+  }
+
+  if (method === "GET" && path === "/v1/admin/notifications") {
+    const rows = await env.DB.prepare(
+      "SELECT id, target_type, recipient_uid, title, body, device_count, sent_count, failed_count, created_at FROM admin_notifications ORDER BY created_at DESC LIMIT 100",
+    ).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  if (method === "POST" && path === "/v1/admin/notifications") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const title = text(body.title, 80);
+    const message = text(body.body, 220);
+    const recipientUid = body.target === "ALL" ? null : text(body.targetUid, 128);
+    if (!title || !message || (body.target !== "ALL" && !recipientUid)) return json({ error: "INVALID_NOTIFICATION" }, 400);
+    if (recipientUid) {
+      const target = await requireUser(recipientUid, env);
+      if (!target || target.status !== "ACTIVE") return json({ error: "USER_NOT_ACTIVE" }, 404);
+    }
+    try {
+      const result = await sendAdminAnnouncement(uid, recipientUid, title, message, env);
+      return json({ ok: true, ...result }, 201);
+    } catch {
+      return json({ error: "PUSH_PROVIDER_UNAVAILABLE", message: "O serviço de notificações não está configurado ou indisponível." }, 503);
+    }
+  }
 
   if (method === "GET" && path === "/v1/gamification") {
     return json(await loadGamification(uid, env));
