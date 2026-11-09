@@ -50,7 +50,7 @@ jobs:
               marker = content.find(">", manifest_start)
               if marker < 0:
                   raise SystemExit("Invalid Android manifest.")
-              content = content[:marker + 1] + "\\n" + permission + content[marker + 1:]
+              content = content[:marker + 1] + "\n" + permission + content[marker + 1:]
               manifest.write_text(content, encoding="utf-8")
 
           icon = Path("android/app/src/main/res/drawable/ic_notification.xml")
