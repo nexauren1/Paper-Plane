@@ -543,7 +543,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                 if (chama) ...[
                   const SizedBox(height: 4),
                   Text(
-                    ${chat['plane_count'] ?? 0} aviões · ${chat['exchange_count'] ?? 0} respostas,
+                    '${chat['plane_count'] ?? 0} aviões · ${chat['exchange_count'] ?? 0} respostas',
                     style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w700),
                   ),
                 ],
