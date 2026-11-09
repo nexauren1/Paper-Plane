@@ -1943,6 +1943,26 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ items: planes.results ?? [], replies: replies.results ?? [] });
   }
 
+  const adminPublicReplyReviewMatch = path.match(/^\/v1\/admin\/review\/replies\/([^/]+)$/);
+  if (adminPublicReplyReviewMatch && method === "POST") {
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    const action = body.action;
+    if (action !== "approve" && action !== "reject") return json({ error: "INVALID_ACTION" }, 400);
+    const replyId = adminPublicReplyReviewMatch[1];
+    const reply = await env.DB.prepare(
+      "SELECT id, airplane_id, sender_uid FROM public_replies WHERE id = ? AND moderation_state = 'REVIEW' LIMIT 1",
+    ).bind(replyId).first<{ id: string; airplane_id: string; sender_uid: string }>();
+    if (!reply) return json({ error: "NOT_FOUND" }, 404);
+    const moderationState = action === "approve" ? "SAFE" : "UNSAFE";
+    await env.DB.prepare(
+      "UPDATE public_replies SET moderation_state = ? WHERE id = ? AND moderation_state = 'REVIEW'",
+    ).bind(moderationState, replyId).run();
+    await env.DB.prepare(
+      "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, ?, ?, ?)",
+    ).bind(uuid(), uid, "ADMIN_PUBLIC_REPLY_" + action.toUpperCase(), replyId, JSON.stringify({ airplaneId: reply.airplane_id, senderUid: reply.sender_uid })).run();
+    return json({ ok: true, status: moderationState });
+  }
+
   const adminReviewMatch = path.match(/^\/v1\/admin\/review\/([^/]+)$/);
   if (adminReviewMatch && method === "POST") {
     if (!isAdmin) return json({ error: "FORBIDDEN" }, 403);
