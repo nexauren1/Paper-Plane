@@ -177,6 +177,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> updateAvatarUrl(String? avatarUrl) =>
       _request('/v1/profile/avatar', method: 'POST', body: {'avatarUrl': avatarUrl});
 
+  Future<Map<String, dynamic>> updateLanguagePreference(String language) =>
+      _request('/v1/profile/language', method: 'POST', body: {'language': language});
+
   Future<Map<String, dynamic>> getLinkPreview(String url) =>
       _request('/v1/link-preview?url=${Uri.encodeQueryComponent(url)}');
 
@@ -247,11 +250,24 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> sendChatMessage(
     String conversationId,
-    String message,
-  ) =>
+    String message, {
+    String language = 'pt',
+  }) =>
       _request('/v1/chats/$conversationId/messages', method: 'POST', body: {
         'message': message,
+        'language': language,
       });
+
+  Future<Map<String, dynamic>> translateChatMessage(
+    String conversationId,
+    String messageId,
+    String language,
+  ) =>
+      _request(
+        '/v1/chats/$conversationId/messages/$messageId/translation',
+        method: 'POST',
+        body: {'language': language},
+      );
 
   String buildFriendInviteLink(String pilotHandle) =>
       'https://paper-plane.nexaurenstore.workers.dev/invite?handle=${Uri.encodeQueryComponent(pilotHandle.replaceFirst(RegExp(r'^@'), ''))}';
