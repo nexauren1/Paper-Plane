@@ -144,6 +144,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> bootstrapPilot() =>
       _request('/v1/users/bootstrap', method: 'POST');
 
+  Future<Map<String, dynamic>> deleteAccountData() =>
+      _request('/v1/account', method: 'DELETE');
+
   Future<Map<String, dynamic>> getProfile() => _request('/v1/profile');
 
   Future<Map<String, dynamic>> saveFirstFlight({
