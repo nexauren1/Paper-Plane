@@ -2142,11 +2142,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
     if (nextStatus === "DELIVERED") {
       await env.DB.prepare("INSERT OR IGNORE INTO public_sky(airplane_id) VALUES (?)").bind(airplaneId).run();
-    } else if (nextStatus === "FLYING" && plane.reply_to_id) {
-      // The original airplane is marked RESPONDED when the reply actually arrives.
     } else if (nextStatus === "QUEUED") {
       await env.DELIVERY_QUEUE.send({ type: "MATCH_AIRPLANE", airplaneId });
     }
+    // A direct reply keeps its original airplane active until this flight is delivered.
 
     await env.DB.prepare(
       "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_AIRPLANE_APPROVED', ?, ?)",
