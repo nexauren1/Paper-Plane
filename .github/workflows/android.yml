@@ -44,7 +44,8 @@ jobs:
           content = manifest.read_text(encoding="utf-8")
           permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
           if "android.permission.POST_NOTIFICATIONS" not in content:
-              marker = content.find(">")
+              manifest_start = content.find("<manifest")
+          marker = content.find(">", manifest_start)
               if marker < 0:
                   raise SystemExit("Invalid Android manifest.")
               content = content[:marker + 1] + "\n" + permission + content[marker + 1:]
