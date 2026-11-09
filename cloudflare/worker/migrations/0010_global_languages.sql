@@ -3,6 +3,10 @@ ALTER TABLE users ADD COLUMN preferred_language TEXT NOT NULL DEFAULT 'pt';
 ALTER TABLE airplanes ADD COLUMN message_language_tag TEXT NOT NULL DEFAULT 'pt';
 ALTER TABLE chat_messages ADD COLUMN message_language_tag TEXT NOT NULL DEFAULT 'pt';
 
+-- Preserve known legacy Portuguese/English values when adding the wider language tags.
+UPDATE users SET preferred_language = language WHERE language IN ('pt', 'en');
+UPDATE airplanes SET message_language_tag = message_language WHERE message_language IN ('pt', 'en');
+
 CREATE TABLE IF NOT EXISTS airplane_translations (
   airplane_id TEXT NOT NULL REFERENCES airplanes(id) ON DELETE CASCADE,
   target_language TEXT NOT NULL,
