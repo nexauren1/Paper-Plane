@@ -818,6 +818,12 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   String? _error;
   List<Map<String, dynamic>> _messages = [];
   String _myLanguage = 'pt';
+  static const Map<String, String> _chatLanguageNames = {
+    'pt': 'Português', 'en': 'English', 'ja': '日本語',
+    'es': 'Español', 'fr': 'Français', 'de': 'Deutsch',
+    'zh': '中文', 'ko': '한국어', 'ar': 'العربية',
+    'ru': 'Русский', 'hi': 'हिन्दी', 'id': 'Bahasa Indonesia',
+  };
   final Map<String, String> _translatedMessages = {};
   final Set<String> _translatingMessages = {};
   Map<String, dynamic>? _chamaStats;
@@ -1052,7 +1058,10 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       setState(() => _translatedMessages[id] = translated);
     } catch (error) {
       if (!mounted) return;
-      _notice(error is PaperPlaneApiException ? error.message : 'A tradução não está disponível neste momento.');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error is PaperPlaneApiException ? error.message : 'A tradução não está disponível neste momento.'),
+        behavior: SnackBarBehavior.floating,
+      ));
     } finally {
       if (mounted) setState(() => _translatingMessages.remove(id));
     }
@@ -1422,7 +1431,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             duration: const Duration(milliseconds: 240),
             curve: Curves.easeOutCubic,
             builder: (context, scale, child) => Opacity(
-              opacity: scale.clamp(0.0, 1.0),
+              opacity: scale.clamp(0.0, 1.0).toDouble(),
               child: Transform.scale(scale: scale, alignment: Alignment.topLeft, child: child),
             ),
             child: Text(content, style: const TextStyle(fontSize: 14, height: 1.42)),
@@ -1445,7 +1454,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                 icon: isTranslating
                     ? const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8))
                     : const Icon(Icons.translate_rounded, size: 13),
-                label: Text(isTranslating ? 'A traduzir…' : 'Traduzir para ${_languageNames[_myLanguage] ?? _myLanguage}',
+                label: Text(isTranslating ? 'A traduzir…' : 'Traduzir para ${_chatLanguageNames[_myLanguage] ?? _myLanguage}',
                     style: const TextStyle(fontSize: 10)),
                 style: TextButton.styleFrom(foregroundColor: _chatGoldBright, padding: EdgeInsets.zero),
               ),
