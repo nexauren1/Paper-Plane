@@ -148,6 +148,10 @@ class PaperPlaneNotifications {
   }
 
   static void _rememberMessage(RemoteMessage message) {
+    if (message.data['type'] == 'CHAT_MESSAGE') {
+      _pendingChatOpen = true;
+      return;
+    }
     final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
     if (airplaneId.isNotEmpty) {
       _pendingAirplaneId = airplaneId;
