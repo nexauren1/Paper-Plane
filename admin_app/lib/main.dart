@@ -542,6 +542,22 @@ class _SafetyPageState extends State<SafetyPage> {
               leading: const Icon(Icons.block, color: danger),
               title: Text('@' + show(b['blocker_handle'], show(b['blocker_uid'])) + ' bloqueou @' + show(b['blocked_handle'], show(b['blocked_uid']))),
               subtitle: Text(show(b['created_at']), style: const TextStyle(color: Colors.white54, fontSize: 10)),
+              trailing: IconButton(
+                tooltip: 'Remover bloqueio',
+                icon: const Icon(Icons.link_off, color: danger),
+                onPressed: () async {
+                  try {
+                    await widget.api.post(
+                      '/v1/admin/blocks/' + Uri.encodeComponent(b['blocker_uid'].toString()) +
+                      '/' + Uri.encodeComponent(b['blocked_uid'].toString()),
+                      {'action': 'remove'},
+                    );
+                    await load();
+                  } catch (e) {
+                    toast(e.toString());
+                  }
+                },
+              ),
             ))).toList())),
         ])),
       ]),
