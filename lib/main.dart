@@ -1112,8 +1112,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
     );
     try {
       await PaperPlaneAuth.requireSignedInPilot();
-      final profileResult = await PaperPlaneApi.instance.getProfile();
-      final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+      var profileResult = await PaperPlaneApi.instance.getProfile();
+      var pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       if (pilot['profile_completed'] != 1) {
         if (mounted) Navigator.of(context).pop();
         launchDialogOpen = false;
@@ -1121,11 +1121,13 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
           MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
         );
         if (completed != true) return;
+        profileResult = await PaperPlaneApi.instance.getProfile();
+        pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       }
 
       final result = await PaperPlaneApi.instance.sendPlane(
         message: _message.text.trim(),
-        language: 'pt',
+        language: pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt',
         mood: _mood,
         visibility: _visibility,
         destinationCountry: switch (_destination) {
@@ -3394,10 +3396,13 @@ class _LetterScreenState extends State<LetterScreen> {
     if (message.isEmpty) return;
     setState(() => _busy = true);
     try {
+      final profile = await PaperPlaneApi.instance.getProfile();
+      final pilot = profile['pilot'] as Map<String, dynamic>? ?? const {};
+      final language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
       final result = await PaperPlaneApi.instance.replyToPlane(
         widget.airplane['id'].toString(),
         message: message,
-        language: 'pt',
+        language: language,
         allowReply: true,
       );
       final plane = result['airplane'] as Map<String, dynamic>? ?? const {};
@@ -3438,7 +3443,9 @@ class _LetterScreenState extends State<LetterScreen> {
   @override
   Widget build(BuildContext context) {
     final country = widget.airplane['sender_country_code']?.toString();
-    final message = widget.airplane['message_text']?.toString() ?? '';
+    final originalMessage = widget.airplane['message_text']?.toString() ?? '';
+    final translatedMessage = widget.airplane['translated_text']?.toString();
+    final message = translatedMessage?.isNotEmpty == true ? translatedMessage! : originalMessage;
     final replyValue = widget.airplane['allow_reply'];
     final allowReply = replyValue == 1 || replyValue == true;
     return ScreenFrame(
@@ -3457,7 +3464,36 @@ class _LetterScreenState extends State<LetterScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('De: Alguém em ' + _countryName(country) + ' ' + _countryFlag(country), style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
               const SizedBox(height: 24),
+              if (translatedMessage?.isNotEmpty == true)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Row(children: [
+                    Icon(Icons.translate_rounded, size: 15, color: Color(0xFF82745A)),
+                    SizedBox(width: 6),
+                    Text('TRADUÇÃO AUTOMÁTICA · CLOUDFLARE AI',
+                        style: TextStyle(color: Color(0xFF82745A), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  ]),
+                ),
               Text(message, style: const TextStyle(color: ppInk, fontSize: 22, height: 1.6, fontStyle: FontStyle.italic)),
+              if (translatedMessage?.isNotEmpty == true) ...[
+                const SizedBox(height: 12),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: EdgeInsets.zero,
+                    iconColor: const Color(0xFF82745A),
+                    collapsedIconColor: const Color(0xFF82745A),
+                    title: const Text('Ver mensagem original', style: TextStyle(color: Color(0xFF82745A), fontSize: 12, fontWeight: FontWeight.w700)),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(originalMessage, style: const TextStyle(color: ppInk, fontSize: 16, height: 1.5)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 22),
               Text('Recebido · ' + (widget.airplane['delivered_at']?.toString() ?? ''), style: const TextStyle(color: Color(0xFF82745A), fontSize: 11)),
             ]),
