@@ -10,6 +10,7 @@ on:
       - main
       - flutter-app-foundation
       - platform-integration
+      - release-hardening-public
   pull_request:
     branches:
       - main
@@ -30,6 +31,39 @@ jobs:
 
       - name: Generate Android project files if missing
         run: flutter create --platforms=android --project-name paper_plane --org com.nexauren .
+
+      - name: Configure Android notification permission and icon
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          if not manifest.exists():
+              raise SystemExit("Android manifest was not generated.")
+          content = manifest.read_text(encoding="utf-8")
+          permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          if "android.permission.POST_NOTIFICATIONS" not in content:
+              marker = content.find(">")
+              if marker < 0:
+                  raise SystemExit("Invalid Android manifest.")
+              content = content[:marker + 1] + "\n" + permission + content[marker + 1:]
+              manifest.write_text(content, encoding="utf-8")
+
+          icon = Path("android/app/src/main/res/drawable/ic_notification.xml")
+          icon.parent.mkdir(parents=True, exist_ok=True)
+          icon.write_text("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FFFFFFFF"
+                  android:pathData="M2,21L23,12L2,3L2,10L17,12L2,14Z" />
+          </vector>
+          """, encoding="utf-8")
+          print("Android notification permission and monochrome airplane icon are configured.")
+          PY
 
       - name: Use direct Gradle distribution host
         shell: bash
