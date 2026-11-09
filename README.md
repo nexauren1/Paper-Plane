@@ -16,7 +16,7 @@ The first release concentrates on the full message journey instead of optional e
 - Real inbox, opening and reading letters, private airplane replies, hearts and public replies.
 - Automatic translation of incoming airplanes into the recipient's preferred language, with the source text always available.
 - On-demand AI translation of private Chat and Chama messages, with per-message original/translation switching.
-- AI-assisted content screening with a human-review queue for uncertain cases.
+- Reporting and account-blocking controls. Automated message moderation is not enabled yet and remains a pre-release task.
 - Report categories, sender blocking and age-band separation for stranger matching.
 - Android push notifications, an in-app foreground notification banner and shortcuts to the exact incoming airplane or Chama.
 - A worldwide friends list with pilot-handle search, friend requests and shareable invite links.
