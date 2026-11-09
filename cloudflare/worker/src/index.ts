@@ -570,7 +570,7 @@ async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
             token: device.fcm_token,
             notification: { title: "Chegou um novo avião", body: "Uma mensagem está à tua espera." },
             data: { type: "NEW_PLANE", airplaneId },
-            android: { priority: "HIGH" },
+            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
           },
         }),
       });
