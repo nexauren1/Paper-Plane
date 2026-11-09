@@ -999,7 +999,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                         children: [
                           if (widget.isChama && _chamaHistory.isNotEmpty) _chamaHistoryPanel(),
                           if (_messages.isEmpty)
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.symmetric(vertical: 50, horizontal: 18),
                               child: Text(
                                 widget.isChama
