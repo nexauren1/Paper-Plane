@@ -1305,14 +1305,35 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     await env.DB.batch([
       env.DB.prepare("INSERT INTO deleted_accounts(uid_hash) VALUES (?)").bind(uidHash),
       env.DB.prepare(
-        "DELETE FROM reports WHERE reporter_uid = ? OR reported_uid = ? OR airplane_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ? OR reply_to_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?))",
-      ).bind(uid, uid, uid, uid, uid, uid),
+        `WITH RECURSIVE related_planes(id) AS (
+           SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?
+           UNION
+           SELECT child.id FROM airplanes child
+           JOIN related_planes parent ON child.reply_to_id = parent.id
+         )
+         DELETE FROM reports
+         WHERE reporter_uid = ? OR reported_uid = ?
+            OR airplane_id IN (SELECT id FROM related_planes)`,
+      ).bind(uid, uid, uid, uid),
       env.DB.prepare(
-        "DELETE FROM public_replies WHERE sender_uid = ? OR airplane_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?)",
+        `WITH RECURSIVE related_planes(id) AS (
+           SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?
+           UNION
+           SELECT child.id FROM airplanes child
+           JOIN related_planes parent ON child.reply_to_id = parent.id
+         )
+         DELETE FROM public_replies
+         WHERE sender_uid = ? OR airplane_id IN (SELECT id FROM related_planes)`,
       ).bind(uid, uid, uid),
       env.DB.prepare(
-        "DELETE FROM airplanes WHERE sender_uid = ? OR recipient_uid = ? OR reply_to_id IN (SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?)",
-      ).bind(uid, uid, uid, uid),
+        `WITH RECURSIVE related_planes(id) AS (
+           SELECT id FROM airplanes WHERE sender_uid = ? OR recipient_uid = ?
+           UNION
+           SELECT child.id FROM airplanes child
+           JOIN related_planes parent ON child.reply_to_id = parent.id
+         )
+         DELETE FROM airplanes WHERE id IN (SELECT id FROM related_planes)`,
+      ).bind(uid, uid),
       env.DB.prepare("DELETE FROM admin_notifications WHERE recipient_uid = ?").bind(uid),
       env.DB.prepare("DELETE FROM audit_events WHERE actor_uid = ?").bind(uid),
       env.DB.prepare("DELETE FROM users WHERE uid = ?").bind(uid),
@@ -2096,6 +2117,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "POST" && path === "/v1/users/bootstrap") {
     const user = await bootstrap(uid, env);
+    if (!user) return json({ error: "ACCOUNT_DELETED", message: "Esta conta foi eliminada e não pode ser recriada." }, 410);
     return json({ pilot: user, canSend: !!user && ["UNDER_18", "ADULT"].includes(user.declared_age_band) });
   }
 
