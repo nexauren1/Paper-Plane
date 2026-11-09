@@ -1765,20 +1765,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!body) return json({ error: "INVALID_JSON" }, 400);
     const message = text(body.message, 1000);
     if (!message) return json({ error: "MESSAGE_LENGTH" }, 400);
-    const moderation = await moderate(env, message);
-    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
-      return json({
-        error: "MODERATION_TEMPORARILY_UNAVAILABLE",
-        message: "A verificação de segurança está indisponível. A mensagem privada não foi enviada; tenta novamente mais tarde.",
-      }, 503);
-    }
-    if (moderation.state !== "SAFE") {
-      return json({
-        error: "MESSAGE_REQUIRES_REVIEW",
-        message: "Esta mensagem não pode ser enviada como está. Revê o texto e tenta novamente.",
-        categories: moderation.categories,
-      }, 422);
-    }
     const conversation = await env.DB.prepare(
       "SELECT id, user_a, user_b, kind FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
     ).bind(chatMessagesMatch[1], uid, uid).first<{ id: string; user_a: string; user_b: string; kind: string }>();
@@ -1794,6 +1780,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ).bind(uid).first<{ count: number }>();
     if (Number(recent?.count ?? 0) >= 40) return json({ error: "CHAT_RATE_LIMIT" }, 429);
 
+    const moderation = await moderate(env, message);
+    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
+      return json({
+        error: "MODERATION_TEMPORARILY_UNAVAILABLE",
+        message: "A verificação de segurança está indisponível. A mensagem privada não foi enviada; tenta novamente mais tarde.",
+      }, 503);
+    }
+    if (moderation.state !== "SAFE") {
+      return json({
+        error: "MESSAGE_REQUIRES_REVIEW",
+        message: "Esta mensagem não pode ser enviada como está. Revê o texto e tenta novamente.",
+        categories: moderation.categories,
+      }, 422);
+    }
     const sender = await requireUser(uid, env);
     const languageTag = normalizeLanguage(body.language) ?? normalizeLanguage(sender?.preferred_language) ?? "pt";
     const id = uuid();
