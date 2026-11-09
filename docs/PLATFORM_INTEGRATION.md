@@ -10,7 +10,7 @@ This branch prepares the production architecture without committing private cred
 - Cloudflare Worker: authenticated API, business rules, matching, safety gates, delivery state, and AI orchestration.
 - Cloudflare D1: primary relational database. Message data is not duplicated into Firestore.
 - Cloudflare Queues: asynchronous matching and delivery notifications.
-- Workers AI: optional, user-requested translation only. Sending and recipient matching never wait for AI. There is no AI chatbot or AI compose button.
+- Workers AI: Meta M2M100 1.2B provides multilingual airplane translation on inbox open and per-message translation inside Chat/Chama. Sending and recipient matching never wait for translation. There is no AI chatbot or AI compose button.
 - Cloudflare Pages: public website / help / privacy pages. The Android app calls the Worker API, not Pages Functions.
 
 ## What is implemented in this branch
@@ -24,7 +24,7 @@ This branch prepares the production architecture without committing private cred
 
 ### Worker API and D1
 - Firebase RS256 ID-token signature, issuer, audience, expiry, and subject are verified on the Worker.
-- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, translation, and device registration endpoints are scaffolded.
+- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented.
 - Original planes have unlimited daily sending, a rolling hourly anti-spam safeguard, and a 200-character limit.
 - Random planes are matched immediately when an eligible recipient exists, then retried by the queue and scheduled matcher when nobody is available; they are never falsely marked delivered.
 - Matching only considers active users in the same self-declared age group. Blocks apply in both directions; this is cohort separation, not proof of age.
@@ -38,7 +38,7 @@ This branch prepares the production architecture without committing private cred
 - Sending does not call an AI model and does not depend on AI availability. A fast local filter rejects only a small set of explicit, high-confidence threats, self-harm encouragement, and sexual solicitation.
 - Ordinary greetings, friendship, everyday conversation, and other normal messages are not held for an AI review.
 - Reports, user blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls remain active. The local filter is not a guarantee that every harmful message will be detected; users must still be able to report and block accounts.
-- Workers AI is used only when an authenticated participant explicitly requests a translation. Translation failure never blocks sending or delivery.
+- Workers AI uses `@cf/meta/m2m100-1.2b`. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; the original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
 
 ## Self-declared age groups and child safety
 
