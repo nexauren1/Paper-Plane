@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
@@ -70,7 +71,7 @@ class PaperPlaneApp extends StatelessWidget {
           bodyMedium: TextStyle(fontSize: 14, height: 1.4),
         ),
       ),
-      home: const SplashScreen(),
+      home: const LaunchRouter(),
     );
   }
 }
@@ -480,6 +481,75 @@ class ScreenFrame extends StatelessWidget {
   }
 }
 
+void _replaceWithMain(NavigatorState navigator, String? firstFlightId) {
+  navigator.pushReplacement(
+    PageRouteBuilder(
+      settings: const RouteSettings(name: 'MainShell'),
+      pageBuilder: (_, __, ___) => MainShell(initialFlightId: firstFlightId),
+      transitionsBuilder: (_, animation, __, child) =>
+          FadeTransition(opacity: animation, child: child),
+      transitionDuration: const Duration(milliseconds: 650),
+    ),
+  );
+}
+
+class LaunchRouter extends StatefulWidget {
+  const LaunchRouter({super.key});
+  @override
+  State<LaunchRouter> createState() => _LaunchRouterState();
+}
+
+class _LaunchRouterState extends State<LaunchRouter> {
+  late Future<Widget> _destination;
+
+  @override
+  void initState() {
+    super.initState();
+    _destination = _resolveDestination();
+  }
+
+  Future<Widget> _resolveDestination() async {
+    if (!FirebaseRuntime.isInitialized) return const SplashScreen();
+    try {
+      final user = await FirebaseAuth.instance.authStateChanges().first;
+      if (user == null || user.isAnonymous) return const SplashScreen();
+
+      await PaperPlaneApi.instance.bootstrapPilot();
+      final profileResult = await PaperPlaneApi.instance.getProfile();
+      final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+      final stats = profileResult['stats'] as Map<String, dynamic>? ?? const {};
+      final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
+
+      // Returning pilots who finished their first flight should open directly at Home.
+      if (pilot['profile_completed'] == 1 && sent > 0) return const MainShell();
+    } catch (_) {
+      // Keep the account entry available when the session needs to be retried online.
+    }
+    return AccountScreen(
+      onAuthenticated: (firstFlightId) {
+        if (!mounted) return;
+        _replaceWithMain(Navigator.of(context), firstFlightId);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Widget>(
+      future: _destination,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) return snapshot.data!;
+        return const Scaffold(
+          backgroundColor: ppNavy,
+          body: SpaceBackground(
+            child: Center(child: CircularProgressIndicator(color: ppGoldBright)),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
   @override
@@ -509,17 +579,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       PageRouteBuilder(
         settings: const RouteSettings(name: 'AccountEntry'),
         pageBuilder: (_, __, ___) => AccountScreen(
-          onAuthenticated: (firstFlightId) {
-            navigator.pushReplacement(
-              PageRouteBuilder(
-                settings: const RouteSettings(name: 'MainShell'),
-                pageBuilder: (_, __, ___) => MainShell(initialFlightId: firstFlightId),
-                transitionsBuilder: (_, animation, __, child) =>
-                    FadeTransition(opacity: animation, child: child),
-                transitionDuration: const Duration(milliseconds: 650),
-              ),
-            );
-          },
+          onAuthenticated: (firstFlightId) => _replaceWithMain(navigator, firstFlightId),
         ),
         transitionsBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 650),

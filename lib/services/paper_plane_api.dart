@@ -105,6 +105,10 @@ class PaperPlaneApi {
         'CHAT_NOT_FOUND' => 'Esta Chama já não está disponível.',
         'CHAT_UNAVAILABLE' => 'Não é possível enviar mensagens nesta conversa.',
         'CHAT_RATE_LIMIT' => 'Atingiste o limite temporário de mensagens. Tenta novamente mais tarde.',
+        'FRIENDSHIP_REQUIRED' => 'Aceitem primeiro o pedido de amizade para abrir um Chat privado.',
+        'MISSION_NOT_READY' => 'Ainda falta cumprir esta missão.',
+        'MISSION_ALREADY_CLAIMED' => 'Já resgataste esta recompensa.',
+        'QUIZ_DAILY_LIMIT' => 'Já concluíste muitas rondas hoje. Volta amanhã para continuar.',
         'INVALID_PILOT_HANDLE' => 'Usa 4 a 28 caracteres: letras, números, _ e um sufixo como -07.',
         'INVALID_BIRTH_YEAR' => 'Indica um ano de nascimento válido.',
         'INVALID_COUNTRY' => 'Escolhe um país válido.',
@@ -191,6 +195,27 @@ class PaperPlaneApi {
       _request('/v1/friends/remove', method: 'POST', body: {'uid': uid});
 
   Future<Map<String, dynamic>> getChats() => _request('/v1/chats');
+
+  Future<Map<String, dynamic>> getChamas() => _request('/v1/chamas');
+
+  Future<Map<String, dynamic>> createChat(String friendUid) =>
+      _request('/v1/chats', method: 'POST', body: {'uid': friendUid});
+
+  Future<Map<String, dynamic>> getGamification() => _request('/v1/gamification');
+
+  Future<Map<String, dynamic>> claimMission(String missionKey) =>
+      _request('/v1/gamification/claim', method: 'POST', body: {'missionKey': missionKey});
+
+  Future<Map<String, dynamic>> recordQuizAttempt({
+    required String category,
+    required int questionCount,
+    required int correctCount,
+  }) =>
+      _request('/v1/quiz/attempts', method: 'POST', body: {
+        'category': category,
+        'questionCount': questionCount,
+        'correctCount': correctCount,
+      });
 
   Future<Map<String, dynamic>> getChat(String conversationId) =>
       _request('/v1/chats/$conversationId');

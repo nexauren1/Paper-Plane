@@ -262,3 +262,40 @@ except sqlite3.IntegrityError:
     pass
 
 print("D1 migration checks passed: unlimited daily sends with hourly abuse controls, expiry metadata, friendships, delivered-reply Chama tables, route data, matching, reporting and support.")
+
+
+# Chama and direct Chat remain separate for the same pair of pilots.
+conversation_columns = {
+    row[1] for row in DB.execute("PRAGMA table_info(conversations)").fetchall()
+}
+assert "kind" in conversation_columns, "Conversations need a CHAT/CHAMA kind"
+DB.execute(
+    "INSERT INTO conversations(id, user_a, user_b, kind) VALUES ('chat-1', 'pilot-a', 'pilot-b', 'CHAT')"
+)
+assert DB.execute(
+    "SELECT COUNT(*) FROM conversations WHERE user_a = 'pilot-a' AND user_b = 'pilot-b'"
+).fetchone()[0] == 2, "A pair must be able to have independent Chat and Chama conversations"
+
+# Persistent quiz history and one-time XP mission claims.
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quiz_attempts'"
+).fetchone() is not None, "Missing quiz attempt history"
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pilot_reward_claims'"
+).fetchone() is not None, "Missing mission reward ledger"
+DB.execute(
+    """INSERT INTO quiz_attempts(id, uid, category, question_count, correct_count, xp_awarded)
+       VALUES ('quiz-1', 'pilot-a', 'Geografia', 10, 8, 26)"""
+)
+DB.execute(
+    """INSERT INTO pilot_reward_claims(uid, mission_key, xp)
+       VALUES ('pilot-a', 'send_five', 60)"""
+)
+try:
+    DB.execute(
+        """INSERT INTO pilot_reward_claims(uid, mission_key, xp)
+           VALUES ('pilot-a', 'send_five', 60)"""
+    )
+    raise AssertionError("Mission reward was claimed twice")
+except sqlite3.IntegrityError:
+    pass

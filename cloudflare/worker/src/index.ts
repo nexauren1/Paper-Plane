@@ -357,11 +357,6 @@ async function createAirplane(
     ).bind(directFlight.distanceKm, directFlight.durationSeconds, directFlight.startedAt, directFlight.arrivalAt, directFlight.routeJson, id).run();
   }
 
-  let conversationId: string | null = null;
-  if (replyToId && forcedRecipient && status === "FLYING" && moderation.state === "SAFE") {
-    conversationId = await ensureChamaForReply(id, uid, forcedRecipient, replyToId, env);
-    if (conversationId) ctx.waitUntil(notifyChatMessage(forcedRecipient, conversationId, env));
-  }
 
   if (status === "DELIVERED") {
     await env.DB.prepare("INSERT OR IGNORE INTO public_sky (airplane_id) VALUES (?)").bind(id).run();
@@ -405,7 +400,6 @@ async function createAirplane(
       id,
       status: moderationPending ? "PENDING_MODERATION" : status,
       moderation: moderationPending ? "PENDING" : moderation.state,
-      ...(conversationId ? { conversationId } : {}),
     },
     message: moderationPending
       ? "Your plane is saved and will be launched automatically after safety checks."
@@ -540,8 +534,8 @@ async function notifyChatMessage(uid: string, conversationId: string, env: Env) 
           message: {
             token: device.fcm_token,
             notification: {
-              title: "A Chama do Deserto",
-              body: "Tens uma nova mensagem na tua conversa.",
+              title: "Nova mensagem no Paper Plane",
+              body: "Tens uma nova mensagem privada.",
             },
             data: { type: "CHAT_MESSAGE", conversationId },
             android: { priority: "HIGH" },
@@ -564,10 +558,10 @@ async function ensureChamaForReply(
   const userA = senderUid < recipientUid ? senderUid : recipientUid;
   const userB = senderUid < recipientUid ? recipientUid : senderUid;
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO conversations(id, user_a, user_b) VALUES (?, ?, ?)",
+    "INSERT OR IGNORE INTO conversations(id, user_a, user_b, kind) VALUES (?, ?, ?, 'CHAMA')",
   ).bind(uuid(), userA, userB).run();
   const conversation = await env.DB.prepare(
-    "SELECT id FROM conversations WHERE user_a = ? AND user_b = ? LIMIT 1",
+    "SELECT id FROM conversations WHERE user_a = ? AND user_b = ? AND kind = 'CHAMA' LIMIT 1",
   ).bind(userA, userB).first<{ id: string }>();
   if (!conversation) return null;
 
@@ -622,7 +616,8 @@ async function deliverAirplane(airplaneId: string, env: Env) {
   ).bind(airplaneId, plane.recipient_uid).run();
 
   if (plane.reply_to_id) {
-    await ensureChamaForReply(airplaneId, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
+    const conversationId = await ensureChamaForReply(airplaneId, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
+    if (conversationId) await notifyChatMessage(plane.recipient_uid, conversationId, env);
   }
   await notifyNewPlane(plane.recipient_uid, airplaneId, env);
 }
@@ -692,10 +687,6 @@ async function processPendingAirplane(airplaneId: string, env: Env): Promise<boo
     ).bind(now, route.distanceKm, route.durationSeconds, route.startedAt, route.arrivalAt, route.routeJson, airplaneId).run();
 
     if ((result.meta?.changes ?? 0) === 1) {
-      if (plane.reply_to_id) {
-        const conversationId = await ensureChamaForReply(airplaneId, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
-        if (conversationId) await notifyChatMessage(plane.recipient_uid, conversationId, env);
-      }
       try {
         await env.DELIVERY_QUEUE.send(
           { type: "DELIVER_AIRPLANE", airplaneId },
@@ -786,10 +777,6 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
     }
 
     if (changed && plane.recipient_uid) {
-      if (plane.reply_to_id) {
-        const conversationId = await ensureChamaForReply(plane.id, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
-        if (conversationId) await notifyChatMessage(plane.recipient_uid, conversationId, env);
-      }
       try {
         const flight = await env.DB.prepare("SELECT flight_duration_seconds FROM airplanes WHERE id = ?").bind(plane.id).first<{ flight_duration_seconds: number | null }>();
         await env.DELIVERY_QUEUE.send({ type: "DELIVER_AIRPLANE", airplaneId: plane.id }, { delaySeconds: Math.max(1, Number(flight?.flight_duration_seconds ?? 4)) });
@@ -803,6 +790,112 @@ async function releasePreviouslyHeldSafeMessages(env: Env): Promise<void> {
       ).bind(uuid(), plane.id, JSON.stringify({ rule: "local_high_confidence_filter_passed" })).run();
     }
   }
+}
+
+
+type EngagementMetric = "sent" | "received" | "replies" | "friends" | "publicReplies" | "quizRounds" | "correctAnswers" | "perfectQuizzes";
+const ENGAGEMENT_MISSIONS: Array<{ key: string; title: string; description: string; target: number; xp: number; metric: EngagementMetric }> = [
+  { key: "first_flight", title: "Primeiro voo", description: "Lança o teu primeiro avião.", target: 1, xp: 25, metric: "sent" },
+  { key: "send_five", title: "Mensageiro ativo", description: "Envia cinco aviões para o mundo.", target: 5, xp: 60, metric: "sent" },
+  { key: "send_twenty_five", title: "Correio incansável", description: "Envia 25 aviões.", target: 25, xp: 160, metric: "sent" },
+  { key: "receive_five", title: "Correio recebido", description: "Recebe cinco aviões.", target: 5, xp: 55, metric: "received" },
+  { key: "first_reply", title: "A primeira resposta", description: "Responde a um avião que recebeste.", target: 1, xp: 45, metric: "replies" },
+  { key: "reply_five", title: "Conversas no céu", description: "Responde a cinco aviões.", target: 5, xp: 120, metric: "replies" },
+  { key: "invite_friend", title: "Liga dois mundos", description: "Convida um amigo e confirma a amizade.", target: 1, xp: 75, metric: "friends" },
+  { key: "invite_five", title: "Rede mundial", description: "Constrói uma rede com cinco amigos.", target: 5, xp: 220, metric: "friends" },
+  { key: "open_sky_voice", title: "Voz do Open Sky", description: "Publica uma resposta no Open Sky.", target: 1, xp: 35, metric: "publicReplies" },
+  { key: "quiz_first", title: "Mente curiosa", description: "Termina a tua primeira ronda de Quiz.", target: 1, xp: 25, metric: "quizRounds" },
+  { key: "quiz_three", title: "Aprendiz do céu", description: "Termina três rondas de Quiz.", target: 3, xp: 65, metric: "quizRounds" },
+  { key: "quiz_ten", title: "Mestre das perguntas", description: "Termina dez rondas de Quiz.", target: 10, xp: 180, metric: "quizRounds" },
+  { key: "quiz_fifty_answers", title: "Curiosidade sem limites", description: "Acerta 50 respostas no Quiz.", target: 50, xp: 130, metric: "correctAnswers" },
+  { key: "perfect_quiz", title: "Ronda perfeita", description: "Termina uma ronda sem errar.", target: 1, xp: 100, metric: "perfectQuizzes" }
+];
+
+async function loadEngagementStats(uid: string, env: Env): Promise<Record<EngagementMetric, number> & { quizXp: number; missionXp: number }> {
+  const row = await env.DB.prepare(
+    `SELECT
+      (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND status <> 'REJECTED') AS sent,
+      (SELECT COUNT(*) FROM inbox i JOIN airplanes a ON a.id = i.airplane_id WHERE i.recipient_uid = ?) AS received,
+      (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND reply_to_id IS NOT NULL AND status <> 'REJECTED') AS replies,
+      (SELECT COUNT(*) FROM friendships WHERE status = 'ACCEPTED' AND (requester_uid = ? OR addressee_uid = ?)) AS friends,
+      (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND moderation_state = 'SAFE') AS publicReplies,
+      (SELECT COUNT(*) FROM quiz_attempts WHERE uid = ?) AS quizRounds,
+      (SELECT COALESCE(SUM(correct_count), 0) FROM quiz_attempts WHERE uid = ?) AS correctAnswers,
+      (SELECT COUNT(*) FROM quiz_attempts WHERE uid = ? AND correct_count = question_count) AS perfectQuizzes,
+      (SELECT COALESCE(SUM(xp_awarded), 0) FROM quiz_attempts WHERE uid = ?) AS quizXp,
+      (SELECT COALESCE(SUM(xp), 0) FROM pilot_reward_claims WHERE uid = ?) AS missionXp`,
+  ).bind(uid, uid, uid, uid, uid, uid, uid, uid, uid, uid).first<Record<string, number>>();
+  return {
+    sent: Number(row?.sent ?? 0), received: Number(row?.received ?? 0),
+    replies: Number(row?.replies ?? 0), friends: Number(row?.friends ?? 0),
+    publicReplies: Number(row?.publicReplies ?? 0), quizRounds: Number(row?.quizRounds ?? 0),
+    correctAnswers: Number(row?.correctAnswers ?? 0), perfectQuizzes: Number(row?.perfectQuizzes ?? 0),
+    quizXp: Number(row?.quizXp ?? 0), missionXp: Number(row?.missionXp ?? 0),
+  };
+}
+
+async function loadGamification(uid: string, env: Env) {
+  const [stats, claims] = await Promise.all([
+    loadEngagementStats(uid, env),
+    env.DB.prepare("SELECT mission_key, xp, claimed_at FROM pilot_reward_claims WHERE uid = ?").bind(uid).all<{
+      mission_key: string; xp: number; claimed_at: string;
+    }>(),
+  ]);
+  const claimed = new Map((claims.results ?? []).map((item) => [item.mission_key, item]));
+  const missions = ENGAGEMENT_MISSIONS.map((mission) => {
+    const current = Math.min(stats[mission.metric], mission.target);
+    const alreadyClaimed = claimed.has(mission.key);
+    return {
+      key: mission.key, title: mission.title, description: mission.description,
+      current, target: mission.target, xp: mission.xp,
+      complete: stats[mission.metric] >= mission.target,
+      claimed: alreadyClaimed, claimable: stats[mission.metric] >= mission.target && !alreadyClaimed,
+    };
+  });
+  const xp = stats.quizXp + stats.missionXp;
+  const level = Math.floor(Math.sqrt(xp / 100)) + 1;
+  const levelStartXp = (level - 1) * (level - 1) * 100;
+  const nextLevelXp = level * level * 100;
+  const titles = ["Piloto novato", "Mensageiro", "Explorador", "Navegador", "Embaixador", "Lenda do céu", "Guardião do mundo"];
+  const badges = [
+    { key: "first_flight", title: "Primeiro voo", icon: "flight", description: "Lançaste o teu primeiro avião.", unlocked: stats.sent >= 1 },
+    { key: "five_planes", title: "Correio ativo", icon: "send", description: "Enviastes cinco aviões.", unlocked: stats.sent >= 5 },
+    { key: "world_mail", title: "Correio mundial", icon: "public", description: "Enviastes 25 aviões.", unlocked: stats.sent >= 25 },
+    { key: "kind_receiver", title: "Caixa cheia", icon: "inbox", description: "Recebeste cinco aviões.", unlocked: stats.received >= 5 },
+    { key: "first_reply", title: "Resposta enviada", icon: "reply", description: "Respondeste a um avião.", unlocked: stats.replies >= 1 },
+    { key: "friend_network", title: "Rede de amigos", icon: "people", description: "Confirmaste a amizade com alguém.", unlocked: stats.friends >= 1 },
+    { key: "open_sky", title: "Voz aberta", icon: "forum", description: "Publicaste no Open Sky.", unlocked: stats.publicReplies >= 1 },
+    { key: "curious_mind", title: "Mente curiosa", icon: "quiz", description: "Terminaste três rondas de Quiz.", unlocked: stats.quizRounds >= 3 },
+    { key: "perfect_round", title: "Ronda perfeita", icon: "star", description: "Acertaste todas as perguntas de uma ronda.", unlocked: stats.perfectQuizzes >= 1 },
+    { key: "quiz_master", title: "Mestre do Quiz", icon: "school", description: "Terminaste dez rondas de Quiz.", unlocked: stats.quizRounds >= 10 },
+  ];
+  return {
+    xp, level, title: titles[Math.min(titles.length - 1, level - 1)],
+    levelStartXp, nextLevelXp,
+    levelProgress: Math.max(0, Math.min(1, (xp - levelStartXp) / Math.max(1, nextLevelXp - levelStartXp))),
+    stats, missions, badges,
+  };
+}
+
+async function awardQuizAttempt(uid: string, body: Record<string, unknown>, env: Env) {
+  const category = text(body.category, 32) || "Geral";
+  const questionCount = Number(body.questionCount);
+  const correctCount = Number(body.correctCount);
+  if (!Number.isInteger(questionCount) || questionCount !== 10 ||
+      !Number.isInteger(correctCount) || correctCount < 0 || correctCount > questionCount) {
+    return json({ error: "INVALID_QUIZ_RESULT", message: "A ronda deve conter dez perguntas válidas." }, 400);
+  }
+  const daily = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM quiz_attempts WHERE uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')",
+  ).bind(uid).first<{ count: number }>();
+  if (Number(daily?.count ?? 0) >= 20) return json({ error: "QUIZ_DAILY_LIMIT" }, 429);
+  const xpAwarded = 10 + correctCount * 2;
+  const id = uuid();
+  const createdAt = isoNow();
+  await env.DB.prepare(
+    "INSERT INTO quiz_attempts(id, uid, category, question_count, correct_count, xp_awarded, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  ).bind(id, uid, category, questionCount, correctCount, xpAwarded, createdAt).run();
+  return json({ ok: true, attempt: { id, category, questionCount, correctCount, xpAwarded, createdAt }, gamification: await loadGamification(uid, env) }, 201);
 }
 
 async function translateMessage(airplaneId: string, targetLanguage: "pt" | "en", message: string, env: Env): Promise<string | null> {
@@ -904,6 +997,34 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   const admins = (env.ADMIN_UIDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
   const isAdmin = admins.includes(uid);
+
+
+  if (method === "GET" && path === "/v1/gamification") {
+    return json(await loadGamification(uid, env));
+  }
+
+  if (method === "POST" && path === "/v1/gamification/claim") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const missionKey = text(body.missionKey, 64);
+    const mission = ENGAGEMENT_MISSIONS.find((item) => item.key === missionKey);
+    if (!mission) return json({ error: "UNKNOWN_MISSION" }, 404);
+    const stats = await loadEngagementStats(uid, env);
+    if (stats[mission.metric] < mission.target) return json({ error: "MISSION_NOT_READY" }, 409);
+    const result = await env.DB.prepare(
+      "INSERT OR IGNORE INTO pilot_reward_claims(uid, mission_key, xp) VALUES (?, ?, ?)",
+    ).bind(uid, mission.key, mission.xp).run();
+    if ((result.meta?.changes ?? 0) !== 1) {
+      return json({ error: "MISSION_ALREADY_CLAIMED", gamification: await loadGamification(uid, env) }, 409);
+    }
+    return json({ ok: true, missionKey, xpAwarded: mission.xp, gamification: await loadGamification(uid, env) });
+  }
+
+  if (method === "POST" && path === "/v1/quiz/attempts") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    return awardQuizAttempt(uid, body, env);
+  }
 
   if (method === "GET" && path === "/v1/friends") {
     const [friends, requests] = await Promise.all([
@@ -1046,9 +1167,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ ok: true });
   }
 
-  if (method === "GET" && path === "/v1/chats") {
+  if (method === "GET" && (path === "/v1/chats" || path === "/v1/chamas")) {
+    const kind = path === "/v1/chamas" ? "CHAMA" : "CHAT";
     const rows = await env.DB.prepare(
-      `SELECT c.id AS conversation_id,
+      `SELECT c.id AS conversation_id, c.kind,
               CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
               u.pilot_name, u.pilot_handle,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
@@ -1057,10 +1179,48 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
               c.created_at
        FROM conversations c
        JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
-       WHERE c.user_a = ? OR c.user_b = ?
+       WHERE (c.user_a = ? OR c.user_b = ?) AND c.kind = ?
        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC LIMIT 100`,
-    ).bind(uid, uid, uid, uid).all();
+    ).bind(uid, uid, uid, uid, kind).all();
     return json({ items: rows.results ?? [] });
+  }
+
+  if (method === "POST" && path === "/v1/chats") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const handle = normalizePilotHandle(body.handle);
+    const requestedUid = text(body.uid, 128);
+    const target = requestedUid
+      ? await requireUser(requestedUid, env)
+      : await env.DB.prepare(
+          "SELECT uid, declared_age_band, status, profile_completed FROM users WHERE lower(pilot_handle) = ? LIMIT 1",
+        ).bind(handle).first<{ uid: string; declared_age_band: string; status: string; profile_completed: number }>();
+    if (!target || target.status !== "ACTIVE" || target.profile_completed !== 1) {
+      return json({ error: "PILOT_NOT_FOUND" }, 404);
+    }
+    if (target.uid === uid) return json({ error: "CANNOT_CHAT_WITH_SELF" }, 400);
+    const current = await requireUser(uid, env);
+    if (!current || current.declared_age_band !== target.declared_age_band) {
+      return json({ error: "FRIEND_AGE_GROUP_MISMATCH" }, 403);
+    }
+    const friendship = await env.DB.prepare(
+      "SELECT 1 AS found FROM friendships WHERE status = 'ACCEPTED' AND ((requester_uid = ? AND addressee_uid = ?) OR (requester_uid = ? AND addressee_uid = ?)) LIMIT 1",
+    ).bind(uid, target.uid, target.uid, uid).first();
+    if (!friendship) return json({ error: "FRIENDSHIP_REQUIRED", message: "Aceitem primeiro o pedido de amizade para abrir um Chat privado." }, 403);
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, target.uid, target.uid, uid).first();
+    if (blocked) return json({ error: "CHAT_UNAVAILABLE" }, 403);
+    const userA = uid < target.uid ? uid : target.uid;
+    const userB = uid < target.uid ? target.uid : uid;
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO conversations(id, user_a, user_b, kind) VALUES (?, ?, ?, 'CHAT')",
+    ).bind(uuid(), userA, userB).run();
+    const conversation = await env.DB.prepare(
+      "SELECT id, kind FROM conversations WHERE user_a = ? AND user_b = ? AND kind = 'CHAT' LIMIT 1",
+    ).bind(userA, userB).first<{ id: string; kind: string }>();
+    if (!conversation) return json({ error: "CHAT_CREATE_FAILED" }, 500);
+    return json({ conversation: { id: conversation.id, kind: conversation.kind }, created: true }, 201);
   }
 
   const chatMessagesMatch = path.match(/^\/v1\/chats\/([^/]+)\/messages$/);
@@ -1108,7 +1268,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const chatMatch = path.match(/^\/v1\/chats\/([^/]+)$/);
   if (method === "GET" && chatMatch) {
     const conversation = await env.DB.prepare(
-      `SELECT c.id, c.user_a, c.user_b,
+      `SELECT c.id, c.user_a, c.user_b, c.kind,
               CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
               u.pilot_name, u.pilot_handle,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
