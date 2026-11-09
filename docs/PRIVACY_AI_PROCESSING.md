@@ -13,14 +13,13 @@ This is an implementation note for the privacy policy, not a substitute for lega
 
 ## AI processing — internal, not a user-facing assistant
 
-Paper Plane sends the text of a letter to Cloudflare Workers AI for:
-- unsafe-content screening with Llama Guard;
-- a second risk-triage pass for grooming/predatory contact, sexual solicitation, self-harm, threats, personal contact details, off-platform contact requests, coercion, and spam;
-- language, mood, and topic metadata classification;
-- translation of an incoming airplane into the recipient's saved preferred language when the recipient opens the letter;
-- on-demand translation of a private Chat or Chama message when the recipient taps Translate.
+Paper Plane sends message text to Cloudflare Workers AI for translation:
+- an incoming airplane is translated into the recipient's saved preferred language when the recipient opens the letter;
+- a private Chat or Chama message is translated when the recipient taps Translate.
 
-The translation model is Meta M2M100 1.2B (`@cf/meta/m2m100-1.2b`) running through Cloudflare Workers AI. Message text is sent to Cloudflare for inference when an airplane is opened or a chat translation is requested. The original message remains unchanged; translated text is cached in Cloudflare D1 for reuse. A recipient can view the original message. The translation model is not used to write messages for users or impersonate pilots.
+The current Worker does not run an automated content-safety classifier or AI moderation pass. Its moderation function currently accepts messages as SAFE. Reporting and blocking controls exist, but they are not a substitute for automated screening or staffed human review.
+
+The translation model is Meta M2M100 1.2B (`@cf/meta/m2m100-1.2b`) running through Cloudflare Workers AI. Message text is sent to Cloudflare for inference when an airplane is opened or a chat translation is requested. The original message remains unchanged; translated text is cached in Cloudflare D1 for reuse. A recipient can view the original message. The translation model is not used to write messages for users, impersonate pilots, or moderate messages.
 
 The currently selected Cloudflare AI models list zero-data-retention availability in Cloudflare's model catalogue. This does not mean Paper Plane itself stores no messages: letters are stored in D1 to provide the service, and the policy must explain the application's own storage, access, deletion, and expiry rules.
 
@@ -44,6 +43,7 @@ Push notifications use generic text and do not include the letter body.
 - how a user can report, block, export, and request deletion of an account and its content;
 - the legal basis, transfer locations, and contact channel for privacy requests;
 - how FCM tokens are stored and how notification permission can be withdrawn;
-- how moderation reports and safety records are retained after a letter expires.
+- how moderation reports and safety records are retained after a letter expires;
+- that automated content moderation is not yet enabled in the current Worker and must be implemented before public launch.
 
 Do not launch until account deletion, export, report handling, human review operations, retention schedules, and the self-declared age-group safeguards are implemented and tested.
