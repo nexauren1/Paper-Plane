@@ -1382,6 +1382,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     return json({ error: "FORBIDDEN" }, 403);
   }
 
+  const adminBlockMatch = path.match(/^\\/v1\\/admin\\/blocks\\/([^/]+)\\/([^/]+)$/);
+  if (adminBlockMatch && method === "POST") {
+    const blockerUid = adminBlockMatch[1];
+    const blockedUid = adminBlockMatch[2];
+    const result = await env.DB.prepare(
+      "DELETE FROM blocks WHERE blocker_uid = ? AND blocked_uid = ?",
+    ).bind(blockerUid, blockedUid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "BLOCK_NOT_FOUND" }, 404);
+    await env.DB.prepare(
+      "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'ADMIN_BLOCK_REMOVED', ?, ?)",
+    ).bind(uuid(), uid, blockerUid + ":" + blockedUid, JSON.stringify({ blockerUid, blockedUid })).run();
+    return json({ ok: true });
+  }
+
   if (method === "GET" && path === "/v1/admin/blocks") {
     const rows = await env.DB.prepare(
       `SELECT b.blocker_uid, a.pilot_handle AS blocker_handle, b.blocked_uid, z.pilot_handle AS blocked_handle, b.created_at
