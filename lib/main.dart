@@ -1079,15 +1079,33 @@ class WritePlaneScreen extends StatefulWidget {
   State<WritePlaneScreen> createState() => _WritePlaneScreenState();
 }
 
-class _WritePlaneScreenState extends State<WritePlaneScreen> {
+class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _message = TextEditingController();
   String _mood = 'Esperança';
   String _visibility = 'Aleatório 1-para-1';
   bool _allowReply = true;
   String _destination = 'Qualquer lugar do mundo';
+  late final AnimationController _previewFlight = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  )..repeat(reverse: true);
+
+  void _insertEmoji(String emoji) {
+    final value = _message.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final next = value.text.replaceRange(selection.start, selection.end, emoji);
+    if (next.runes.length > 200) return;
+    _message.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: selection.start + emoji.length),
+    );
+  }
 
   @override
   void dispose() {
+    _previewFlight.dispose();
     _message.dispose();
     super.dispose();
   }
@@ -1112,8 +1130,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
     );
     try {
       await PaperPlaneAuth.requireSignedInPilot();
-      final profileResult = await PaperPlaneApi.instance.getProfile();
-      final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+      var profileResult = await PaperPlaneApi.instance.getProfile();
+      var pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       if (pilot['profile_completed'] != 1) {
         if (mounted) Navigator.of(context).pop();
         launchDialogOpen = false;
@@ -1121,11 +1139,13 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
           MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
         );
         if (completed != true) return;
+        profileResult = await PaperPlaneApi.instance.getProfile();
+        pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       }
 
       final result = await PaperPlaneApi.instance.sendPlane(
         message: _message.text.trim(),
-        language: 'pt',
+        language: pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt',
         mood: _mood,
         visibility: _visibility,
         destinationCountry: switch (_destination) {
@@ -1165,6 +1185,54 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
         children: [
           Container(
+            height: 132,
+            margin: const EdgeInsets.only(bottom: 15),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: ppGold.withOpacity(0.32)),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF18365A), Color(0xFF0B1A31), Color(0xFF071225)],
+              ),
+              boxShadow: [BoxShadow(color: ppGold.withOpacity(0.08), blurRadius: 22, spreadRadius: 1)],
+            ),
+            child: Stack(clipBehavior: Clip.hardEdge, children: [
+              Positioned(right: 15, top: 10, child: Icon(Icons.auto_awesome, color: ppGoldBright.withOpacity(0.45), size: 18)),
+              Positioned(left: 20, bottom: 18, child: Icon(Icons.star_rounded, color: Colors.white.withOpacity(0.22), size: 8)),
+              Positioned(left: 78, top: 28, child: Icon(Icons.star_rounded, color: ppGold.withOpacity(0.45), size: 10)),
+              Positioned(
+                left: 18,
+                bottom: 17,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+                  Text('PREPARA A TUA MENSAGEM', style: TextStyle(color: ppGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                  SizedBox(height: 5),
+                  Text('Uma ideia. Um voo. Outro mundo.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                ]),
+              ),
+              Positioned(
+                right: 28,
+                top: 14,
+                child: AnimatedBuilder(
+                  animation: _previewFlight,
+                  builder: (_, child) => Transform.translate(
+                    offset: Offset(-_previewFlight.value * 32, _previewFlight.value * 15),
+                    child: Transform.rotate(
+                      angle: -0.12 + _previewFlight.value * 0.18,
+                      child: child,
+                    ),
+                  ),
+                  child: const AnimatedPlane(width: 86),
+                ),
+              ),
+              Positioned(
+                right: 85,
+                bottom: 12,
+                child: Container(width: 85, height: 1, color: ppGold.withOpacity(0.18)),
+              ),
+            ]),
+          ),
+          Container(
             height: 250,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1202,6 +1270,23 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            const Expanded(child: Text('Expressa-te com um símbolo', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700))),
+            TextButton(
+              onPressed: () => _insertEmoji(' ✨'),
+              child: const Text('Adicionar ✨', style: TextStyle(color: ppGoldBright, fontSize: 11)),
+            ),
+          ]),
+          Wrap(
+            spacing: 7,
+            children: ['😊', '💌', '🌍', '❤️', '🌙', '🌸'].map((emoji) => ActionChip(
+              label: Text(emoji, style: const TextStyle(fontSize: 17)),
+              backgroundColor: const Color(0xFF172844),
+              side: BorderSide(color: ppGold.withOpacity(0.22)),
+              onPressed: () => _insertEmoji(emoji),
+            )).toList(),
           ),
           const SectionTitle('Escolhe o sentimento'),
           Wrap(
@@ -3394,10 +3479,13 @@ class _LetterScreenState extends State<LetterScreen> {
     if (message.isEmpty) return;
     setState(() => _busy = true);
     try {
+      final profile = await PaperPlaneApi.instance.getProfile();
+      final pilot = profile['pilot'] as Map<String, dynamic>? ?? const {};
+      final language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
       final result = await PaperPlaneApi.instance.replyToPlane(
         widget.airplane['id'].toString(),
         message: message,
-        language: 'pt',
+        language: language,
         allowReply: true,
       );
       final plane = result['airplane'] as Map<String, dynamic>? ?? const {};
@@ -3438,7 +3526,9 @@ class _LetterScreenState extends State<LetterScreen> {
   @override
   Widget build(BuildContext context) {
     final country = widget.airplane['sender_country_code']?.toString();
-    final message = widget.airplane['message_text']?.toString() ?? '';
+    final originalMessage = widget.airplane['message_text']?.toString() ?? '';
+    final translatedMessage = widget.airplane['translated_text']?.toString();
+    final message = translatedMessage?.isNotEmpty == true ? translatedMessage! : originalMessage;
     final replyValue = widget.airplane['allow_reply'];
     final allowReply = replyValue == 1 || replyValue == true;
     return ScreenFrame(
@@ -3457,7 +3547,36 @@ class _LetterScreenState extends State<LetterScreen> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('De: Alguém em ' + _countryName(country) + ' ' + _countryFlag(country), style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
               const SizedBox(height: 24),
+              if (translatedMessage?.isNotEmpty == true)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Row(children: [
+                    Icon(Icons.translate_rounded, size: 15, color: Color(0xFF82745A)),
+                    SizedBox(width: 6),
+                    Text('TRADUÇÃO AUTOMÁTICA · CLOUDFLARE AI',
+                        style: TextStyle(color: Color(0xFF82745A), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  ]),
+                ),
               Text(message, style: const TextStyle(color: ppInk, fontSize: 22, height: 1.6, fontStyle: FontStyle.italic)),
+              if (translatedMessage?.isNotEmpty == true) ...[
+                const SizedBox(height: 12),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: EdgeInsets.zero,
+                    iconColor: const Color(0xFF82745A),
+                    collapsedIconColor: const Color(0xFF82745A),
+                    title: const Text('Ver mensagem original', style: TextStyle(color: Color(0xFF82745A), fontSize: 12, fontWeight: FontWeight.w700)),
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(originalMessage, style: const TextStyle(color: ppInk, fontSize: 16, height: 1.5)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 22),
               Text('Recebido · ' + (widget.airplane['delivered_at']?.toString() ?? ''), style: const TextStyle(color: Color(0xFF82745A), fontSize: 11)),
             ]),

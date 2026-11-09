@@ -27,6 +27,13 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   bool _searching = false;
   String? _error;
   String _myHandle = '';
+  String _myLanguage = 'pt';
+  static const Map<String, String> _languageNames = {
+    'pt': 'Português', 'en': 'English', 'ja': '日本語',
+    'es': 'Español', 'fr': 'Français', 'de': 'Deutsch',
+    'zh': '中文', 'ko': '한국어', 'ar': 'العربية',
+    'ru': 'Русский', 'hi': 'हिन्दी', 'id': 'Bahasa Indonesia',
+  };
   final TextEditingController _search = TextEditingController();
   Timer? _poller;
   List<Map<String, dynamic>> _chats = [];
@@ -85,6 +92,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         _incoming = incomingById.values.toList();
         _outgoing = _items(responses[2], 'outgoing');
         _myHandle = pilot['pilot_handle']?.toString() ?? '';
+        _myLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
         _loading = false;
         _error = null;
       });
@@ -201,6 +209,43 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     }
   }
 
+  Future<void> _changeLanguage() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF142541),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+          children: [
+            const Text('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            const Text('Os aviões recebidos serão traduzidos para este idioma.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const SizedBox(height: 10),
+            for (final entry in _languageNames.entries)
+              ListTile(
+                leading: Icon(_myLanguage == entry.key ? Icons.check_circle_rounded : Icons.language_rounded,
+                    color: _myLanguage == entry.key ? _chatGoldBright : Colors.white54),
+                title: Text(entry.value),
+                onTap: () => Navigator.pop(sheetContext, entry.key),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == _myLanguage) return;
+    try {
+      await PaperPlaneApi.instance.updateLanguagePreference(selected);
+      if (!mounted) return;
+      setState(() => _myLanguage = selected);
+      _notice('Idioma alterado para ${_languageNames[selected]}.');
+      await _refresh(silent: true);
+    } catch (error) {
+      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível alterar o idioma.');
+    }
+  }
+
   Future<void> _copyInvite() async {
     if (_myHandle.isEmpty) {
       _notice('Completa primeiro o teu perfil de copiloto.');
@@ -243,6 +288,11 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                   onPressed: _copyInvite,
                   tooltip: 'Copiar link de convite',
                   icon: const Icon(Icons.link_rounded, color: _chatGoldBright),
+                ),
+                IconButton(
+                  onPressed: _changeLanguage,
+                  tooltip: 'Idioma: ${_languageNames[_myLanguage] ?? _myLanguage}',
+                  icon: const Icon(Icons.translate_rounded, color: _chatGoldBright),
                 ),
                 IconButton(
                   onPressed: () => _refresh(),
@@ -767,6 +817,15 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   bool _chamaEnded = false;
   String? _error;
   List<Map<String, dynamic>> _messages = [];
+  String _myLanguage = 'pt';
+  static const Map<String, String> _chatLanguageNames = {
+    'pt': 'Português', 'en': 'English', 'ja': '日本語',
+    'es': 'Español', 'fr': 'Français', 'de': 'Deutsch',
+    'zh': '中文', 'ko': '한국어', 'ar': 'العربية',
+    'ru': 'Русский', 'hi': 'हिन्दी', 'id': 'Bahasa Indonesia',
+  };
+  final Map<String, String> _translatedMessages = {};
+  final Set<String> _translatingMessages = {};
   Map<String, dynamic>? _chamaStats;
   List<Map<String, dynamic>> _chamaHistory = [];
 
@@ -776,6 +835,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     _name = widget.fallbackName;
     _handle = widget.fallbackHandle;
     _countryCode = widget.fallbackCountry;
+    _loadPreferredLanguage();
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 4), (_) => _refresh(silent: true));
   }
@@ -786,6 +846,18 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     _message.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPreferredLanguage() async {
+    try {
+      final data = await PaperPlaneApi.instance.getProfile();
+      final pilot = data['pilot'] as Map<String, dynamic>? ?? const {};
+      if (!mounted) return;
+      setState(() => _myLanguage =
+          pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt');
+    } catch (_) {
+      // Keep the conversation usable with Portuguese as the fallback.
+    }
   }
 
   Future<void> _refresh({bool silent = false}) async {
@@ -965,6 +1037,85 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     );
   }
 
+  void _insertChatEmoji(String emoji) {
+    final value = _message.value;
+    final selection = value.selection.isValid
+        ? value.selection
+        : TextSelection.collapsed(offset: value.text.length);
+    final next = value.text.replaceRange(selection.start, selection.end, emoji);
+    final limit = widget.isChama ? 200 : 1000;
+    if (next.runes.length > limit) return;
+    _message.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: selection.start + emoji.length),
+    );
+  }
+
+  Future<void> _openEmojiPicker() async {
+    const emojis = ['😊', '😂', '🥹', '❤️', '💌', '🌍', '🌸', '✨', '🌙', '🙏', '🤝', '🕊️'];
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF142541),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 8, 18, 20),
+          child: Wrap(
+            alignment: WrapAlignment.spaceAround,
+            spacing: 12,
+            runSpacing: 12,
+            children: emojis.map((emoji) => InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () => Navigator.pop(sheetContext, emoji),
+              child: Container(
+                width: 52,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF203958),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _chatGold.withOpacity(0.2)),
+                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 25)),
+              ),
+            )).toList(),
+          ),
+        ),
+      ),
+    );
+    if (selected != null) _insertChatEmoji(selected);
+  }
+
+  Future<void> _translateMessage(Map<String, dynamic> message) async {
+    final id = message['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    if (_translatedMessages.containsKey(id)) {
+      setState(() => _translatedMessages.remove(id));
+      return;
+    }
+    if (_translatingMessages.contains(id)) return;
+    setState(() => _translatingMessages.add(id));
+    try {
+      final result = id.startsWith('plane:')
+          ? await PaperPlaneApi.instance.translatePlane(id.substring(6), _myLanguage)
+          : await PaperPlaneApi.instance.translateChatMessage(widget.conversationId, id, _myLanguage);
+      final translated = result['text']?.toString();
+      if (translated == null || translated.isEmpty) {
+        throw const PaperPlaneApiException('TRANSLATION_UNAVAILABLE', 'Não foi possível traduzir esta mensagem.');
+      }
+      if (!mounted) return;
+      setState(() => _translatedMessages[id] = translated);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error is PaperPlaneApiException ? error.message : 'A tradução não está disponível neste momento.'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      if (mounted) setState(() => _translatingMessages.remove(id));
+    }
+  }
+
   Future<void> _send() async {
     final text = _message.text.trim();
     if (text.isEmpty || _sending) return;
@@ -992,11 +1143,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         await PaperPlaneApi.instance.replyToPlane(
           planeId,
           message: text,
-          language: 'pt',
+          language: _myLanguage,
           allowReply: true,
         );
       } else {
-        await PaperPlaneApi.instance.sendChatMessage(widget.conversationId, text);
+        await PaperPlaneApi.instance.sendChatMessage(widget.conversationId, text, language: _myLanguage);
       }
       _message.clear();
       await _refresh(silent: true);
@@ -1224,6 +1375,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
               border: Border(top: BorderSide(color: Color(0x33F0CE7C))),
             ),
             child: Row(children: [
+              IconButton(
+                onPressed: widget.isChama && _chamaEnded ? null : _openEmojiPicker,
+                tooltip: 'Adicionar emoji',
+                icon: const Icon(Icons.emoji_emotions_outlined, color: _chatGoldBright),
+              ),
               Expanded(
                 child: TextField(
                   controller: _message,
@@ -1282,7 +1438,9 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   Widget _messageBubble(Map<String, dynamic> message) {
     final isOwn = message['sender_uid']?.toString() == FirebaseAuth.instance.currentUser?.uid;
     final isOpeningPlane = message['id']?.toString().startsWith('plane:') == true;
-    final content = message['message_text']?.toString() ?? '';
+    final original = message['message_text']?.toString() ?? '';
+    final content = _translatedMessages[message['id']?.toString()] ?? original;
+    final isTranslating = _translatingMessages.contains(message['id']?.toString());
     final date = DateTime.tryParse(message['created_at']?.toString() ?? '');
     final time = date == null
         ? ''
@@ -1322,11 +1480,57 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             ]),
             const SizedBox(height: 6),
           ],
-          Text(content, style: const TextStyle(fontSize: 14, height: 1.42)),
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.97, end: 1),
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
+            builder: (context, scale, child) => Opacity(
+              opacity: scale.clamp(0.0, 1.0).toDouble(),
+              child: Transform.scale(scale: scale, alignment: Alignment.topLeft, child: child),
+            ),
+            child: Text(content, style: const TextStyle(fontSize: 14, height: 1.42)),
+          ),
+          if (content != original)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => _translateMessage(message),
+                icon: const Icon(Icons.visibility_outlined, size: 13),
+                label: const Text('Ver original', style: TextStyle(fontSize: 10)),
+                style: TextButton.styleFrom(foregroundColor: _chatGoldBright, padding: EdgeInsets.zero),
+              ),
+            )
+          else if (!isOwn)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: isTranslating ? null : () => _translateMessage(message),
+                icon: isTranslating
+                    ? const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8))
+                    : const Icon(Icons.translate_rounded, size: 13),
+                label: Text(isTranslating ? 'A traduzir…' : 'Traduzir para ${_chatLanguageNames[_myLanguage] ?? _myLanguage}',
+                    style: const TextStyle(fontSize: 10)),
+                style: TextButton.styleFrom(foregroundColor: _chatGoldBright, padding: EdgeInsets.zero),
+              ),
+            ),
           ChatLinkPreview(key: ValueKey(message['id']?.toString() ?? content), message: content),
           const SizedBox(height: 5),
           Row(mainAxisSize: MainAxisSize.min, children: [
             Text(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints.tightFor(width: 27, height: 25),
+              padding: EdgeInsets.zero,
+              tooltip: 'Copiar mensagem',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: original));
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Mensagem copiada.'), behavior: SnackBarBehavior.floating),
+                );
+              },
+              icon: const Icon(Icons.copy_rounded, color: Colors.white54, size: 12),
+            ),
             if (isOwn && !widget.isChama) ...[
               const SizedBox(width: 6),
               Icon(

@@ -55,7 +55,22 @@ const FIREBASE_JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"),
 );
 const CLASSIFICATION_MODEL = "@cf/zai-org/glm-4.7-flash";
-const TRANSLATION_MODEL = "@cf/zai-org/glm-4.7-flash";
+const TRANSLATION_MODEL = "@cf/meta/m2m100-1.2b";
+
+const M2M100_LANGUAGES = {
+  pt: "portuguese", en: "english", ja: "japanese", es: "spanish",
+  fr: "french", de: "german", zh: "chinese", ko: "korean",
+  ar: "arabic", ru: "russian", hi: "hindi", id: "indonesian",
+  it: "italian", nl: "dutch", tr: "turkish", th: "thai", vi: "vietnamese",
+} as const;
+
+type SupportedLanguage = keyof typeof M2M100_LANGUAGES;
+
+function normalizeLanguage(value: unknown): SupportedLanguage | null {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toLowerCase().replace("_", "-").split("-")[0] as SupportedLanguage;
+  return Object.prototype.hasOwnProperty.call(M2M100_LANGUAGES, code) ? code : null;
+}
 
 const json = (data: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(data), {
@@ -80,6 +95,9 @@ function modelText(result: unknown): string {
     choices?: Array<{ message?: { content?: unknown }; text?: unknown }>;
   };
   if (typeof value.response === "string") return value.response;
+  if (typeof (value as { translated_text?: unknown }).translated_text === "string") {
+    return (value as { translated_text: string }).translated_text;
+  }
   const choice = value.choices?.[0];
   if (typeof choice?.message?.content === "string") return choice.message.content;
   if (typeof choice?.text === "string") return choice.text;
@@ -126,11 +144,11 @@ async function authenticate(request: Request, env: Env): Promise<string | null> 
 
 async function requireUser(uid: string, env: Env) {
   return env.DB.prepare(
-    "SELECT uid, pilot_code, pilot_name, pilot_handle, avatar_url, birth_year, declared_age_band, age_declaration_at, profile_completed, language, country_code, country_visible, status, accept_random_mail, push_enabled FROM users WHERE uid = ?",
+    "SELECT uid, pilot_code, pilot_name, pilot_handle, avatar_url, birth_year, declared_age_band, age_declaration_at, profile_completed, language, preferred_language, country_code, country_visible, status, accept_random_mail, push_enabled FROM users WHERE uid = ?",
   ).bind(uid).first<{
     uid: string; pilot_code: string; pilot_name: string; pilot_handle: string | null; avatar_url: string | null;
     birth_year: number | null; declared_age_band: string; age_declaration_at: string | null;
-    profile_completed: number; language: string; country_code: string | null;
+    profile_completed: number; language: string; preferred_language: string; country_code: string | null;
     country_visible: number; status: string; accept_random_mail: number; push_enabled: number;
   }>();
 }
@@ -253,7 +271,9 @@ async function createAirplane(
   const message = text(body.message, 200);
   if (!message || [...message].length > 200) return json({ error: "MESSAGE_LENGTH", message: "Message must contain 1 to 200 characters." }, 400);
   const audience = forcedRecipient ? "DIRECT" : body.visibility === "PUBLIC" ? "PUBLIC" : "RANDOM";
-  const language = body.language === "en" ? "en" : "pt";
+  const senderProfile = await requireUser(uid, env);
+  const languageTag = normalizeLanguage(body.language) ?? normalizeLanguage(senderProfile?.preferred_language) ?? "pt";
+  const language = languageTag === "en" ? "en" : "pt";
   const mood = text(body.mood, 32) || null;
   const requestedPlaneModel = text(body.planeModel, 16).toUpperCase() || "DART";
   if (!["DART", "GLIDER", "SWALLOW"].includes(requestedPlaneModel)) return json({ error: "INVALID_PLANE_MODEL" }, 400);
@@ -322,9 +342,9 @@ async function createAirplane(
 
   try {
     await env.DB.prepare(
-      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at, plane_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO airplanes (id, sender_uid, recipient_uid, reply_to_id, audience, message_text, message_language, message_language_tag, mood, destination_country, sender_country_code, allow_reply, status, moderation_state, moderation_categories, content_hash, delivered_at, expires_at, plane_model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(
-      id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, mood, destination,
+      id, uid, forcedRecipient ?? null, replyToId ?? null, audience, message, language, languageTag, mood, destination,
       user.country_visible === 1 ? user.country_code : null, body.allowReply === false ? 0 : 1, status,
       moderationState, JSON.stringify(moderation.categories), contentHash,
       audience === "PUBLIC" && !moderationPending ? createdAt : null,
@@ -559,13 +579,13 @@ async function ensureChamaForReply(
     .bind(conversation.id).run();
 
   const planes = await env.DB.prepare(
-    "SELECT id, sender_uid, message_text, created_at FROM airplanes WHERE id IN (?, ?) AND moderation_state = 'SAFE' AND status IN ('FLYING','DELIVERED','READ','RESPONDED') ORDER BY created_at ASC",
+    "SELECT id, sender_uid, message_text, message_language_tag, created_at FROM airplanes WHERE id IN (?, ?) AND moderation_state = 'SAFE' AND status IN ('FLYING','DELIVERED','READ','RESPONDED') ORDER BY created_at ASC",
   ).bind(originalAirplaneId, replyAirplaneId).all<{
-    id: string; sender_uid: string; message_text: string; created_at: string;
+    id: string; sender_uid: string; message_text: string; message_language_tag: string; created_at: string;
   }>();
   const statements = (planes.results ?? []).map((plane) => env.DB.prepare(
-    "INSERT OR IGNORE INTO chat_messages(id, conversation_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
-  ).bind("plane:" + plane.id, conversation.id, plane.sender_uid, plane.message_text, plane.created_at));
+    "INSERT OR IGNORE INTO chat_messages(id, conversation_id, sender_uid, message_text, message_language_tag, moderation_state, created_at) VALUES (?, ?, ?, ?, ?, 'SAFE', ?)",
+  ).bind("plane:" + plane.id, conversation.id, plane.sender_uid, plane.message_text, plane.message_language_tag, plane.created_at));
   const latestMessageAt = planes.results && planes.results.length
     ? planes.results[planes.results.length - 1].created_at
     : null;
@@ -920,24 +940,52 @@ async function awardQuizAttempt(uid: string, body: Record<string, unknown>, env:
   return json({ ok: true, attempt: { id, category, questionCount, correctCount, xpAwarded, createdAt }, gamification: await loadGamification(uid, env) }, 201);
 }
 
-async function translateMessage(airplaneId: string, targetLanguage: "pt" | "en", message: string, env: Env): Promise<string | null> {
+async function translateMessage(
+  airplaneId: string, sourceLanguage: SupportedLanguage, targetLanguage: SupportedLanguage,
+  message: string, env: Env,
+): Promise<string | null> {
+  if (sourceLanguage === targetLanguage) return message;
   const cached = await env.DB.prepare(
-    "SELECT translated_text FROM translations WHERE airplane_id = ? AND target_language = ?",
+    "SELECT translated_text FROM airplane_translations WHERE airplane_id = ? AND target_language = ?",
   ).bind(airplaneId, targetLanguage).first<{ translated_text: string }>();
   if (cached) return cached.translated_text;
-
   try {
     const result = await env.AI.run(TRANSLATION_MODEL, {
-      messages: [
-        { role: "system", content: `Translate the user's letter into ${targetLanguage === "pt" ? "Portuguese" : "English"}. Return only the translation. Preserve meaning and tone. Do not reply, add details, or identify the sender.` },
-        { role: "user", content: message },
-      ],
-    }) as { response?: string } | string;
+      text: message,
+      source_lang: M2M100_LANGUAGES[sourceLanguage],
+      target_lang: M2M100_LANGUAGES[targetLanguage],
+    });
     const translated = text(modelText(result), 2000);
     if (!translated) return null;
     await env.DB.prepare(
-      "INSERT OR REPLACE INTO translations(airplane_id, target_language, translated_text) VALUES (?, ?, ?)",
+      "INSERT OR REPLACE INTO airplane_translations(airplane_id, target_language, translated_text) VALUES (?, ?, ?)",
     ).bind(airplaneId, targetLanguage, translated).run();
+    return translated;
+  } catch {
+    return null;
+  }
+}
+
+async function translateChatMessage(
+  messageId: string, sourceLanguage: SupportedLanguage, targetLanguage: SupportedLanguage,
+  message: string, env: Env,
+): Promise<string | null> {
+  if (sourceLanguage === targetLanguage) return message;
+  const cached = await env.DB.prepare(
+    "SELECT translated_text FROM chat_translations WHERE message_id = ? AND target_language = ?",
+  ).bind(messageId, targetLanguage).first<{ translated_text: string }>();
+  if (cached) return cached.translated_text;
+  try {
+    const result = await env.AI.run(TRANSLATION_MODEL, {
+      text: message,
+      source_lang: M2M100_LANGUAGES[sourceLanguage],
+      target_lang: M2M100_LANGUAGES[targetLanguage],
+    });
+    const translated = text(modelText(result), 4000);
+    if (!translated) return null;
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO chat_translations(message_id, target_language, translated_text) VALUES (?, ?, ?)",
+    ).bind(messageId, targetLanguage, translated).run();
     return translated;
   } catch {
     return null;
@@ -1399,19 +1447,21 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ).bind(uid).first<{ count: number }>();
     if (Number(recent?.count ?? 0) >= 40) return json({ error: "CHAT_RATE_LIMIT" }, 429);
 
+    const sender = await requireUser(uid, env);
+    const languageTag = normalizeLanguage(body.language) ?? normalizeLanguage(sender?.preferred_language) ?? "pt";
     const id = uuid();
     const createdAt = isoNow();
     await env.DB.batch([
       env.DB.prepare(
-        "INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
-      ).bind(id, conversation.id, uid, message, createdAt),
+        "INSERT INTO chat_messages(id, conversation_id, sender_uid, message_text, message_language_tag, moderation_state, created_at) VALUES (?, ?, ?, ?, ?, 'SAFE', ?)",
+      ).bind(id, conversation.id, uid, message, languageTag, createdAt),
       env.DB.prepare(
         "UPDATE conversations SET last_message_at = ?, hidden_at_a = CASE WHEN user_a = ? THEN NULL ELSE hidden_at_a END, hidden_at_b = CASE WHEN user_b = ? THEN NULL ELSE hidden_at_b END WHERE id = ?",
       ).bind(createdAt, uid, uid, conversation.id),
     ]);
     ctx.waitUntil(notifyChatMessage(otherUid, conversation.id, env));
     return json({
-      message: { id, conversation_id: conversation.id, sender_uid: uid, message_text: message, created_at: createdAt },
+      message: { id, conversation_id: conversation.id, sender_uid: uid, message_text: message, message_language_tag: languageTag, created_at: createdAt },
     }, 201);
   }
 
@@ -1465,12 +1515,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       ).bind(isoNow(), chatMatch[1], uid).run();
     }
     const messages = await env.DB.prepare(
-      "SELECT id, sender_uid, message_text, created_at, read_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 150",
+      "SELECT id, sender_uid, message_text, message_language_tag, created_at, read_at FROM chat_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 150",
     ).bind(chatMatch[1]).all();
     let chama: Record<string, unknown> | null = null;
     if ((conversation as { kind?: string }).kind === "CHAMA") {
       const history = await env.DB.prepare(
-        `SELECT id, sender_uid, recipient_uid, reply_to_id, message_text, status, created_at, delivered_at
+        `SELECT id, sender_uid, recipient_uid, reply_to_id, message_text, message_language_tag, status, created_at, delivered_at
          FROM airplanes
          WHERE ((sender_uid = ? AND recipient_uid = ?) OR (sender_uid = ? AND recipient_uid = ?))
            AND status IN ('FLYING','DELIVERED','READ','RESPONDED')
@@ -1872,7 +1922,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const birthDateText = text(body.birthDate, 10);
     const birthDateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateText);
     const countryCode = text(body.countryCode, 2).toUpperCase();
-    const language = body.language === "en" ? "en" : "pt";
+    const preferredLanguage = normalizeLanguage(body.language) ?? "pt";
+    const language = preferredLanguage === "en" ? "en" : "pt";
     const avatarInput = text(body.avatarUrl, 900);
     const avatarUrl = avatarInput ? safePublicHttpsUrl(avatarInput)?.toString() : null;
     if (avatarInput && !avatarUrl) return json({ error: "INVALID_AVATAR_URL", message: "Use um link HTTPS público para a tua foto ou perfil." }, 400);
@@ -1902,8 +1953,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
     try {
       await env.DB.prepare(
-        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
-      ).bind(pilotName, handle, avatarUrl, birthYear, declaredAgeBand, isoNow(), countryCode, language, isoNow(), uid).run();
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, avatarUrl, birthYear, declaredAgeBand, isoNow(), countryCode, language, preferredLanguage, isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
         return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
@@ -1916,6 +1967,17 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       canSend: !!pilot && ["UNDER_18", "ADULT"].includes(pilot.declared_age_band),
       ageDeclaration: "SELF_DECLARED",
     });
+  }
+
+  if (method === "POST" && path === "/v1/profile/language") {
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    const language = normalizeLanguage(body?.language);
+    if (!language) return json({ error: "INVALID_LANGUAGE" }, 400);
+    const legacyLanguage = language === "en" ? "en" : "pt";
+    await env.DB.prepare(
+      "UPDATE users SET preferred_language = ?, language = ?, updated_at = ? WHERE uid = ?",
+    ).bind(language, legacyLanguage, isoNow(), uid).run();
+    return json({ ok: true, language });
   }
 
   if (method === "POST" && path === "/v1/profile/avatar") {
@@ -1944,7 +2006,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/inbox") {
     const rows = await env.DB.prepare(
-      `SELECT a.id, a.message_text, a.message_language, a.mood, a.status, a.delivered_at,
+      `SELECT a.id, a.message_text, a.message_language, a.message_language_tag, a.mood, a.status, a.delivered_at,
               a.expires_at, a.sender_country_code, a.allow_reply
        FROM inbox i JOIN airplanes a ON a.id = i.airplane_id
        WHERE i.recipient_uid = ? AND a.status IN ('DELIVERED','READ','RESPONDED')
@@ -1969,6 +2031,17 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
           .bind(now, airplaneId, uid),
       ]);
       plane.status = "READ";
+    }
+    const pilot = await requireUser(uid, env);
+    const targetLanguage = normalizeLanguage(pilot?.preferred_language) ?? "pt";
+    const sourceLanguage = normalizeLanguage(plane.message_language_tag) ??
+      normalizeLanguage(plane.message_language) ?? "pt";
+    if (sourceLanguage !== targetLanguage) {
+      const translated = await translateMessage(airplaneId, sourceLanguage, targetLanguage, text(plane.message_text, 200), env);
+      if (translated) {
+        plane.translated_text = translated;
+        plane.translation_language = targetLanguage;
+      }
     }
     return json({ airplane: plane });
   }
@@ -2314,14 +2387,37 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const translationMatch = path.match(/^\/v1\/airplanes\/([^/]+)\/translation$/);
   if (method === "POST" && translationMatch) {
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    const target = body.language === "en" ? "en" : "pt";
+    const pilot = await requireUser(uid, env);
+    if (body.language != null && !normalizeLanguage(body.language)) return json({ error: "INVALID_LANGUAGE" }, 400);
+    const target = normalizeLanguage(body.language) ?? normalizeLanguage(pilot?.preferred_language) ?? "pt";
     const plane = await env.DB.prepare(
-      "SELECT message_text, sender_uid, recipient_uid, audience, moderation_state FROM airplanes WHERE id = ?",
-    ).bind(translationMatch[1]).first<{ message_text: string; sender_uid: string; recipient_uid: string | null; audience: string; moderation_state: string }>();
+      "SELECT message_text, message_language_tag, message_language, sender_uid, recipient_uid, audience, moderation_state FROM airplanes WHERE id = ?",
+    ).bind(translationMatch[1]).first<{ message_text: string; message_language_tag?: string; message_language: string; sender_uid: string; recipient_uid: string | null; audience: string; moderation_state: string }>();
     if (!plane || (plane.sender_uid !== uid && plane.recipient_uid !== uid && plane.audience !== "PUBLIC") || plane.moderation_state !== "SAFE") return json({ error: "NOT_FOUND" }, 404);
-    const translated = await translateMessage(translationMatch[1], target, plane.message_text, env);
+    const source = normalizeLanguage(plane.message_language_tag) ?? normalizeLanguage(plane.message_language) ?? "pt";
+    const translated = await translateMessage(translationMatch[1], source, target, plane.message_text, env);
     if (!translated) return json({ error: "TRANSLATION_UNAVAILABLE" }, 503);
-    return json({ text: translated, language: target });
+    return json({ text: translated, language: target, sourceLanguage: source });
+  }
+
+  const chatTranslationMatch = path.match(/^\/v1\/chats\/([^/]+)\/messages\/([^/]+)\/translation$/);
+  if (method === "POST" && chatTranslationMatch) {
+    const pilot = await requireUser(uid, env);
+    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+    if (body.language != null && !normalizeLanguage(body.language)) return json({ error: "INVALID_LANGUAGE" }, 400);
+    const target = normalizeLanguage(body.language) ?? normalizeLanguage(pilot?.preferred_language) ?? "pt";
+    const conversation = await env.DB.prepare(
+      "SELECT id FROM conversations WHERE id = ? AND (user_a = ? OR user_b = ?) LIMIT 1",
+    ).bind(chatTranslationMatch[1], uid, uid).first();
+    if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    const message = await env.DB.prepare(
+      "SELECT id, message_text, message_language_tag FROM chat_messages WHERE id = ? AND conversation_id = ? LIMIT 1",
+    ).bind(chatTranslationMatch[2], chatTranslationMatch[1]).first<{ id: string; message_text: string; message_language_tag: string }>();
+    if (!message) return json({ error: "NOT_FOUND" }, 404);
+    const source = normalizeLanguage(message.message_language_tag) ?? "pt";
+    const translated = await translateChatMessage(message.id, source, target, message.message_text, env);
+    if (!translated) return json({ error: "TRANSLATION_UNAVAILABLE" }, 503);
+    return json({ text: translated, language: target, sourceLanguage: source });
   }
 
   return json({ error: "NOT_FOUND" }, 404);

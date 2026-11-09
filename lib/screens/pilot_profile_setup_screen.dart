@@ -29,6 +29,21 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
 
   List<Map<String, String>> _countries = [];
   String? _countryCode;
+  String _preferredLanguage = 'pt';
+  static const Map<String, String> _languages = {
+    'pt': 'Português',
+    'en': 'English',
+    'ja': '日本語 · Japonês',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'zh': '中文 · Chinês',
+    'ko': '한국어 · Coreano',
+    'ar': 'العربية · Árabe',
+    'ru': 'Русский · Russo',
+    'hi': 'हिन्दी · Hindi',
+    'id': 'Bahasa Indonesia',
+  };
   bool _loadingCountries = true;
   bool _saving = false;
   bool _checkingHandle = false;
@@ -219,7 +234,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
         pilotHandle: _pilotHandle.text.trim().replaceFirst(RegExp(r'^@'), ''),
         birthDate: _selectedBirthDate!,
         countryCode: _countryCode!,
-        language: 'pt',
+        language: _preferredLanguage,
         avatarUrl: _avatarUrl.text.trim().isEmpty ? null : _avatarUrl.text.trim(),
       );
       if (!mounted) return;
@@ -406,7 +421,32 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                       style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Idioma preferido',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _setupGoldLight),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    value: _preferredLanguage,
+                    isExpanded: true,
+                    dropdownColor: const Color(0xFF142541),
+                    decoration: _decoration('Idioma para receber aviões e traduções', Icons.translate_rounded),
+                    items: _languages.entries.map((entry) => DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                    )).toList(),
+                    onChanged: _saving ? null : (value) {
+                      if (value != null) setState(() => _preferredLanguage = value);
+                    },
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 6, left: 8, right: 8, bottom: 10),
+                    child: Text(
+                      'Os aviões recebidos podem ser apresentados automaticamente neste idioma. A mensagem original continua disponível.',
+                      style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+                    ),
+                  ),
                   if (_loadingCountries)
                     const Center(child: Padding(
                       padding: EdgeInsets.all(16),
