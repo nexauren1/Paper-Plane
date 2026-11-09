@@ -17,9 +17,10 @@ Paper Plane sends the text of a letter to Cloudflare Workers AI for:
 - unsafe-content screening with Llama Guard;
 - a second risk-triage pass for grooming/predatory contact, sexual solicitation, self-harm, threats, personal contact details, off-platform contact requests, coercion, and spam;
 - language, mood, and topic metadata classification;
-- translation when an authenticated participant explicitly requests it.
+- translation of an incoming airplane into the recipient's saved preferred language when the recipient opens the letter;
+- on-demand translation of a private Chat or Chama message when the recipient taps Translate.
 
-The AI is not used to write messages for users, create fake conversations, select a person's identity, or decide that a user is safe. When a result is unsafe, uncertain, or the model is unavailable, content is not automatically published or delivered. It is either rejected or held for review according to the API rule.
+The translation model is Meta M2M100 1.2B (`@cf/meta/m2m100-1.2b`) running through Cloudflare Workers AI. Message text is sent to Cloudflare for inference when an airplane is opened or a chat translation is requested. The original message remains unchanged; translated text is cached in Cloudflare D1 for reuse. A recipient can view the original message. The translation model is not used to write messages for users or impersonate pilots.
 
 The currently selected Cloudflare AI models list zero-data-retention availability in Cloudflare's model catalogue. This does not mean Paper Plane itself stores no messages: letters are stored in D1 to provide the service, and the policy must explain the application's own storage, access, deletion, and expiry rules.
 
@@ -28,8 +29,8 @@ The currently selected Cloudflare AI models list zero-data-retention availabilit
 - Firebase UID: internal account identifier; never displayed as the pilot's public name.
 - Pilot code and fictional pilot name.
 - Self-declared date of birth is used transiently by the Worker; D1 retains only the birth year, derived age group, and declaration timestamp, not the full date.
-- Language and optional country code. Country display is opt-in; no precise GPS location is collected by this schema.
-- Letter body, delivery state, moderation state, timestamps, and optional translation.
+- Preferred language and optional country code. Country display is opt-in; no precise GPS location is collected by this schema.
+- Original letter/chat body, source-language tag, delivery state, timestamps, and cached translations.
 - FCM device token, only after a pilot opts into notifications.
 - Reports, blocks, public likes, and public replies.
 
@@ -37,7 +38,7 @@ Push notifications use generic text and do not include the letter body.
 
 ## Before release, the public privacy policy must state
 
-- that message text is processed by Cloudflare Workers AI for moderation and requested translation;
+- that message text is processed by Cloudflare Workers AI for translation, including automatic incoming-airplane translation and translation requested inside Chat;
 - where the app stores letters, for how long, and how expiration differs before and after opening;
 - how the sender, recipient, moderators, and service providers can access content;
 - how a user can report, block, export, and request deletion of an account and its content;
