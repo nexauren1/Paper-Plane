@@ -8,8 +8,14 @@ class FirebaseRuntime {
 
   static bool _initialized = false;
   static bool get isInitialized => _initialized;
+  static Future<void>? _initialization;
 
-  static Future<void> initialize() async {
+  /// Shares one initialization future so the app shell and launch router never
+  /// race to initialize the default Firebase app twice.
+  static Future<void> initialize() =>
+      _initialization ??= _initializeOnce();
+
+  static Future<void> _initializeOnce() async {
     const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
     const appId = String.fromEnvironment('FIREBASE_APP_ID');
     const senderId = String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
