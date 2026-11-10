@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:paper_plane/services/paper_plane_localization.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => PaperPlaneLocale.setLanguage('pt'));
   tearDown(() => PaperPlaneLocale.setLanguage('pt'));
 
