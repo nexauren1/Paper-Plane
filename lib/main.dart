@@ -79,6 +79,9 @@ class _PaperPlaneAppState extends State<PaperPlaneApp> {
     } catch (error) {
       debugPrint('Paper Plane: notification handlers unavailable at startup: $error');
     }
+
+    // Create the Android channel before requesting the system permission.
+    await PaperPlaneNotifications.requestSystemPermissionAtLaunch();
   }
 
   Future<void> _initializeAnalyticsSafely() async {
@@ -749,7 +752,7 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
     PaperPlaneNotifications.onOpenOpenSky = _openOpenSkyAfterPublish;
     // Existing opt-ins are reconciled with the current FCM token after login.
-    unawaited(PaperPlaneNotifications.syncRegisteredDeviceIfEnabled());
+    unawaited(PaperPlaneNotifications.registerDeviceIfAuthorized());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
@@ -4947,8 +4950,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool notifications = false;
-  bool _loadingNotifications = true;
   String _language = 'pt';
   bool _loadingLanguage = true;
 
@@ -4975,17 +4976,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadNotificationPreference();
+    _loadLanguagePreference();
   }
 
-  Future<void> _loadNotificationPreference() async {
+  Future<void> _loadLanguagePreference() async {
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
-      if (mounted) {
-        setState(() {
-          _loadingNotifications = false;
-          _loadingLanguage = false;
-        });
-      }
+      if (mounted) setState(() => _loadingLanguage = false);
       return;
     }
     try {
@@ -4993,19 +4989,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final pilot = result['pilot'] as Map<String, dynamic>? ?? const {};
       if (mounted) {
         setState(() {
-          notifications = pilot['push_enabled'] == 1 || pilot['push_enabled'] == true;
           _language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
-          _loadingNotifications = false;
           _loadingLanguage = false;
         });
       }
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _loadingNotifications = false;
-          _loadingLanguage = false;
-        });
-      }
+      if (mounted) setState(() => _loadingLanguage = false);
     }
   }
 
@@ -5057,54 +5046,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _setNotifications(bool enabled) async {
-    if (!enabled) {
-      try {
-        final serverUpdated = await PaperPlaneNotifications.disableAndUnregister();
-        if (!mounted) return;
-        setState(() => notifications = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              serverUpdated
-                  ? 'Notificações desativadas neste dispositivo.'
-                  : 'Notificações desativadas localmente. O servidor ainda precisa de sincronizar esta alteração.',
-            ),
-          ),
-        );
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Não foi possível concluir a desativação das notificações.')),
-          );
-        }
-      }
-      return;
-    }
-    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Configura Firebase e Cloudflare antes de ativar notificações.')),
-      );
-      return;
-    }
-    try {
-      await PaperPlaneAuth.requireSignedInPilot();
-      await PaperPlaneNotifications.enableAndRegister();
-      if (mounted) setState(() => notifications = true);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Notificações ativadas neste dispositivo.')),
-        );
-      }
-    } catch (error) {
-      if (mounted) setState(() => notifications = false);
-      if (mounted) {
-        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível ativar notificações.';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ScreenFrame(
@@ -5128,20 +5069,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 10),
         GlassPanel(
-          child: SwitchListTile(
+          child: ListTile(
             contentPadding: EdgeInsets.zero,
-            activeColor: ppGold,
-            title: const Text('Notificações neste dispositivo'),
-            subtitle: Text(
-              _loadingNotifications
-                  ? 'A consultar a preferência da tua conta…'
-                  : notifications
-                      ? 'Recebe avisos de novos aviões no Android e dentro da aplicação.'
-                      : 'Ativa para receber avisos quando um avião chegar.',
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+            leading: const Icon(Icons.notifications_active_outlined, color: ppGoldBright),
+            title: const Text('Notificações'),
+            subtitle: const Text(
+              'A permissão é controlada pelo Android. Podes alterá-la nas definições do dispositivo.',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
-            value: notifications,
-            onChanged: _loadingNotifications ? null : _setNotifications,
           ),
         ),
         const SectionTitle('Conta'),

@@ -23,6 +23,7 @@ class PaperPlaneNotifications {
   static String? _pendingAirplaneId;
   static bool _handlersInitialized = false;
   static bool _localNotificationsInitialized = false;
+  static Future<void>? _permissionRequest;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedSubscription;
   static StreamSubscription<String>? _tokenSubscription;
@@ -206,72 +207,66 @@ class PaperPlaneNotifications {
     return pending;
   }
 
-  /// Call only after the pilot has opted into notifications in Settings.
-  static Future<void> enableAndRegister() async {
-    if (!FirebaseRuntime.isInitialized) {
-      throw const PaperPlaneApiException('FIREBASE_NOT_CONFIGURED', 'Firebase ainda não está configurado.');
+  /// Requests the native operating-system permission when the app starts.
+  /// Android decides whether a dialog can be shown again after a denial.
+  static Future<void> requestSystemPermissionAtLaunch() {
+    return _permissionRequest ??= _requestSystemPermission();
+  }
+
+  static Future<void> _requestSystemPermission() async {
+    if (!FirebaseRuntime.isInitialized) return;
+    try {
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
+    } catch (error) {
+      debugPrint('Paper Plane: Android notification permission request failed: $error');
     }
-
-    final messaging = FirebaseMessaging.instance;
-    final settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-    );
-
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      throw const PaperPlaneApiException('NOTIFICATIONS_DENIED', 'As notificações não foram autorizadas.');
-    }
-
-    final token = await messaging.getToken();
-    if (token == null || token.isEmpty) {
-      throw const PaperPlaneApiException('FCM_TOKEN_UNAVAILABLE', 'Não foi possível registar este dispositivo.');
-    }
-
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    await PaperPlaneApi.instance.registerDevice(token);
-    _watchTokenRefresh(messaging);
   }
 
   static void _watchTokenRefresh(FirebaseMessaging messaging) {
     if (_tokenSubscription != null) return;
     _tokenSubscription = messaging.onTokenRefresh.listen((newToken) {
-      unawaited(
-        PaperPlaneApi.instance.registerDevice(newToken).then<void>(
-          (_) {},
-          onError: (Object error, StackTrace stack) {
-            debugPrint('Paper Plane: could not refresh the registered FCM token: $error');
-          },
-        ),
-      );
+      unawaited(() async {
+        final settings = await messaging.getNotificationSettings();
+        final allowed = settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+        if (allowed) {
+          await PaperPlaneApi.instance.registerDevice(newToken);
+        } else {
+          await PaperPlaneApi.instance.unregisterDevice(newToken);
+        }
+      }().catchError((Object error, StackTrace stack) {
+        debugPrint('Paper Plane: could not synchronize the refreshed FCM token: $error');
+      }));
     });
   }
 
-  /// Repairs the server-side token record when an already-enabled pilot opens
-  /// an updated app. This does not prompt for permission or enable notifications.
-  static Future<void> syncRegisteredDeviceIfEnabled() async {
+  /// Registers the FCM token only when the operating system has granted
+  /// notification permission. The Android system setting is the source of truth.
+  static Future<void> registerDeviceIfAuthorized() async {
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
     try {
-      final profile = await PaperPlaneApi.instance.getProfile();
-      final pilot = profile['pilot'] as Map<String, dynamic>? ?? const {};
-      final enabled = pilot['push_enabled'] == 1 || pilot['push_enabled'] == true;
-      if (!enabled) return;
-
+      await requestSystemPermissionAtLaunch();
       final messaging = FirebaseMessaging.instance;
       final settings = await messaging.getNotificationSettings();
-      if (settings.authorizationStatus != AuthorizationStatus.authorized &&
-          settings.authorizationStatus != AuthorizationStatus.provisional) {
-        return;
-      }
       final token = await messaging.getToken();
       if (token == null || token.isEmpty) return;
+
+      final allowed = settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+      if (!allowed) {
+        await PaperPlaneApi.instance.unregisterDevice(token);
+        return;
+      }
+
       await PaperPlaneApi.instance.registerDevice(token);
       _watchTokenRefresh(messaging);
     } catch (error) {
-      debugPrint('Paper Plane: existing notification registration could not be synchronized: $error');
+      debugPrint('Paper Plane: device notification registration could not be synchronized: $error');
     }
   }
 
