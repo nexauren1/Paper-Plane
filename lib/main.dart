@@ -1355,8 +1355,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                     maxLines: null,
                     expands: true,
                     style: const TextStyle(color: ppInk, fontSize: 18, height: 1.45),
-                    decoration: const InputDecoration(
-                      hintText: 'Escreve algo gentil...',
+                    decoration: InputDecoration(
+                      hintText: PaperPlaneLocale.translate('Escreve algo gentil...'),
                       hintStyle: TextStyle(color: Color(0xFF77736B)),
                       border: InputBorder.none,
                       counterText: '',
@@ -2511,7 +2511,7 @@ class _FlightScreenState extends State<FlightScreen> {
 
     return ScreenFrame(
       title: 'O teu avião está a voar',
-      action: IconButton(onPressed: _refresh, tooltip: 'Atualizar voo', icon: const Icon(Icons.refresh_rounded, color: ppGoldBright)),
+      action: IconButton(onPressed: _refresh, tooltip: PaperPlaneLocale.translate('Atualizar voo'), icon: const Icon(Icons.refresh_rounded, color: ppGoldBright)),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
         children: [
@@ -3698,7 +3698,7 @@ class _LetterScreenState extends State<LetterScreen> {
                 maxLines: 4,
                 minLines: 3,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: 'Escreve uma resposta gentil…', border: InputBorder.none, counterStyle: TextStyle(color: Colors.white54)),
+                decoration: InputDecoration(hintText: PaperPlaneLocale.translate('Escreve uma resposta gentil…'), border: InputBorder.none, counterStyle: TextStyle(color: Colors.white54)),
               ),
             ),
             const SizedBox(height: 12),
@@ -3813,7 +3813,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               maxLength: 200,
               maxLines: 3,
               style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(hintText: 'Escreve uma resposta…'),
+              decoration: InputDecoration(hintText: PaperPlaneLocale.translate('Escreve uma resposta…')),
             ),
             const SizedBox(height: 8),
             FilledButton.icon(
@@ -3969,7 +3969,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                       ])),
                       if (message['is_own'] != 1 && message['is_own'] != true)
                         PopupMenuButton<String>(
-                          tooltip: 'Mais opções',
+                          tooltip: PaperPlaneLocale.translate('Mais opções'),
                           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
                           onSelected: (action) async {
                             final airplaneId = message['id'].toString();
@@ -4120,10 +4120,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   autocorrect: false,
                   onChanged: (_) => updateDialog(() {}),
                   style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     prefixIcon: Icon(Icons.link_rounded, color: ppGoldBright),
-                    labelText: 'Link da foto ou perfil público',
-                    hintText: 'https://…',
+                    labelText: PaperPlaneLocale.translate('Link da foto ou perfil público'),
+                    hintText: PaperPlaneLocale.translate('https://…'),
                     labelStyle: TextStyle(color: Colors.white70),
                     hintStyle: TextStyle(color: Colors.white38),
                     enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
@@ -4382,7 +4382,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
       title: 'Atlas do Céu',
       action: IconButton(
         onPressed: _refresh,
-        tooltip: 'Atualizar atlas',
+        tooltip: PaperPlaneLocale.translate('Atualizar atlas'),
         icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
       ),
       child: RefreshIndicator(
@@ -4609,7 +4609,7 @@ class ChamaScreen extends StatelessWidget {
                     child: TextField(
                       enabled: false,
                       decoration: InputDecoration(
-                        hintText: 'Enviar mensagem em papel...',
+                        hintText: PaperPlaneLocale.translate('Enviar mensagem em papel...'),
                         filled: true,
                         fillColor: Color(0x3310182A),
                         border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.all(Radius.circular(18))),
@@ -4814,7 +4814,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
       title: 'A minha coleção',
       action: IconButton(
         onPressed: _load,
-        tooltip: 'Atualizar coleção',
+        tooltip: PaperPlaneLocale.translate('Atualizar coleção'),
         icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
       ),
       child: RefreshIndicator(
