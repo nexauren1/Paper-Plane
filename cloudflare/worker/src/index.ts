@@ -41,9 +41,13 @@ interface DeliveryJob {
   type: "MODERATE_AIRPLANE" | "MATCH_AIRPLANE" | "DELIVER_AIRPLANE";
   airplaneId: string;
 }
+interface AssetFetcher {
+  fetch(request: Request): Promise<Response>;
+}
 interface Env {
   DB: D1Database;
   AI: AiBinding;
+  ASSETS?: AssetFetcher;
   DELIVERY_QUEUE: QueueBinding<DeliveryJob>;
   FIREBASE_PROJECT_ID: string;
   APP_ORIGINS: string;
@@ -552,26 +556,62 @@ async function exchangeFcmAccessToken(env: Env): Promise<string | null> {
   }
 }
 
+type PushNoticeKind = "NEW_PLANE" | "CHAT_MESSAGE" | "PLANE_DELIVERED";
+
+function pushNoticeCopy(language: string | null | undefined, kind: PushNoticeKind): { title: string; body: string } {
+  const lang = (language ?? "pt").toLowerCase().split("-")[0];
+  const copy: Record<string, Record<PushNoticeKind, { title: string; body: string }>> = {
+    pt: {
+      NEW_PLANE: { title: "Chegou um novo avião", body: "Uma mensagem está à tua espera." },
+      CHAT_MESSAGE: { title: "Nova mensagem no Paper Plane", body: "Tens uma nova mensagem privada." },
+      PLANE_DELIVERED: { title: "O teu avião chegou ao destino", body: "O teu avião foi entregue. Fica atento a uma possível resposta." },
+    },
+    en: {
+      NEW_PLANE: { title: "A new paper plane has arrived", body: "A message is waiting for you." },
+      CHAT_MESSAGE: { title: "New message on Paper Plane", body: "You have a new private message." },
+      PLANE_DELIVERED: { title: "Your plane reached its destination", body: "Your plane was delivered. Keep an eye out for a possible reply." },
+    },
+    es: {
+      NEW_PLANE: { title: "Ha llegado un nuevo avión", body: "Tienes un mensaje esperando." },
+      CHAT_MESSAGE: { title: "Nuevo mensaje en Paper Plane", body: "Tienes un nuevo mensaje privado." },
+      PLANE_DELIVERED: { title: "Tu avión llegó a su destino", body: "Tu avión fue entregado. Estate atento a una posible respuesta." },
+    },
+    fr: {
+      NEW_PLANE: { title: "Un nouvel avion est arrivé", body: "Un message t’attend." },
+      CHAT_MESSAGE: { title: "Nouveau message sur Paper Plane", body: "Tu as reçu un nouveau message privé." },
+      PLANE_DELIVERED: { title: "Ton avion est arrivé à destination", body: "Ton avion a été livré. Reste attentif à une éventuelle réponse." },
+    },
+    de: {
+      NEW_PLANE: { title: "Ein neuer Papierflieger ist angekommen", body: "Eine Nachricht wartet auf dich." },
+      CHAT_MESSAGE: { title: "Neue Nachricht bei Paper Plane", body: "Du hast eine neue private Nachricht." },
+      PLANE_DELIVERED: { title: "Dein Papierflieger hat sein Ziel erreicht", body: "Dein Flugzeug wurde zugestellt. Achte auf eine mögliche Antwort." },
+    },
+  };
+  return (copy[lang] ?? copy.pt)[kind];
+}
+
 async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
   const accessToken = await exchangeFcmAccessToken(env);
   if (!accessToken) return;
-  const devices = await env.DB.prepare("SELECT d.fcm_token FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'").bind(uid).all<{ fcm_token: string }>();
-  const projectId = env.FIREBASE_PROJECT_ID;
+  const devices = await env.DB.prepare(
+    "SELECT d.fcm_token, u.preferred_language FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'",
+  ).bind(uid).all<{ fcm_token: string; preferred_language?: string | null }>();
   for (const device of devices.results ?? []) {
     try {
-      const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+      const copy = pushNoticeCopy(device.preferred_language, "NEW_PLANE");
+      const response = await fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
         method: "POST",
         headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
         body: JSON.stringify({
           message: {
             token: device.fcm_token,
-            notification: { title: "Chegou um novo avião", body: "Uma mensagem está à tua espera." },
+            notification: copy,
             data: { type: "NEW_PLANE", airplaneId },
-            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
+            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates", sound: "default" } },
           },
         }),
       });
-      if (response.status === 404) {
+      if (!response.ok) {
         const failure = await response.json().catch(() => ({})) as {
           error?: { details?: Array<{ errorCode?: string }> };
         };
@@ -587,26 +627,61 @@ async function notifyNewPlane(uid: string, airplaneId: string, env: Env) {
   }
 }
 
+async function notifyPlaneDelivered(uid: string, airplaneId: string, env: Env) {
+  const accessToken = await exchangeFcmAccessToken(env);
+  if (!accessToken) return;
+  const devices = await env.DB.prepare(
+    "SELECT d.fcm_token, u.preferred_language FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'",
+  ).bind(uid).all<{ fcm_token: string; preferred_language?: string | null }>();
+  for (const device of devices.results ?? []) {
+    try {
+      const copy = pushNoticeCopy(device.preferred_language, "PLANE_DELIVERED");
+      const response = await fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          message: {
+            token: device.fcm_token,
+            notification: copy,
+            data: { type: "PLANE_DELIVERED", airplaneId },
+            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates", sound: "default" } },
+          },
+        }),
+      });
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({})) as {
+          error?: { details?: Array<{ errorCode?: string }> };
+        };
+        const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
+        if (errorCode === "UNREGISTERED") {
+          await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?")
+            .bind(uid, device.fcm_token).run();
+        }
+      }
+    } catch {
+      // The flight remains delivered even when an optional push cannot be sent.
+    }
+  }
+}
+
 async function notifyChatMessage(uid: string, conversationId: string, env: Env) {
   const accessToken = await exchangeFcmAccessToken(env);
   if (!accessToken) return;
   const devices = await env.DB.prepare(
-    "SELECT d.fcm_token FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'",
-  ).bind(uid).all<{ fcm_token: string }>();
+    "SELECT d.fcm_token, u.preferred_language FROM devices d JOIN users u ON u.uid = d.uid WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'",
+  ).bind(uid).all<{ fcm_token: string; preferred_language?: string | null }>();
   for (const device of devices.results ?? []) {
     try {
+      const copy = pushNoticeCopy(device.preferred_language, "CHAT_MESSAGE");
       await fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
         method: "POST",
         headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
         body: JSON.stringify({
           message: {
             token: device.fcm_token,
-            notification: {
-              title: "Nova mensagem no Paper Plane",
-              body: "Tens uma nova mensagem privada.",
-            },
+            notification: copy,
             data: { type: "CHAT_MESSAGE", conversationId },
-            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
+            android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates", sound: "default" } },
           },
         }),
       });
@@ -817,6 +892,10 @@ async function deliverAirplane(airplaneId: string, env: Env) {
   await env.DB.prepare(
     "INSERT OR IGNORE INTO inbox(airplane_id, recipient_uid) VALUES (?, ?)",
   ).bind(airplaneId, plane.recipient_uid).run();
+
+  // Notify the sender too, so a pilot who closes the app can still know
+  // that the flight reached its destination.
+  await notifyPlaneDelivered(plane.sender_uid, airplaneId, env);
 
   if (plane.reply_to_id) {
     const conversationId = await ensureChamaForReply(airplaneId, plane.sender_uid, plane.recipient_uid, plane.reply_to_id, env);
@@ -2892,6 +2971,16 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const cors = corsHeaders(request, env);
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+
+    // Serve the public product website from this same Worker while keeping
+    // API and invitation endpoints on their existing handlers.
+    const url = new URL(request.url);
+    const staticPaths = new Set(["/", "/privacy", "/terms", "/about", "/news", "/support", "/faq", "/styles.css", "/site.js", "/favicon.svg"]);
+    if (request.method === "GET" && env.ASSETS && staticPaths.has(url.pathname)) {
+      if (url.pathname !== "/" && !url.pathname.includes(".")) url.pathname += ".html";
+      return env.ASSETS.fetch(new Request(url.toString(), request));
+    }
+
     try {
       const response = await handleApi(request, env, ctx);
       const headers = new Headers(response.headers);
