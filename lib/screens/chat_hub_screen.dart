@@ -30,12 +30,11 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   String _myHandle = '';
   String _myLanguage = 'pt';
   static const Map<String, String> _languageNames = {
-    'pt': 'Português', 'en': 'English', 'ja': '日本語',
-    'es': 'Español', 'fr': 'Français', 'de': 'Deutsch',
-    'zh': '中文', 'ko': '한국어', 'ar': 'العربية',
-    'ru': 'Русский', 'hi': 'हिन्दी', 'id': 'Bahasa Indonesia',
-    'it': 'Italiano', 'nl': 'Nederlands', 'tr': 'Türkçe',
-    'th': 'ไทย', 'vi': 'Tiếng Việt',
+    'pt': 'Português',
+    'en': 'English',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
   };
   final TextEditingController _search = TextEditingController();
   Timer? _poller;
@@ -95,7 +94,8 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         _incoming = incomingById.values.toList();
         _outgoing = _items(responses[2], 'outgoing');
         _myHandle = pilot['pilot_handle']?.toString() ?? '';
-        _myLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
+        final savedLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
+        _myLanguage = PaperPlaneLocale.supportedLanguages.contains(savedLanguage) ? savedLanguage : 'pt';
         _loading = false;
         _error = null;
       });
@@ -242,6 +242,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       await PaperPlaneApi.instance.updateLanguagePreference(selected);
       if (!mounted) return;
       setState(() => _myLanguage = selected);
+      PaperPlaneLocale.setLanguage(selected);
       _notice('Idioma alterado para ${_languageNames[selected]}.');
       await _refresh(silent: true);
     } catch (error) {
