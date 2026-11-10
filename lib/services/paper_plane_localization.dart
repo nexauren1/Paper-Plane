@@ -1308,6 +1308,11 @@ class PaperPlaneLocale {
     "Atingiste o limite diário de pedidos de suporte.": ["You have reached the daily support request limit.","Has alcanzado el límite diario de solicitudes de soporte.","Tu as atteint la limite quotidienne de demandes d’assistance.","Du hast das tägliche Limit für Supportanfragen erreicht."],
     "Atualizar": ["Refresh","Actualizar","Actualiser","Aktualisieren"],
     "Opções da conversa": ["Conversation options","Opciones de la conversación","Options de la conversation","Unterhaltungsoptionen"],
+    "Nova atividade no Paper Plane": ["New activity on Paper Plane","Nueva actividad en Paper Plane","Nouvelle activité sur Paper Plane","Neue Aktivität bei Paper Plane"],
+    "Tens uma atualização na tua caixa de entrada.": ["You have an update in your inbox.","Tienes una actualización en tu bandeja de entrada.","Tu as une mise à jour dans ta boîte de réception.","Du hast eine Aktualisierung in deinem Posteingang."],
+    "Novos aviões, mensagens e avisos importantes.": ["New planes, messages and important alerts.","Nuevos aviones, mensajes y avisos importantes.","Nouveaux avions, messages et alertes importantes.","Neue Papierflieger, Nachrichten und wichtige Hinweise."],
+    "Abrir carta": ["Open letter","Abrir carta","Ouvrir la lettre","Brief öffnen"],
+    "Abrir caixa": ["Open inbox","Abrir bandeja","Ouvrir la boîte de réception","Posteingang öffnen"],
   };
 }
 
