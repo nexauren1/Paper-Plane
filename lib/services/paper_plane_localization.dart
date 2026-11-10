@@ -935,7 +935,6 @@ class PaperPlaneLocale {
     'Pedidos enviados': ['Sent requests', 'Solicitudes enviadas', 'Demandes envoyées', 'Gesendete Anfragen'],
     'Adicionar': ['Add', 'Añadir', 'Ajouter', 'Hinzufügen'],
     'Pendente': ['Pending', 'Pendiente', 'En attente', 'Ausstehend'],
-    'Abrir Chat': ['Open chat', 'Abrir chat', 'Ouvrir le chat', 'Chat öffnen'],
     'Todas': ['All', 'Todas', 'Toutes', 'Alle'],
     'Jogar': ['Play', 'Jugar', 'Jouer', 'Spielen'],
     'Missões': ['Missions', 'Misiones', 'Missions', 'Missionen'],
