@@ -343,3 +343,34 @@ DB.execute(
     "UPDATE conversations SET ended_at = '2026-11-09T12:05:00.000Z' WHERE id = 'chama-1'"
 )
 assert DB.execute("SELECT ended_at FROM conversations WHERE id = 'chama-1'").fetchone()[0] == "2026-11-09T12:05:00.000Z"
+
+
+# Release-hardening tables: Admin notification history and privacy deletion tombstones.
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'admin_notifications'"
+).fetchone() is not None, "Missing admin_notifications history table"
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'deleted_accounts'"
+).fetchone() is not None, "Missing deleted_accounts tombstone table"
+
+DB.execute(
+    """INSERT INTO admin_notifications(
+         id, actor_uid, target_type, recipient_uid, title, body,
+         device_count, sent_count, failed_count
+       ) VALUES ('admin-notice-1', 'pilot-a', 'ALL', NULL, 'Update', 'A test notice', 12, 12, 0)"""
+)
+assert DB.execute(
+    "SELECT target_type, device_count, sent_count FROM admin_notifications WHERE id = 'admin-notice-1'"
+).fetchone() == ("ALL", 12, 12), "Admin announcement history did not persist"
+
+DB.execute("INSERT INTO deleted_accounts(uid_hash) VALUES ('sha256-test-tombstone')")
+assert DB.execute(
+    "SELECT COUNT(*) FROM deleted_accounts WHERE uid_hash = 'sha256-test-tombstone'"
+).fetchone()[0] == 1, "Account deletion tombstone did not persist"
+try:
+    DB.execute("INSERT INTO deleted_accounts(uid_hash) VALUES ('sha256-test-tombstone')")
+    raise AssertionError("Deleted account UID tombstone must be unique")
+except sqlite3.IntegrityError:
+    pass
+
+print("Release hardening checks passed: Admin notification history and unique account-deletion tombstones.")

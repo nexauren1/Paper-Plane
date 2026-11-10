@@ -33,6 +33,8 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     'es': 'Español', 'fr': 'Français', 'de': 'Deutsch',
     'zh': '中文', 'ko': '한국어', 'ar': 'العربية',
     'ru': 'Русский', 'hi': 'हिन्दी', 'id': 'Bahasa Indonesia',
+    'it': 'Italiano', 'nl': 'Nederlands', 'tr': 'Türkçe',
+    'th': 'ไทย', 'vi': 'Tiếng Việt',
   };
   final TextEditingController _search = TextEditingController();
   Timer? _poller;

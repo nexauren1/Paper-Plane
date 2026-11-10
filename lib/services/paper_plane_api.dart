@@ -104,6 +104,9 @@ class PaperPlaneApi {
         'DAILY_LIMIT_REACHED' => 'Já lançaste o teu avião original de hoje.',
         'MESSAGE_NOT_ALLOWED' => 'A mensagem contém conteúdo que não é permitido.',
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
+        'MODERATION_TEMPORARILY_UNAVAILABLE' => 'A verificação de segurança está temporariamente indisponível. A resposta não foi publicada; tenta novamente mais tarde.',
+        'MESSAGE_REQUIRES_REVIEW' => 'Esta mensagem não passou na verificação de segurança. Reformula o texto e tenta novamente.',
+        'REPLY_LIMIT_REACHED' => 'Este avião já atingiu o limite de cinco respostas públicas.',
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
         'PROFILE_SETUP_REQUIRED' => 'Completa primeiro o perfil do piloto.',
@@ -126,6 +129,7 @@ class PaperPlaneApi {
         'INVALID_REPORT_CATEGORY' => 'Escolhe uma categoria de denúncia válida.',
         'REPORT_ALREADY_OPEN' => 'Já existe uma denúncia tua em análise para esta mensagem.',
         'REPORT_RATE_LIMIT' => 'Atingiste o limite diário de denúncias. Tenta novamente mais tarde.',
+        'NOT_FOUND' => 'Este avião público já não está disponível para responder.',
         'INVALID_SUPPORT_CATEGORY' => 'Escolhe uma categoria de suporte válida.',
         'SUPPORT_MESSAGE_TOO_SHORT' => 'Preenche o assunto e descreve o problema com mais detalhes.',
         'SUPPORT_RATE_LIMIT' => 'Atingiste o limite diário de pedidos de suporte.',
@@ -140,6 +144,12 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> bootstrapPilot() =>
       _request('/v1/users/bootstrap', method: 'POST');
+
+  Future<Map<String, dynamic>> deleteAccountData() =>
+      _request('/v1/account', method: 'DELETE');
+
+  Future<Map<String, dynamic>> exportAccountData() =>
+      _request('/v1/account/export');
 
   Future<Map<String, dynamic>> getProfile() => _request('/v1/profile');
 
@@ -298,7 +308,7 @@ class PaperPlaneApi {
         'message': message,
         'language': language,
         'mood': mood,
-        'visibility': visibility == 'Público' ? 'PUBLIC' : 'RANDOM',
+        'visibility': const {'Público', 'Public', 'PUBLIC', 'Open Sky'}.contains(visibility.trim()) ? 'PUBLIC' : 'RANDOM',
         'destinationCountry': destinationCountry,
         'allowReply': allowReply,
         'planeModel': planeModel,

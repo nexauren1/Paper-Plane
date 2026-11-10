@@ -32,14 +32,62 @@ const Color ppPanel = Color(0xCC172844);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await FirebaseRuntime.initialize();
-  await PaperPlaneNotifications.initializeMessageHandlers();
-  await PaperPlaneAnalytics.initialize();
+
+  // Paint the Flutter UI immediately. Firebase and notification plugins must
+  // never hold the native launch screen open while awaiting platform channels.
   runApp(const PaperPlaneApp());
 }
 
-class PaperPlaneApp extends StatelessWidget {
+class PaperPlaneApp extends StatefulWidget {
   const PaperPlaneApp({super.key});
+
+  @override
+  State<PaperPlaneApp> createState() => _PaperPlaneAppState();
+}
+
+class _PaperPlaneAppState extends State<PaperPlaneApp> {
+  bool _firebaseReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlatformServices();
+  }
+
+  Future<void> _initializePlatformServices() async {
+    try {
+      await FirebaseRuntime.initialize().timeout(const Duration(seconds: 15));
+    } catch (error) {
+      debugPrint('Paper Plane: Firebase startup timed out or failed: $error');
+    }
+
+    if (!mounted) return;
+    final ready = FirebaseRuntime.isInitialized;
+    if (ready) setState(() => _firebaseReady = true);
+    if (!ready) return;
+
+    // These are optional enhancements. The app remains usable when notification
+    // permissions, FCM, or Analytics are slow or temporarily unavailable.
+    unawaited(_initializeNotificationsSafely());
+    unawaited(_initializeAnalyticsSafely());
+  }
+
+  Future<void> _initializeNotificationsSafely() async {
+    try {
+      await PaperPlaneNotifications.initializeMessageHandlers()
+          .timeout(const Duration(seconds: 8));
+    } catch (error) {
+      debugPrint('Paper Plane: notification handlers unavailable at startup: $error');
+    }
+  }
+
+  Future<void> _initializeAnalyticsSafely() async {
+    try {
+      await PaperPlaneAnalytics.initialize().timeout(const Duration(seconds: 8));
+    } catch (error) {
+      debugPrint('Paper Plane: Analytics startup skipped: $error');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +96,7 @@ class PaperPlaneApp extends StatelessWidget {
       title: 'Paper Plane',
       debugShowCheckedModeBanner: false,
       navigatorObservers: [
-        if (FirebaseRuntime.isInitialized)
+        if (_firebaseReady)
           FirebaseAnalyticsObserver(
             analytics: FirebaseAnalytics.instance,
             nameExtractor: (settings) => settings.name ?? 'PaperPlaneScreen',
@@ -547,13 +595,27 @@ class _LaunchRouterState extends State<LaunchRouter> {
   }
 
   Future<Widget> _resolveDestination() async {
-    if (!FirebaseRuntime.isInitialized) return const SplashScreen();
     try {
-      final user = await FirebaseAuth.instance.authStateChanges().first;
+      await FirebaseRuntime.initialize().timeout(const Duration(seconds: 15));
+    } catch (error) {
+      debugPrint('Paper Plane: launch initialization did not complete: $error');
+      return const SplashScreen();
+    }
+    if (!FirebaseRuntime.isInitialized) return const SplashScreen();
+
+    try {
+      final user = await FirebaseAuth.instance
+          .authStateChanges()
+          .first
+          .timeout(const Duration(seconds: 8));
       if (user == null || user.isAnonymous) return const SplashScreen();
 
-      await PaperPlaneApi.instance.bootstrapPilot();
-      final profileResult = await PaperPlaneApi.instance.getProfile();
+      await PaperPlaneApi.instance
+          .bootstrapPilot()
+          .timeout(const Duration(seconds: 8));
+      final profileResult = await PaperPlaneApi.instance
+          .getProfile()
+          .timeout(const Duration(seconds: 8));
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
       // A completed profile is enough to enter the app. The first-flight
       // workshop belongs to registration, never to every app reopening.
@@ -677,6 +739,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  final GlobalKey<_OpenSkyPageState> _openSkyKey = GlobalKey<_OpenSkyPageState>();
 
   @override
   void initState() {
@@ -684,6 +747,7 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
     PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
     PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
+    PaperPlaneNotifications.onOpenOpenSky = _openOpenSkyAfterPublish;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
@@ -707,6 +771,14 @@ class _MainShellState extends State<MainShell> {
 
   void _openChatFromNotification() {
     if (mounted) setState(() => _index = 3);
+  }
+
+  void _openOpenSkyAfterPublish() {
+    if (!mounted) return;
+    setState(() => _index = 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openSkyKey.currentState?._refresh();
+    });
   }
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
@@ -741,6 +813,7 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenInbox = null;
     PaperPlaneNotifications.onOpenPlane = null;
     PaperPlaneNotifications.onOpenChat = null;
+    PaperPlaneNotifications.onOpenOpenSky = null;
     super.dispose();
   }
 
@@ -749,7 +822,7 @@ class _MainShellState extends State<MainShell> {
     final pages = [
       HomePage(onWrite: () => ppPush(context, const WritePlaneScreen()), onOpenInbox: () => setState(() => _index = 1)),
       const InboxPage(),
-      const OpenSkyPage(),
+      OpenSkyPage(key: _openSkyKey),
       const ChatHubScreen(),
       const QuizScreen(),
       const ProfilePage(),
@@ -1164,6 +1237,23 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
       final id = airplane['id']?.toString();
       if (id == null || id.isEmpty) {
         throw const PaperPlaneApiException('AIRPLANE_NOT_CREATED', 'O servidor não confirmou a criação do avião.');
+      }
+      final isPublic = const {'Público', 'Public', 'PUBLIC', 'Open Sky'}.contains(_visibility.trim());
+      if (isPublic) {
+        Navigator.of(context).pop();
+        final published = airplane['status']?.toString() == 'DELIVERED' &&
+            airplane['moderation']?.toString() == 'SAFE';
+        if (published) {
+          PaperPlaneNotifications.onOpenOpenSky?.call();
+          PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: Text('Avião publicado no Open Sky.')),
+          );
+        } else {
+          PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: Text('Avião recebido e colocado em revisão de segurança. Só será mostrado no Open Sky depois de aprovado.')),
+          );
+        }
+        return;
       }
       ppPush(context, FlightScreen(airplaneId: id));
     } catch (error) {
@@ -3716,10 +3806,14 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                 final text = controller.text.trim();
                 if (text.isEmpty) return;
                 try {
-                  await PaperPlaneApi.instance.addPublicReply(id, text);
+                  final response = await PaperPlaneApi.instance.addPublicReply(id, text);
                   if (sheetContext.mounted) Navigator.pop(sheetContext);
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Resposta enviada para publicação.')));
+                    final status = response['status']?.toString();
+                    final notice = status == 'PUBLISHED'
+                        ? 'A tua resposta já está publicada no Open Sky.'
+                        : 'A tua resposta foi recebida e aguarda revisão de segurança.';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
                     _refresh();
                   }
                 } catch (error) {
@@ -4201,7 +4295,7 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
             const SectionTitle('Conta e preferências'),
             _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, AccountScreen(onAuthenticated: (_) => Navigator.of(context).pop()))),
-            _ProfileLink(icon: Icons.translate, title: 'Idioma', subtitle: 'Português · English', onTap: () => ppPush(context, const SettingsScreen())),
+            _ProfileLink(icon: Icons.translate, title: 'Idioma preferido', subtitle: 'Tradução de aviões e mensagens', onTap: () => ppPush(context, const SettingsScreen())),
             _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
             _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
           ],
@@ -4853,6 +4947,28 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool notifications = false;
   bool _loadingNotifications = true;
+  String _language = 'pt';
+  bool _loadingLanguage = true;
+
+  static const Map<String, String> _languageNames = {
+    'pt': 'Português',
+    'en': 'English',
+    'ja': '日本語',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
+    'zh': '中文',
+    'ko': '한국어',
+    'ar': 'العربية',
+    'ru': 'Русский',
+    'hi': 'हिन्दी',
+    'id': 'Bahasa Indonesia',
+    'it': 'Italiano',
+    'nl': 'Nederlands',
+    'tr': 'Türkçe',
+    'th': 'ไทย',
+    'vi': 'Tiếng Việt',
+  };
 
   @override
   void initState() {
@@ -4862,7 +4978,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadNotificationPreference() async {
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
-      if (mounted) setState(() => _loadingNotifications = false);
+      if (mounted) {
+        setState(() {
+          _loadingNotifications = false;
+          _loadingLanguage = false;
+        });
+      }
       return;
     }
     try {
@@ -4871,11 +4992,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           notifications = pilot['push_enabled'] == 1 || pilot['push_enabled'] == true;
+          _language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
           _loadingNotifications = false;
+          _loadingLanguage = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingNotifications = false);
+      if (mounted) {
+        setState(() {
+          _loadingNotifications = false;
+          _loadingLanguage = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _changeLanguage() async {
+    if (_loadingLanguage || !FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF142541),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+          children: [
+            const Text('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 6),
+            const Text(
+              'Os aviões recebidos e as traduções das mensagens usam este idioma.',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            const SizedBox(height: 10),
+            for (final entry in _languageNames.entries)
+              ListTile(
+                leading: Icon(
+                  _language == entry.key ? Icons.check_circle_rounded : Icons.language_rounded,
+                  color: _language == entry.key ? ppGoldBright : Colors.white54,
+                ),
+                title: Text(entry.value),
+                onTap: () => Navigator.pop(sheetContext, entry.key),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || selected == _language) return;
+    try {
+      await PaperPlaneApi.instance.updateLanguagePreference(selected);
+      if (!mounted) return;
+      setState(() => _language = selected);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Idioma preferido alterado para ' + (_languageNames[selected] ?? selected) + '.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException
+          ? error.message
+          : 'Não foi possível alterar o idioma preferido.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -4933,6 +5109,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Configurações',
       child: ListView(padding: const EdgeInsets.fromLTRB(18, 0, 18, 24), children: [
         const SectionTitle('Preferências'),
+        GlassPanel(
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.translate_rounded, color: ppGoldBright),
+            title: const Text('Idioma preferido dos aviões'),
+            subtitle: Text(
+              _loadingLanguage
+                  ? 'A consultar o idioma da tua conta…'
+                  : _languageNames[_language] ?? _language,
+              style: const TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+            onTap: _loadingLanguage ? null : _changeLanguage,
+          ),
+        ),
+        const SizedBox(height: 10),
         GlassPanel(
           child: SwitchListTile(
             contentPadding: EdgeInsets.zero,

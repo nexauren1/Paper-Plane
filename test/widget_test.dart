@@ -3,6 +3,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:paper_plane/main.dart';
 
 void main() {
+  testWidgets('settings expose the preferred translation language', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Configurações'), findsOneWidget);
+    expect(find.text('Idioma preferido dos aviões'), findsOneWidget);
+  });
+
   testWidgets('welcome screen routes to the Firebase account gate', (tester) async {
     tester.view.physicalSize = const Size(1080, 2200);
     tester.view.devicePixelRatio = 3;

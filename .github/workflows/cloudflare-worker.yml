@@ -24,6 +24,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: cloudflare/worker/package.json
-      - run: npm install
+      - run: npm install --legacy-peer-deps
       - run: python3 scripts/validate_migrations.py
       - run: npm run typecheck
+      - run: npm run test:integration

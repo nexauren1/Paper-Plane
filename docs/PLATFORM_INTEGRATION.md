@@ -24,7 +24,7 @@ This branch prepares the production architecture without committing private cred
 
 ### Worker API and D1
 - Firebase RS256 ID-token signature, issuer, audience, expiry, and subject are verified on the Worker.
-- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented.
+- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented. The core Flutter screens request live API data; they must still be integration-tested against production resources.
 - Original planes have unlimited daily sending, a rolling hourly anti-spam safeguard, and a 200-character limit.
 - Random planes are matched immediately when an eligible recipient exists, then retried by the queue and scheduled matcher when nobody is available; they are never falsely marked delivered.
 - Matching only considers active users in the same self-declared age group. Blocks apply in both directions; this is cohort separation, not proof of age.
@@ -35,10 +35,13 @@ This branch prepares the production architecture without committing private cred
 - Moderation review endpoints are restricted to Firebase UIDs listed in the Worker secret ADMIN_UIDS.
 
 ### Message safety and AI translation
-- The current Worker moderation function returns SAFE without running a content classifier. Automated content moderation and an operational human-review process are not implemented yet; do not present them as active protections.
-- Reporting, blocking, account actions, same-age-cohort matching, and rolling hourly anti-spam controls are implemented. These controls do not replace content moderation or guarantee that harmful messages will be detected.
-- Workers AI uses `@cf/meta/m2m100-1.2b` for translation only. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; the original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
-- Automated screening, human-review operations, account deletion/export, and tested retention procedures remain pre-release requirements.
+
+- The Worker uses Cloudflare Workers AI model `@cf/meta/llama-guard-3-8b` for first-pass screening of airplanes and public replies. Flagged items are not shown in Open Sky or delivered as normal content; they remain in the Admin human-review queue until an authorized operator approves or rejects them.
+- Private Chat messages are screened before storage; messages that are not classified SAFE are not sent. If the model is unavailable or returns an invalid response, the Worker fails closed rather than publishing unverified content.
+- This classifier can make mistakes and is not a guarantee of safety. It does not replace trained moderators, live response coverage, escalation procedures or effective reporting.
+- Reporting, blocking, same-age-cohort matching and rolling hourly anti-spam controls are also active server-side safeguards; none proves a user's identity or declared age.
+- Workers AI uses `@cf/meta/m2m100-1.2b` for translation. Incoming airplanes are translated when opened if the recipient's preferred language differs from the source. Chat and Chama bubbles can be translated on demand; original text remains available and translated results are cached in D1. Translation failure never blocks sending or delivery.
+- The account screen now provides authenticated JSON data export and a reauthentication-protected account deletion flow. The Worker deletes associated user data and retains only a one-way SHA-256 UID tombstone; the client then requests deletion of the Firebase Authentication identity.
 
 ## Self-declared age groups and child safety
 
@@ -57,7 +60,7 @@ Moderation, reporting, blocking, rate limits, human review, transparent communit
 3. Enable Firebase Cloud Messaging and Google Analytics for the Android app.
 4. The Android app package is com.nexauren.paper_plane. The supplied client configuration is stored at firebase/google-services.json and copied into android/app/google-services.json by the Android build workflow.
 5. The workflow reads the Firebase API key, Android App ID, project number, Project ID, and Web OAuth client ID from that file. It configures the Google Services Gradle plugin and passes the values into the Flutter build. No manual Dart defines are needed for GitHub Actions.
-6. Google sign-in uses the Web OAuth client (oauth_client client_type 3) from the Firebase file. Add the SHA-1 and SHA-256 fingerprints for the certificate used to sign the APK in Firebase Project settings → Your apps → Android app, then download a fresh google-services.json and replace firebase/google-services.json. The current uploaded file has the Web OAuth client, but no Android OAuth client entry yet; Google sign-in can fail until the signing fingerprint is registered.
+6. Google sign-in uses the Web OAuth client (oauth_client client_type 3) together with the Android OAuth client (client_type 1) in firebase/google-services.json. The Android OAuth entry currently contains the permanent upload-key SHA-1 below, and the signed release build validates the same keystore before compilation. A successful build confirms the APK signing setup, but Google sign-in must still be tested on a real Android device with the released APK.
    - Permanent upload-key SHA-1: `F4:5F:3C:66:21:1A:38:23:59:34:DF:C8:07:16:A2:E1:2D:4B:3A:7F`.
    - Permanent upload-key SHA-256: `6E:9B:24:0E:19:3B:53:E1:92:FB:3C:11:D4:06:EC:E4:77:EC:E8:CA:50:15:93:07:21:05:A6:39:74:79:10:6B`.
    - These fingerprints belong to the permanent `paper-plane-upload` keystore used by the release workflow. Do not replace the keystore after publishing this APK package.
@@ -135,10 +138,10 @@ Pages remains the public website. Use a Worker custom domain such as api.yourdom
 
 ## Known work still required before public release
 
-- Add the signing certificate SHA-1 and SHA-256 fingerprints to Firebase and refresh firebase/google-services.json before validating Google sign-in on the signed release APK.
-- Create the D1 database and Queue resources in the correct Cloudflare account.
-- Build the human moderation dashboard/workflow on top of the admin endpoints and define response coverage and escalation procedures.
-- Verify local laws and privacy requirements for every launch country, and publish clear notices for self-declared age information and user safety.
-- Connect live API data to every visual screen; the composer, auth, notification registration, and API clients are prepared, but inbox, Open Sky, profile, collection, and some other visual screens still show illustrative content.
-- Test FCM delivery on a real Android device and configure notification channels.
-- Add integration tests using Firebase Auth and Cloudflare staging resources before production.
+- Register the permanent signing certificate SHA-1/SHA-256 in Firebase, download a fresh `firebase/google-services.json`, and test Google Login using the exact signed APK.
+- Apply D1 migrations `0011_admin_console.sql` and `0012_account_deletion.sql` to staging and production before using the new Admin and privacy endpoints.
+- Verify Cloudflare Queue resources, Workers AI access and the FCM service-account secret. Set the trusted operator UID list in `ADMIN_UIDS`.
+- Confirm that trained human moderators can review every held item, respond to reports, handle escalation and support all launch hours. The Admin APK provides tools; it does not provide staffed coverage.
+- Verify launch-country laws, age-appropriate design, child-safety duties, privacy notices and cross-border data handling. Self-declared age cohorts are not age verification.
+- Test FCM on real Android devices in foreground, background and terminated states, and verify that tapping a notification opens the exact airplane.
+- Run integration tests using Firebase Auth, D1 staging data and Cloudflare Worker staging resources; validate account export/deletion, Open Sky publishing/replies and Admin permissions before production.

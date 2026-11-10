@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "paper-plane-worker-tests",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-07",
+  "vars": {
+    "FIREBASE_PROJECT_ID": "paper-plane-test-project",
+    "ADMIN_UIDS": "test-admin",
+    "APP_ORIGINS": "*"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "paper-plane-test-db",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

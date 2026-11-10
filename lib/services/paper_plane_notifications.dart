@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'firebase_runtime.dart';
 import 'paper_plane_api.dart';
@@ -11,13 +13,16 @@ class PaperPlaneNotifications {
 
   static final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
+  static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   static VoidCallback? onOpenInbox;
   static ValueChanged<String>? onOpenPlane;
   static VoidCallback? onOpenChat;
+  static VoidCallback? onOpenOpenSky;
   static bool _pendingInboxOpen = false;
   static bool _pendingChatOpen = false;
   static String? _pendingAirplaneId;
   static bool _handlersInitialized = false;
+  static bool _localNotificationsInitialized = false;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedSubscription;
   static StreamSubscription<String>? _tokenSubscription;
@@ -28,7 +33,47 @@ class PaperPlaneNotifications {
     if (!FirebaseRuntime.isInitialized || _handlersInitialized) return;
     final messaging = FirebaseMessaging.instance;
 
-    _foregroundSubscription = FirebaseMessaging.onMessage.listen((message) {
+    if (!_localNotificationsInitialized) {
+      await _localNotifications.initialize(
+        settings: const InitializationSettings(
+          android: AndroidInitializationSettings('ic_notification'),
+        ),
+        onDidReceiveNotificationResponse: (response) {
+          final payload = response.payload;
+          if (payload == null || payload.isEmpty) return;
+          try {
+            final data = jsonDecode(payload) as Map<String, dynamic>;
+            _routeLocalPayload(data);
+          } catch (_) {
+            // Ignore old or malformed local notification payloads.
+          }
+        },
+      );
+      const channel = AndroidNotificationChannel(
+        'paper_plane_updates',
+        'Paper Plane',
+        description: 'Novos aviões, mensagens e avisos importantes.',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+      final launchDetails = await _localNotifications.getNotificationAppLaunchDetails();
+      final launchPayload = launchDetails?.notificationResponse?.payload;
+      if (launchDetails?.didNotificationLaunchApp == true &&
+          launchPayload != null && launchPayload.isNotEmpty) {
+        try {
+          _routeLocalPayload(jsonDecode(launchPayload) as Map<String, dynamic>);
+        } catch (_) {
+          // Ignore malformed launch payloads.
+        }
+      }
+      _localNotificationsInitialized = true;
+    }
+
+    _foregroundSubscription = FirebaseMessaging.onMessage.listen((message) async {
       final notification = message.notification;
       final title = notification?.title?.trim().isNotEmpty == true
           ? notification!.title!
@@ -36,19 +81,30 @@ class PaperPlaneNotifications {
       final body = notification?.body?.trim().isNotEmpty == true
           ? notification!.body!
           : 'Tens uma atualização na tua caixa de entrada.';
+
+      await _localNotifications.show(
+        id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'paper_plane_updates',
+            'Paper Plane',
+            channelDescription: 'Novos aviões, mensagens e avisos importantes.',
+            importance: Importance.max,
+            priority: Priority.high,
+            category: AndroidNotificationCategory.message,
+            icon: 'ic_notification',
+          ),
+        ),
+        payload: jsonEncode(Map<String, dynamic>.from(message.data)),
+      );
+
       scaffoldMessengerKey.currentState?.showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 6),
+          duration: const Duration(seconds: 5),
           behavior: SnackBarBehavior.floating,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 3),
-              Text(body),
-            ],
-          ),
+          content: Text('$title  $body'),
           action: SnackBarAction(
             label: message.data['type'] == 'CHAT_MESSAGE'
                 ? 'Abrir Chama'
@@ -68,13 +124,34 @@ class PaperPlaneNotifications {
     _handlersInitialized = true;
   }
 
-  static void _rememberMessage(RemoteMessage message) {
-    final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
-    if (airplaneId.isNotEmpty) {
-      _pendingAirplaneId = airplaneId;
-    } else {
-      _pendingInboxOpen = true;
+  static void _routeLocalPayload(Map<String, dynamic> data) {
+    if (data['type'] == 'CHAT_MESSAGE') {
+      final callback = onOpenChat;
+      if (callback == null) {
+        _pendingChatOpen = true;
+      } else {
+        callback();
+      }
+      return;
     }
+    final airplaneId = data['airplaneId']?.toString().trim() ?? '';
+    if (airplaneId.isNotEmpty) {
+      final callback = onOpenPlane;
+      if (callback == null) {
+        _pendingAirplaneId = airplaneId;
+      } else {
+        callback(airplaneId);
+      }
+      return;
+    }
+    _requestInboxOpen();
+  }
+
+  static void _rememberMessage(RemoteMessage message) {
+    // Notification initialization now runs after runApp. The authenticated
+    // shell may already be mounted when FCM returns the initial message, so
+    // route immediately when callbacks exist and retain it only when they do not.
+    _routeMessage(message);
   }
 
   static void _routeMessage(RemoteMessage message) {
@@ -148,11 +225,15 @@ class PaperPlaneNotifications {
     }
 
     final token = await messaging.getToken();
+    await messaging.subscribeToTopic('paper_plane_all');
     if (token == null || token.isEmpty) {
       throw const PaperPlaneApiException('FCM_TOKEN_UNAVAILABLE', 'Não foi possível registar este dispositivo.');
     }
 
     await PaperPlaneApi.instance.registerDevice(token);
+    await _localNotifications
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
     await _tokenSubscription?.cancel();
     _tokenSubscription = messaging.onTokenRefresh.listen((newToken) {
       unawaited(PaperPlaneApi.instance.registerDevice(newToken));
@@ -166,6 +247,7 @@ class PaperPlaneNotifications {
 
     final messaging = FirebaseMessaging.instance;
     final token = await messaging.getToken();
+    await messaging.unsubscribeFromTopic('paper_plane_all');
     await _tokenSubscription?.cancel();
     _tokenSubscription = null;
 

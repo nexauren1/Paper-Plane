@@ -31,13 +31,16 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Validate D1 migrations
         run: python3 scripts/validate_migrations.py
 
       - name: Typecheck Worker
         run: npm run typecheck
+
+      - name: Test Admin API against isolated local D1
+        run: npm run test:integration
 
       - name: Apply D1 migrations
         if: github.event_name != 'pull_request'

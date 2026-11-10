@@ -115,6 +115,42 @@ class PaperPlaneAuth {
     await FirebaseAuth.instance.sendPasswordResetEmail(email: email.trim());
   }
 
+  /// Reauthenticate before irreversible account deletion.
+  /// The Firebase password or Google credential is never sent to Paper Plane's API.
+  static Future<void> reauthenticateCurrentUser({String? password}) async {
+    _requireFirebase();
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw const PaperPlaneApiException('AUTH_REQUIRED', 'Entra novamente na tua conta.');
+
+    final providers = user.providerData.map((provider) => provider.providerId).toSet();
+    if (providers.contains('password')) {
+      if (password == null || password.isEmpty || user.email == null) {
+        throw const PaperPlaneApiException('PASSWORD_REQUIRED', 'Introduz a palavra-passe atual para confirmar a eliminação.');
+      }
+      final credential = EmailAuthProvider.credential(email: user.email!, password: password);
+      await user.reauthenticateWithCredential(credential);
+      return;
+    }
+
+    if (providers.contains('google.com')) {
+      await _initializeGoogleSignIn();
+      final googleUser = await GoogleSignIn.instance.authenticate();
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw const PaperPlaneApiException('GOOGLE_ID_TOKEN_MISSING', 'O Google não devolveu o token de confirmação.');
+      }
+      await user.reauthenticateWithCredential(
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
+      return;
+    }
+
+    throw const PaperPlaneApiException(
+      'REAUTHENTICATION_UNAVAILABLE',
+      'Este método de autenticação ainda não suporta a confirmação de eliminação.',
+    );
+  }
+
   static Future<void> signOut() async {
     if (!FirebaseRuntime.isInitialized) return;
     await PaperPlaneAnalytics.logLogout();

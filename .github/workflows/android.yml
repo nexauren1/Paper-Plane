@@ -10,6 +10,7 @@ on:
       - main
       - flutter-app-foundation
       - platform-integration
+      - release-hardening-public
   pull_request:
     branches:
       - main
@@ -30,6 +31,217 @@ jobs:
 
       - name: Generate Android project files if missing
         run: flutter create --platforms=android --project-name paper_plane --org com.nexauren .
+
+      - name: Configure Android notification permission and icon
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          if not manifest.exists():
+              raise SystemExit("Android manifest was not generated.")
+          content = manifest.read_text(encoding="utf-8")
+          permission = '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+          if "android.permission.POST_NOTIFICATIONS" not in content:
+              manifest_start = content.find("<manifest")
+              if manifest_start < 0:
+                  raise SystemExit("Android manifest root is missing.")
+              marker = content.find(">", manifest_start)
+              if marker < 0:
+                  raise SystemExit("Invalid Android manifest.")
+              content = content[:marker + 1] + "\n" + permission + content[marker + 1:]
+              manifest.write_text(content, encoding="utf-8")
+
+          icon = Path("android/app/src/main/res/drawable/ic_notification.xml")
+          icon.parent.mkdir(parents=True, exist_ok=True)
+          icon.write_text("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="24dp"
+              android:height="24dp"
+              android:viewportWidth="24"
+              android:viewportHeight="24">
+              <path
+                  android:fillColor="#FFFFFFFF"
+                  android:pathData="M2,21L23,12L2,3L2,10L17,12L2,14Z" />
+          </vector>
+          """, encoding="utf-8")
+          print("Android notification permission and monochrome airplane icon are configured.")
+          PY
+
+      - name: Configure Paper Plane launcher icon and branded native splash
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          res = Path("android/app/src/main/res")
+          drawable = res / "drawable"
+          values = res / "values"
+          drawable.mkdir(parents=True, exist_ok=True)
+          values.mkdir(parents=True, exist_ok=True)
+
+          foreground = """<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#FF55C7E8"
+                  android:strokeColor="#FF55C7E8"
+                  android:strokeWidth="3.5"
+                  android:strokeLineCap="round"
+                  android:fillType="nonZero"
+                  android:pathData="M13,79 C25,91 39,94 52,87" />
+              <path
+                  android:fillColor="#FFFFF8E8"
+                  android:pathData="M18,54 L91,25 L64,86 L48,65 Z" />
+              <path
+                  android:fillColor="#FFFFFFFF"
+                  android:pathData="M18,54 L91,25 L48,65 Z" />
+              <path
+                  android:fillColor="#FFD8E9F5"
+                  android:pathData="M91,25 L64,86 L48,65 Z" />
+              <path
+                  android:fillColor="#FFF0CE7C"
+                  android:pathData="M48,65 L64,86 L56,65 Z" />
+          </vector>
+          """
+          (drawable / "ic_launcher_foreground.xml").write_text(foreground, encoding="utf-8")
+
+          legacy_icon = """<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="48dp"
+              android:height="48dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path android:fillColor="#FF071225" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#FF55C7E8" android:strokeColor="#FF55C7E8"
+                  android:strokeWidth="3.5" android:strokeLineCap="round"
+                  android:pathData="M13,79 C25,91 39,94 52,87" />
+              <path android:fillColor="#FFFFF8E8" android:pathData="M18,54 L91,25 L64,86 L48,65 Z" />
+              <path android:fillColor="#FFFFFFFF" android:pathData="M18,54 L91,25 L48,65 Z" />
+              <path android:fillColor="#FFD8E9F5" android:pathData="M91,25 L64,86 L48,65 Z" />
+              <path android:fillColor="#FFF0CE7C" android:pathData="M48,65 L64,86 L56,65 Z" />
+          </vector>
+          """
+          anydpi = res / "mipmap-anydpi"
+          anydpi.mkdir(parents=True, exist_ok=True)
+          (anydpi / "ic_launcher.xml").write_text(legacy_icon, encoding="utf-8")
+          (anydpi / "ic_launcher_round.xml").write_text(legacy_icon, encoding="utf-8")
+
+          adaptive = res / "mipmap-anydpi-v26"
+          adaptive.mkdir(parents=True, exist_ok=True)
+          adaptive_xml = """<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background" />
+              <foreground android:drawable="@drawable/ic_launcher_foreground" />
+          </adaptive-icon>
+          """
+          (adaptive / "ic_launcher.xml").write_text(adaptive_xml, encoding="utf-8")
+          (adaptive / "ic_launcher_round.xml").write_text(adaptive_xml, encoding="utf-8")
+
+          # Remove Flutter's generated bitmap launcher marks so Android always
+          # resolves the custom Paper Plane vector resource instead.
+          for folder in res.glob("mipmap-*"):
+              if folder.name in {"mipmap-anydpi", "mipmap-anydpi-v26"}:
+                  continue
+              for filename in (
+                  "ic_launcher.png", "ic_launcher.webp",
+                  "ic_launcher_round.png", "ic_launcher_round.webp",
+              ):
+                  candidate = folder / filename
+                  if candidate.exists():
+                      candidate.unlink()
+
+          colors = values / "colors.xml"
+          color_entry = '<color name="ic_launcher_background">#071225</color>'
+          if colors.exists():
+              content = colors.read_text(encoding="utf-8")
+              if 'name="ic_launcher_background"' in content:
+                  content = re.sub(
+                      r'<color name="ic_launcher_background">.*?</color>',
+                      color_entry,
+                      content,
+                      count=1,
+                  )
+              else:
+                  content = content.replace("</resources>", f"    {color_entry}\n</resources>")
+          else:
+              content = '<resources>\n    ' + color_entry + '\n</resources>\n'
+          colors.write_text(content, encoding="utf-8")
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text(encoding="utf-8")
+          text = re.sub(r'android:label="[^"]+"', 'android:label="Paper Plane"', text, count=1)
+          text = re.sub(r'android:icon="[^"]+"', 'android:icon="@mipmap/ic_launcher"', text, count=1)
+          if 'android:roundIcon=' in text:
+              text = re.sub(r'android:roundIcon="[^"]+"', 'android:roundIcon="@mipmap/ic_launcher_round"', text, count=1)
+          else:
+              text = text.replace('android:icon="@mipmap/ic_launcher"',
+                                  'android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round"', 1)
+          manifest.write_text(text, encoding="utf-8")
+
+          launch = drawable / "launch_background.xml"
+          launch.write_text("""<?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="@color/ic_launcher_background" />
+              <item
+                  android:drawable="@drawable/ic_launcher_foreground"
+                  android:width="108dp"
+                  android:height="108dp"
+                  android:gravity="center" />
+          </layer-list>
+          """, encoding="utf-8")
+
+          styles = values / "styles.xml"
+          if styles.exists():
+              style_text = styles.read_text(encoding="utf-8")
+              if "android:windowSplashScreenBackground" not in style_text:
+                  style_text = style_text.replace(
+                      "</style>",
+                      '        <item name="android:windowSplashScreenBackground">#071225</item>\n'
+                      '        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>\n'
+                      '    </style>',
+                      1,
+                  )
+              styles.write_text(style_text, encoding="utf-8")
+          print("Paper Plane launcher/adaptive icon and branded native splash configured.")
+          PY
+
+      - name: Enable core library desugaring for Android notifications
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          candidates = [Path("android/app/build.gradle.kts"), Path("android/app/build.gradle")]
+          gradle = next((path for path in candidates if path.exists()), None)
+          if gradle is None:
+              raise SystemExit("Android app Gradle file was not generated.")
+          content = gradle.read_text(encoding="utf-8")
+          kotlin = gradle.suffix == ".kts"
+
+          if "compileOptions {" not in content:
+              raise SystemExit("Could not find the Android compileOptions block.")
+          if kotlin:
+              setting = "        isCoreLibraryDesugaringEnabled = true"
+              dependency = '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")'
+          else:
+              setting = "        coreLibraryDesugaringEnabled true"
+              dependency = "    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'"
+
+          if "isCoreLibraryDesugaringEnabled = true" not in content and "coreLibraryDesugaringEnabled true" not in content:
+              content = content.replace("    compileOptions {", "    compileOptions {\n" + setting, 1)
+          if "desugar_jdk_libs" not in content:
+              marker = "dependencies {"
+              index = content.find(marker)
+              if index < 0:
+                  content += "\n\ndependencies {\n" + dependency + "\n}\n"
+              else:
+                  insert_at = index + len(marker)
+                  content = content[:insert_at] + "\n" + dependency + content[insert_at:]
+          gradle.write_text(content, encoding="utf-8")
+          print(f"Enabled core library desugaring in {gradle}.")
+          PY
 
       - name: Use direct Gradle distribution host
         shell: bash
@@ -212,3 +424,112 @@ jobs:
           name: paper-plane-android-release
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
+
+  admin-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Admin Android project
+        working-directory: admin_app
+        run: flutter create --platforms=android --project-name paper_plane_admin --org com.nexauren .
+
+      - name: Configure Admin app label
+        working-directory: admin_app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text(encoding="utf-8")
+          text = text.replace('android:label="paper_plane_admin"', 'android:label="Paper Plane Admin"')
+          manifest.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Configure Firebase build values
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          config = json.loads(Path("firebase/google-services.json").read_text(encoding="utf-8"))
+          project = config["project_info"]
+          client = next(
+              item for item in config["client"]
+              if item["client_info"]["android_client_info"]["package_name"] == "com.nexauren.paper_plane"
+          )
+          values = {
+              "FIREBASE_API_KEY": client["api_key"][0]["current_key"],
+              "FIREBASE_APP_ID": client["client_info"]["mobilesdk_app_id"],
+              "FIREBASE_MESSAGING_SENDER_ID": project["project_number"],
+              "FIREBASE_PROJECT_ID": project["project_id"],
+          }
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              for key, value in values.items():
+                  env.write(f"{key}={value}\n")
+          PY
+
+      - name: Install Admin dependencies
+        working-directory: admin_app
+        run: flutter pub get
+
+      - name: Configure permanent Admin APK signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: python3 admin_app/tool/prepare_android_signing.py
+
+      - name: Build signed Admin APK
+        working-directory: admin_app
+        run: |
+          flutter build apk --release \
+            --dart-define=FIREBASE_API_KEY="$FIREBASE_API_KEY" \
+            --dart-define=FIREBASE_APP_ID="$FIREBASE_APP_ID" \
+            --dart-define=FIREBASE_MESSAGING_SENDER_ID="$FIREBASE_MESSAGING_SENDER_ID" \
+            --dart-define=FIREBASE_PROJECT_ID="$FIREBASE_PROJECT_ID" \
+            --dart-define=ADMIN_API_BASE_URL="https://paper-plane.nexaurenstore.workers.dev"
+
+      - name: Upload Admin APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-plane-admin-android-release
+          path: admin_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  worker-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Worker dependencies
+        working-directory: cloudflare/worker
+        run: npm install --legacy-peer-deps
+
+      - name: Type-check Cloudflare Worker
+        working-directory: cloudflare/worker
+        run: npm run typecheck
+
+      - name: Validate D1 migrations
+        working-directory: cloudflare/worker
+        run: npm run db:test
