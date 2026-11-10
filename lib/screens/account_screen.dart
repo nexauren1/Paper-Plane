@@ -263,8 +263,8 @@ class _AccountScreenState extends State<AccountScreen> {
               TextField(
                 controller: passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Palavra-passe atual',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Palavra-passe atual'),
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -607,7 +607,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   InputDecoration _inputDecoration(String label, IconData icon, {Widget? suffix}) {
     return InputDecoration(
-      labelText: label,
+      labelText: PaperPlaneLocale.translate(label),
       prefixIcon: Icon(icon, color: _goldLight),
       suffixIcon: suffix,
       filled: true,
