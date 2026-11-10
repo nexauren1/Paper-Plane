@@ -524,7 +524,7 @@ jobs:
 
       - name: Install Worker dependencies
         working-directory: cloudflare/worker
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Type-check Cloudflare Worker
         working-directory: cloudflare/worker
