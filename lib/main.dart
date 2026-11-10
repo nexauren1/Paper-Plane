@@ -772,14 +772,18 @@ class _MainShellState extends State<MainShell> {
     super.initState();
     PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
     PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
+    PaperPlaneNotifications.onOpenSentPlane = _openSentPlaneFromNotification;
     PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
     PaperPlaneNotifications.onOpenOpenSky = _openOpenSkyAfterPublish;
     // Existing opt-ins are reconciled with the current FCM token after login.
     unawaited(PaperPlaneNotifications.registerDeviceIfAuthorized());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final pendingSentAirplaneId = PaperPlaneNotifications.consumePendingSentPlaneOpen();
       final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
-      if (pendingAirplaneId != null) {
+      if (pendingSentAirplaneId != null) {
+        _openSentPlaneFromNotification(pendingSentAirplaneId);
+      } else if (pendingAirplaneId != null) {
         _openPlaneFromNotification(pendingAirplaneId);
       } else if (PaperPlaneNotifications.consumePendingChatOpen()) {
         _openChatFromNotification();
@@ -807,6 +811,11 @@ class _MainShellState extends State<MainShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openSkyKey.currentState?._refresh();
     });
+  }
+
+  void _openSentPlaneFromNotification(String airplaneId) {
+    if (!mounted || airplaneId.isEmpty) return;
+    ppPush(context, FlightScreen(airplaneId: airplaneId));
   }
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
@@ -840,6 +849,7 @@ class _MainShellState extends State<MainShell> {
   void dispose() {
     PaperPlaneNotifications.onOpenInbox = null;
     PaperPlaneNotifications.onOpenPlane = null;
+    PaperPlaneNotifications.onOpenSentPlane = null;
     PaperPlaneNotifications.onOpenChat = null;
     PaperPlaneNotifications.onOpenOpenSky = null;
     super.dispose();
