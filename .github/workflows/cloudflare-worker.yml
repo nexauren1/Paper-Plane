@@ -27,3 +27,4 @@ jobs:
       - run: npm install
       - run: python3 scripts/validate_migrations.py
       - run: npm run typecheck
+      - run: npm run test:integration
