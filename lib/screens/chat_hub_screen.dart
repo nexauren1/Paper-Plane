@@ -823,10 +823,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   List<Map<String, dynamic>> _messages = [];
   String _myLanguage = 'pt';
   static const Map<String, String> _chatLanguageNames = {
-    'pt': 'Português', 'en': 'English', 'ja': '日本語',
-    'es': 'Español', 'fr': 'Français', 'de': 'Deutsch',
-    'zh': '中文', 'ko': '한국어', 'ar': 'العربية',
-    'ru': 'Русский', 'hi': 'हिन्दी', 'id': 'Bahasa Indonesia',
+    'pt': 'Português',
+    'en': 'English',
+    'es': 'Español',
+    'fr': 'Français',
+    'de': 'Deutsch',
   };
   final Map<String, String> _translatedMessages = {};
   final Set<String> _translatingMessages = {};
@@ -857,8 +858,9 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       final data = await PaperPlaneApi.instance.getProfile();
       final pilot = data['pilot'] as Map<String, dynamic>? ?? const {};
       if (!mounted) return;
+      final savedLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
       setState(() => _myLanguage =
-          pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt');
+          PaperPlaneLocale.supportedLanguages.contains(savedLanguage) ? savedLanguage : 'pt');
     } catch (_) {
       // Keep the conversation usable with Portuguese as the fallback.
     }
