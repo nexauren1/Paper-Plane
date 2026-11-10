@@ -1313,6 +1313,8 @@ class PaperPlaneLocale {
     "Novos aviões, mensagens e avisos importantes.": ["New planes, messages and important alerts.","Nuevos aviones, mensajes y avisos importantes.","Nouveaux avions, messages et alertes importantes.","Neue Papierflieger, Nachrichten und wichtige Hinweise."],
     "Abrir carta": ["Open letter","Abrir carta","Ouvrir la lettre","Brief öffnen"],
     "Abrir caixa": ["Open inbox","Abrir bandeja","Ouvrir la boîte de réception","Posteingang öffnen"],
+    "História": ["History","Historia","Histoire","Geschichte"],
+    "Língua": ["Language","Lengua","Langue","Sprache"],
   };
 }
 
