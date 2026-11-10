@@ -19,6 +19,7 @@ const DB = testEnv.DB;
 let privateKey: CryptoKey;
 let publicJwk: Record<string, unknown>;
 let originalFetch: typeof fetch;
+const sentFcmMessages: Array<Record<string, any>> = [];
 
 async function createToken(uid: string): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
@@ -110,6 +111,8 @@ describe("Paper Plane Admin API integration", () => {
         });
       }
       if (url.startsWith("https://fcm.googleapis.com/v1/projects/")) {
+        const requestBody = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        sentFcmMessages.push(requestBody.message ?? {});
         return new Response(JSON.stringify({ name: "projects/paper-plane-test-project/messages/test-message" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
@@ -126,6 +129,9 @@ describe("Paper Plane Admin API integration", () => {
     await DB.prepare(
       "INSERT INTO devices(id, uid, fcm_token) VALUES (?, ?, ?)",
     ).bind("device-target", "target-test", "test-fcm-token-target").run();
+    await DB.prepare(
+      "INSERT INTO devices(id, uid, fcm_token) VALUES (?, ?, ?)",
+    ).bind("device-admin", ADMIN_UID, "test-fcm-token-admin").run();
     await DB.prepare(
       "INSERT INTO devices(id, uid, fcm_token) VALUES (?, ?, ?)",
     ).bind("device-pilot", "pilot-test", "test-fcm-token-pilot").run();
@@ -270,16 +276,36 @@ describe("Paper Plane Admin API integration", () => {
     expect(targetedPush.data.deviceCount).toBe(1);
     expect(targetedPush.data.sentCount).toBe(1);
     expect(targetedPush.data.failedCount).toBe(0);
+    const targetedMessage = sentFcmMessages[sentFcmMessages.length - 1];
+    expect(targetedMessage.token).toBe("test-fcm-token-pilot");
+    expect(targetedMessage.topic).toBeUndefined();
 
+    const beforeGlobalPush = sentFcmMessages.length;
     const globalPush = await api(ADMIN_UID, "POST", "/v1/admin/notifications", {
       target: "ALL",
       title: "Aviso global de teste",
       body: "Aviso global apenas no ambiente isolado.",
     });
     expect(globalPush.status).toBe(201);
-    expect(globalPush.data.deviceCount).toBe(1);
-    expect(globalPush.data.sentCount).toBe(1);
+    expect(globalPush.data.deviceCount).toBe(2);
+    expect(globalPush.data.sentCount).toBe(2);
     expect(globalPush.data.failedCount).toBe(0);
+    const globalMessages = sentFcmMessages.slice(beforeGlobalPush);
+    expect(globalMessages.map((message) => message.token).sort()).toEqual([
+      "test-fcm-token-admin",
+      "test-fcm-token-pilot",
+    ]);
+    expect(globalMessages.every((message) => message.topic === undefined)).toBe(true);
+    expect(globalMessages.every((message) => message.notification?.title === "Aviso global de teste")).toBe(true);
+
+    const noDevicePush = await api(ADMIN_UID, "POST", "/v1/admin/notifications", {
+      target: "USER",
+      targetUid: "target-test",
+      title: "Aviso sem dispositivo",
+      body: "Este utilizador não tem token registado no teste.",
+    });
+    expect(noDevicePush.status).toBe(409);
+    expect(noDevicePush.data.error).toBe("NO_REGISTERED_DEVICE");
 
     const notificationHistory = await DB.prepare(
       "SELECT target_type, recipient_uid, sent_count, failed_count FROM admin_notifications WHERE id IN (?, ?) ORDER BY target_type",
