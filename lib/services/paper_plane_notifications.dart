@@ -16,11 +16,13 @@ class PaperPlaneNotifications {
   static final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
   static VoidCallback? onOpenInbox;
   static ValueChanged<String>? onOpenPlane;
+  static ValueChanged<String>? onOpenSentPlane;
   static VoidCallback? onOpenChat;
   static VoidCallback? onOpenOpenSky;
   static bool _pendingInboxOpen = false;
   static bool _pendingChatOpen = false;
   static String? _pendingAirplaneId;
+  static String? _pendingSentAirplaneId;
   static bool _handlersInitialized = false;
   static bool _localNotificationsInitialized = false;
   static Future<void>? _permissionRequest;
@@ -108,10 +110,12 @@ class PaperPlaneNotifications {
           content: Text('$title  $body'),
           action: SnackBarAction(
             label: message.data['type'] == 'CHAT_MESSAGE'
-                ? 'Abrir Chama'
-                : message.data['airplaneId']?.toString().isNotEmpty == true
-                    ? 'Abrir carta'
-                    : 'Abrir caixa',
+                ? 'Abrir Chat'
+                : message.data['type'] == 'PLANE_DELIVERED'
+                    ? 'Ver voo'
+                    : message.data['airplaneId']?.toString().isNotEmpty == true
+                        ? 'Abrir carta'
+                        : 'Abrir caixa',
             onPressed: () => _routeMessage(message),
           ),
         ),
@@ -126,6 +130,20 @@ class PaperPlaneNotifications {
   }
 
   static void _routeLocalPayload(Map<String, dynamic> data) {
+    if (data['type'] == 'PLANE_DELIVERED') {
+      final airplaneId = data['airplaneId']?.toString().trim() ?? '';
+      if (airplaneId.isEmpty) {
+        _requestInboxOpen();
+        return;
+      }
+      final callback = onOpenSentPlane;
+      if (callback == null) {
+        _pendingSentAirplaneId = airplaneId;
+      } else {
+        callback(airplaneId);
+      }
+      return;
+    }
     if (data['type'] == 'CHAT_MESSAGE') {
       final callback = onOpenChat;
       if (callback == null) {
@@ -156,6 +174,20 @@ class PaperPlaneNotifications {
   }
 
   static void _routeMessage(RemoteMessage message) {
+    if (message.data['type'] == 'PLANE_DELIVERED') {
+      final airplaneId = message.data['airplaneId']?.toString().trim() ?? '';
+      if (airplaneId.isEmpty) {
+        _requestInboxOpen();
+        return;
+      }
+      final callback = onOpenSentPlane;
+      if (callback == null) {
+        _pendingSentAirplaneId = airplaneId;
+      } else {
+        callback(airplaneId);
+      }
+      return;
+    }
     if (message.data['type'] == 'CHAT_MESSAGE') {
       final callback = onOpenChat;
       if (callback == null) {
@@ -184,10 +216,17 @@ class PaperPlaneNotifications {
     return pending;
   }
 
-  /// Returns a pending airplane ID once the authenticated shell is mounted.
+  /// Returns a pending received airplane ID once the authenticated shell is mounted.
   static String? consumePendingPlaneOpen() {
     final id = _pendingAirplaneId;
     _pendingAirplaneId = null;
+    return id;
+  }
+
+  /// Returns a pending sent-flight ID after a delivery notification is tapped.
+  static String? consumePendingSentPlaneOpen() {
+    final id = _pendingSentAirplaneId;
+    _pendingSentAirplaneId = null;
     return id;
   }
 
