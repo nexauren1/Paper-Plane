@@ -4,6 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-07",
   "observability": { "enabled": true },
+  "assets": {
+    "directory": "../../website",
+    "binding": "ASSETS"
+  },
   "vars": {
     "FIREBASE_PROJECT_ID": "studio-7819491277-fa972",
     "APP_ORIGINS": "https://REPLACE_WITH_YOUR_PAGES_DOMAIN"
