@@ -81,30 +81,43 @@ jobs:
           drawable.mkdir(parents=True, exist_ok=True)
           values.mkdir(parents=True, exist_ok=True)
 
+          background = """<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <corners android:radius="24dp" />
+              <gradient android:type="radial" android:gradientRadius="100%p"
+                  android:centerX="50%" android:centerY="38%"
+                  android:startColor="#FF1A4977" android:centerColor="#FF0B2444"
+                  android:endColor="#FF050D1B" />
+              <stroke android:width="1dp" android:color="#FF397BA5" />
+          </shape>
+          """
+          (drawable / "ic_launcher_background.xml").write_text(background, encoding="utf-8")
+
           foreground = """<vector xmlns:android="http://schemas.android.com/apk/res/android"
               android:width="108dp"
               android:height="108dp"
               android:viewportWidth="108"
               android:viewportHeight="108">
-              <path
-                  android:fillColor="#FF55C7E8"
-                  android:strokeColor="#FF55C7E8"
-                  android:strokeWidth="3.5"
-                  android:strokeLineCap="round"
-                  android:fillType="nonZero"
-                  android:pathData="M13,79 C25,91 39,94 52,87" />
-              <path
-                  android:fillColor="#FFFFF8E8"
-                  android:pathData="M18,54 L91,25 L64,86 L48,65 Z" />
-              <path
-                  android:fillColor="#FFFFFFFF"
-                  android:pathData="M18,54 L91,25 L48,65 Z" />
-              <path
-                  android:fillColor="#FFD8E9F5"
-                  android:pathData="M91,25 L64,86 L48,65 Z" />
-              <path
-                  android:fillColor="#FFF0CE7C"
-                  android:pathData="M48,65 L64,86 L56,65 Z" />
+              <path android:fillColor="#00000000" android:strokeColor="#6655C7E8"
+                  android:strokeWidth="2.2"
+                  android:pathData="M13,56 C16,24 48,9 77,20 C101,30 105,61 87,79" />
+              <path android:fillColor="#00000000" android:strokeColor="#77F0CE7C"
+                  android:strokeWidth="1.5"
+                  android:pathData="M20,83 C38,99 68,98 86,80" />
+              <path android:fillColor="#FFFFE7A8" android:pathData="M22,20a2.5,2.5 0,1 0,5 0a2.5,2.5 0,1 0,-5 0" />
+              <path android:fillColor="#FF8EDFFF" android:pathData="M81,17a2,2 0,1 0,4 0a2,2 0,1 0,-4 0" />
+              <path android:fillColor="#FFFFE7A8" android:pathData="M91,63a1.8,1.8 0,1 0,3.6 0a1.8,1.8 0,1 0,-3.6 0" />
+              <path android:fillColor="#FF55C7E8" android:pathData="M13,75a1.6,1.6 0,1 0,3.2 0a1.6,1.6 0,1 0,-3.2 0" />
+              <path android:fillColor="#FFFFFFFF" android:strokeColor="#FFB8F1FF"
+                  android:strokeWidth="1.8" android:strokeLineJoin="round"
+                  android:pathData="M19,53 L88,28 L65,84 L48,65 L29,73 Z" />
+              <path android:fillColor="#FFEAFBFF"
+                  android:pathData="M19,53 L88,28 L48,65 Z" />
+              <path android:fillColor="#FF9AD9F2"
+                  android:pathData="M88,28 L65,84 L48,65 Z" />
+              <path android:fillColor="#FFFFD985"
+                  android:pathData="M48,65 L65,84 L55,66 Z" />
+              <path android:fillColor="#00000000" android:strokeColor="#FF557D9D"
+                  android:strokeWidth="1.1" android:pathData="M29,73 L48,65 L88,28" />
           </vector>
           """
           (drawable / "ic_launcher_foreground.xml").write_text(foreground, encoding="utf-8")
@@ -115,13 +128,18 @@ jobs:
               android:viewportWidth="108"
               android:viewportHeight="108">
               <path android:fillColor="#FF071225" android:pathData="M0,0h108v108h-108z" />
-              <path android:fillColor="#FF55C7E8" android:strokeColor="#FF55C7E8"
-                  android:strokeWidth="3.5" android:strokeLineCap="round"
-                  android:pathData="M13,79 C25,91 39,94 52,87" />
-              <path android:fillColor="#FFFFF8E8" android:pathData="M18,54 L91,25 L64,86 L48,65 Z" />
-              <path android:fillColor="#FFFFFFFF" android:pathData="M18,54 L91,25 L48,65 Z" />
-              <path android:fillColor="#FFD8E9F5" android:pathData="M91,25 L64,86 L48,65 Z" />
-              <path android:fillColor="#FFF0CE7C" android:pathData="M48,65 L64,86 L56,65 Z" />
+              <path android:fillColor="#FF12365B" android:pathData="M0,0h108v108h-108z" />
+              <path android:fillColor="#00000000" android:strokeColor="#6655C7E8"
+                  android:strokeWidth="2.2" android:pathData="M13,56 C16,24 48,9 77,20 C101,30 105,61 87,79" />
+              <path android:fillColor="#00000000" android:strokeColor="#77F0CE7C"
+                  android:strokeWidth="1.5" android:pathData="M20,83 C38,99 68,98 86,80" />
+              <path android:fillColor="#FFFFE7A8" android:pathData="M22,20a2.5,2.5 0,1 0,5 0a2.5,2.5 0,1 0,-5 0" />
+              <path android:fillColor="#FFFFFFFF" android:strokeColor="#FFB8F1FF"
+                  android:strokeWidth="1.8" android:strokeLineJoin="round"
+                  android:pathData="M19,53 L88,28 L65,84 L48,65 L29,73 Z" />
+              <path android:fillColor="#FFEAFBFF" android:pathData="M19,53 L88,28 L48,65 Z" />
+              <path android:fillColor="#FF9AD9F2" android:pathData="M88,28 L65,84 L48,65 Z" />
+              <path android:fillColor="#FFFFD985" android:pathData="M48,65 L65,84 L55,66 Z" />
           </vector>
           """
           anydpi = res / "mipmap-anydpi"
@@ -132,7 +150,7 @@ jobs:
           adaptive = res / "mipmap-anydpi-v26"
           adaptive.mkdir(parents=True, exist_ok=True)
           adaptive_xml = """<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@color/ic_launcher_background" />
+              <background android:drawable="@drawable/ic_launcher_background" />
               <foreground android:drawable="@drawable/ic_launcher_foreground" />
           </adaptive-icon>
           """
@@ -183,7 +201,7 @@ jobs:
           launch = drawable / "launch_background.xml"
           launch.write_text("""<?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-              <item android:drawable="@color/ic_launcher_background" />
+              <item android:drawable="@drawable/ic_launcher_background" />
               <item
                   android:drawable="@drawable/ic_launcher_foreground"
                   android:width="108dp"
