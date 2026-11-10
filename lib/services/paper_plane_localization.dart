@@ -228,6 +228,8 @@ class PaperPlaneLocale {
   }
 
   static const Map<String, List<String>> _translations = {
+    'Abrir Chat': ['Open Chat', 'Abrir Chat', 'Ouvrir le Chat', 'Chat öffnen'],
+    'Ver voo': ['View flight', 'Ver vuelo', 'Voir le vol', 'Flug ansehen'],
     'Início': ['Home', 'Inicio', 'Accueil', 'Startseite'],
     'Começar a voar': [
       'Start Flying',
