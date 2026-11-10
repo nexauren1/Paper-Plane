@@ -66,9 +66,6 @@ class _PaperPlaneAppState extends State<PaperPlaneApp> {
     if (ready) setState(() => _firebaseReady = true);
     if (!ready) return;
 
-    // Ask Android directly; no Paper Plane permission dialog is shown.
-    unawaited(PaperPlaneNotifications.requestSystemPermissionAtLaunch());
-
     // These are optional enhancements. The app remains usable when notification
     // permissions, FCM, or Analytics are slow or temporarily unavailable.
     unawaited(_initializeNotificationsSafely());
@@ -82,6 +79,9 @@ class _PaperPlaneAppState extends State<PaperPlaneApp> {
     } catch (error) {
       debugPrint('Paper Plane: notification handlers unavailable at startup: $error');
     }
+
+    // Create the Android channel before requesting the system permission.
+    await PaperPlaneNotifications.requestSystemPermissionAtLaunch();
   }
 
   Future<void> _initializeAnalyticsSafely() async {
