@@ -163,8 +163,8 @@ class _SupportScreenState extends State<SupportScreen> {
                 value: _category,
                 isExpanded: true,
                 dropdownColor: _panel,
-                decoration: const InputDecoration(
-                  labelText: 'Categoria',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Categoria'),
                   filled: true,
                   fillColor: _panel,
                   border: OutlineInputBorder(),
@@ -180,8 +180,8 @@ class _SupportScreenState extends State<SupportScreen> {
                 enabled: !_sending,
                 maxLength: 100,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Assunto',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Assunto'),
                   filled: true,
                   fillColor: _panel,
                   border: OutlineInputBorder(),
@@ -195,9 +195,9 @@ class _SupportScreenState extends State<SupportScreen> {
                 maxLines: 7,
                 maxLength: 1200,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Descreve o problema',
-                  hintText: 'O que aconteceu? Em que ecrã? O que esperavas que acontecesse?',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Descreve o problema'),
+                  hintText: PaperPlaneLocale.translate('O que aconteceu? Em que ecrã? O que esperavas que acontecesse?'),
                   filled: true,
                   fillColor: _panel,
                   border: OutlineInputBorder(),
