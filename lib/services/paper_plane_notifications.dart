@@ -56,7 +56,7 @@ class PaperPlaneNotifications {
       final channel = AndroidNotificationChannel(
         'paper_plane_updates',
         'Paper Plane',
-        description: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes'),
+        description: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes.'),
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
@@ -94,7 +94,7 @@ class PaperPlaneNotifications {
           android: AndroidNotificationDetails(
             'paper_plane_updates',
             'Paper Plane',
-            channelDescription: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes'),
+            channelDescription: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes.'),
             importance: Importance.max,
             priority: Priority.high,
             category: AndroidNotificationCategory.message,
