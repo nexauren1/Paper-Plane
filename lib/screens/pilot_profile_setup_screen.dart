@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
+import '../services/paper_plane_localization.dart';
 import '../widgets/pilot_avatar.dart';
 
 const Color _setupNavy = Color(0xFF071225);
@@ -29,20 +31,13 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
 
   List<Map<String, String>> _countries = [];
   String? _countryCode;
-  String _preferredLanguage = 'pt';
+  String _preferredLanguage = PaperPlaneLocale.current.value.languageCode;
   static const Map<String, String> _languages = {
     'pt': 'Português',
     'en': 'English',
-    'ja': '日本語 · Japonês',
     'es': 'Español',
     'fr': 'Français',
     'de': 'Deutsch',
-    'zh': '中文 · Chinês',
-    'ko': '한국어 · Coreano',
-    'ar': 'العربية · Árabe',
-    'ru': 'Русский · Russo',
-    'hi': 'हिन्दी · Hindi',
-    'id': 'Bahasa Indonesia',
   };
   bool _loadingCountries = true;
   bool _saving = false;
@@ -222,7 +217,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
     }
     if (_handleAvailable != true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Escolhe um nome de copiloto disponível.')),
+        const SnackBar(content: PlaneText('Escolhe um nome de copiloto disponível.')),
       );
       return;
     }
@@ -250,7 +245,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
           _handleMessage = 'Esse nome já foi escolhido por outro piloto.';
         });
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -285,7 +280,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
         appBar: AppBar(
           backgroundColor: _setupNavy,
           foregroundColor: _setupGoldLight,
-          title: const Text('Criar perfil de copiloto'),
+          title: const PlaneText('Criar perfil de copiloto'),
           automaticallyImplyLeading: !_saving,
         ),
         body: DecoratedBox(
@@ -314,9 +309,9 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                       children: [
                         Icon(Icons.flight_takeoff_rounded, color: _setupGoldLight, size: 34),
                         SizedBox(height: 10),
-                        Text('Escolhe a tua identidade', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+                        PlaneText('Escolhe a tua identidade', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
                         SizedBox(height: 6),
-                        Text(
+                        PlaneText(
                           'O teu nome de copiloto será único e aparecerá com @. A tua data de nascimento é declarada por ti. O servidor calcula a faixa etária, mas não verifica a tua identidade.',
                           style: TextStyle(color: Colors.white70, height: 1.45),
                         ),
@@ -342,7 +337,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   const SizedBox(height: 5),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
+                    child: PlaneText(
                       'Cria o teu próprio @nome. Não precisas de números aleatórios no fim.',
                       style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.35),
                     ),
@@ -354,7 +349,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                         const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: _setupGold)),
                       if (_checkingHandle) const SizedBox(width: 9),
                       Expanded(
-                        child: Text(
+                        child: PlaneText(
                           _handleMessage ?? 'Vamos verificar se o teu nome está livre.',
                           style: TextStyle(
                             fontSize: 12,
@@ -369,7 +364,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text('Foto de perfil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _setupGoldLight)),
+                  const PlaneText('Foto de perfil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _setupGoldLight)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -389,7 +384,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   const SizedBox(height: 5),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
+                    child: PlaneText(
                       'Cola um link HTTPS de uma imagem ou de um perfil público. Tentaremos encontrar a foto automaticamente. Não precisas de carregar ficheiros.',
                       style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
                     ),
@@ -416,13 +411,13 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   const SizedBox(height: 7),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
+                    child: PlaneText(
                       'Usamos a data para calcular a faixa etária. O dia e o mês não ficam guardados; o servidor conserva apenas o ano e a faixa declarada.',
                       style: TextStyle(color: Colors.white54, fontSize: 12, height: 1.4),
                     ),
                   ),
                   const SizedBox(height: 18),
-                  const Text(
+                  const PlaneText(
                     'Idioma preferido',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _setupGoldLight),
                   ),
@@ -434,7 +429,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                     decoration: _decoration('Idioma para receber aviões e traduções', Icons.translate_rounded),
                     items: _languages.entries.map((entry) => DropdownMenuItem(
                       value: entry.key,
-                      child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                      child: PlaneText(entry.value, overflow: TextOverflow.ellipsis),
                     )).toList(),
                     onChanged: _saving ? null : (value) {
                       if (value != null) setState(() => _preferredLanguage = value);
@@ -442,7 +437,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   ),
                   const Padding(
                     padding: EdgeInsets.only(top: 6, left: 8, right: 8, bottom: 10),
-                    child: Text(
+                    child: PlaneText(
                       'Os aviões recebidos podem ser apresentados automaticamente neste idioma. A mensagem original continua disponível.',
                       style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
                     ),
@@ -453,7 +448,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                       child: CircularProgressIndicator(color: _setupGold),
                     ))
                   else if (_countries.isEmpty)
-                    Text(_countryError ?? 'A lista de países não está disponível.', style: const TextStyle(color: Colors.redAccent))
+                    PlaneText(_countryError ?? 'A lista de países não está disponível.', style: const TextStyle(color: Colors.redAccent))
                   else
                     DropdownButtonFormField<String>(
                       value: _countryCode,
@@ -462,7 +457,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                       decoration: _decoration('País', Icons.public_rounded),
                       items: _countries.map((country) => DropdownMenuItem(
                         value: country['code'],
-                        child: Text(country['name']!, overflow: TextOverflow.ellipsis),
+                        child: PlaneText(country['name']!, overflow: TextOverflow.ellipsis),
                       )).toList(),
                       onChanged: _saving ? null : (value) => setState(() {
                         _countryCode = value;
@@ -472,7 +467,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   if (_countryError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 5, left: 12),
-                      child: Text(_countryError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                      child: PlaneText(_countryError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                     ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -484,7 +479,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                       icon: _saving
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _setupNavy))
                           : const Icon(Icons.check_circle_outline_rounded),
-                      label: Text(_saving ? 'A guardar perfil…' : 'Guardar perfil'),
+                      label: PlaneText(_saving ? 'A guardar perfil…' : 'Guardar perfil'),
                       style: FilledButton.styleFrom(
                         backgroundColor: _setupGold,
                         foregroundColor: _setupNavy,
