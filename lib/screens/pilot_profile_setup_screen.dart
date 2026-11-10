@@ -253,8 +253,8 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
 
   InputDecoration _decoration(String label, IconData icon, {String? hint}) {
     return InputDecoration(
-      labelText: label,
-      hintText: hint,
+      labelText: PaperPlaneLocale.translate(label),
+      hintText: hint == null ? null : PaperPlaneLocale.translate(hint),
       prefixIcon: Icon(icon, color: _setupGoldLight),
       filled: true,
       fillColor: const Color(0xFF0C1A30),
