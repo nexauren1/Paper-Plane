@@ -60,7 +60,7 @@ class PaperPlaneLocale {
     if (categoryCount != null) {
       final category = translate(categoryCount.group(1)!, code);
       if (category != categoryCount.group(1)) {
-        return '$category · \${categoryCount.group(2)}';
+        return '$category · ${categoryCount.group(2)}';
       }
     }
 
@@ -68,14 +68,14 @@ class PaperPlaneLocale {
     if (streak != null) {
       final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
       const labels = ['in a row', 'seguidas', 'd’affilée', 'in Folge'];
-      if (index != null) return '\${streak.group(1)} \${labels[index]}';
+      if (index != null) return '${streak.group(1)} ${labels[index]}';
     }
 
     final claimed = RegExp(r'^([0-9]+)/([0-9]+) resgatadas$').firstMatch(source);
     if (claimed != null) {
       final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
       const labels = ['claimed', 'reclamadas', 'récupérées', 'eingelöst'];
-      if (index != null) return '\${claimed.group(1)}/\${claimed.group(2)} \${labels[index]}';
+      if (index != null) return '${claimed.group(1)}/${claimed.group(2)} ${labels[index]}';
     }
 
     final availableQuestions = RegExp(r'^([0-9]+) perguntas disponíveis nesta categoria$').firstMatch(source);
@@ -87,10 +87,10 @@ class PaperPlaneLocale {
         'questions disponibles dans cette catégorie',
         'Fragen in dieser Kategorie verfügbar',
       ];
-      if (index != null) return '\${availableQuestions.group(1)} \${labels[index]}';
+      if (index != null) return '${availableQuestions.group(1)} ${labels[index]}';
     }
 
-    final offlineQuestionCount = RegExp(r'^([0-9]+) perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas\\.$').firstMatch(source);
+    final offlineQuestionCount = RegExp(r'^([0-9]+) perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas\.$').firstMatch(source);
     if (offlineQuestionCount != null) {
       final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
       const labels = [
@@ -99,10 +99,10 @@ class PaperPlaneLocale {
         'questions hors ligne, huit domaines de connaissance et de nouvelles manches aléatoires de dix questions.',
         'Offline-Fragen, acht Wissensbereiche und neue zufällige Runden mit zehn Fragen.',
       ];
-      if (index != null) return '\${offlineQuestionCount.group(1)} \${labels[index]}';
+      if (index != null) return '${offlineQuestionCount.group(1)} ${labels[index]}';
     }
 
-    final numeric = RegExp(r'^([0-9]+) (XP acumulados|destinatário\\(s\\) elegível\\(is\\) neste momento|aviões nesta Chama)$').firstMatch(source);
+    final numeric = RegExp(r'^([0-9]+) (XP acumulados|destinatário\(s\) elegível\(is\) neste momento|aviões nesta Chama)$').firstMatch(source);
     if (numeric != null) {
       final count = numeric.group(1)!;
       final phrase = numeric.group(2);
@@ -947,6 +947,133 @@ class PaperPlaneLocale {
     'Roménia': ['Romania', 'Rumanía', 'Roumanie', 'Rumänien'],
     'Bulgária': ['Bulgaria', 'Bulgaria', 'Bulgarie', 'Bulgarien'],
     'Ucrânia': ['Ukraine', 'Ucrania', 'Ukraine', 'Ukraine'],
+
+    'O servidor vai parar a procura ou o voo antes da entrega.': [
+      'The server will stop the search or flight before delivery.',
+      'El servidor detendrá la búsqueda o el vuelo antes de la entrega.',
+      'Le serveur arrêtera la recherche ou le vol avant la livraison.',
+      'Der Server stoppt die Suche oder den Flug vor der Zustellung.',
+    ],
+    'Continuar voo': ['Continue flight', 'Continuar vuelo', 'Continuer le vol', 'Flug fortsetzen'],
+    'O avião deixa de aparecer no teu histórico. A cópia já entregue à outra pessoa mantém-se.': [
+      'The plane will disappear from your history. A copy already delivered to the other person will remain.',
+      'El avión dejará de aparecer en tu historial. La copia ya entregada a la otra persona se conservará.',
+      'L’avion disparaîtra de ton historique. La copie déjà remise à l’autre personne sera conservée.',
+      'Der Papierflieger verschwindet aus deinem Verlauf. Eine bereits zugestellte Kopie bleibt erhalten.',
+    ],
+    'Eliminar da minha Caixa': ['Remove from my inbox', 'Eliminar de mi bandeja', 'Retirer de ma boîte de réception', 'Aus meinem Posteingang entfernen'],
+    'Remetente bloqueado.': ['Sender blocked.', 'Remitente bloqueado.', 'Expéditeur bloqué.', 'Absender blockiert.'],
+    'Bloquear remetente': ['Block sender', 'Bloquear remitente', 'Bloquer l’expéditeur', 'Absender blockieren'],
+    'A tua foto de perfil': ['Your profile photo', 'Tu foto de perfil', 'Ta photo de profil', 'Dein Profilbild'],
+    'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.': [
+      'You can use an image link or a public page. Paper Plane will try to find the photo automatically.',
+      'Puedes usar un enlace a una imagen o a una página pública. Paper Plane intentará encontrar la foto automáticamente.',
+      'Tu peux utiliser un lien vers une image ou une page publique. Paper Plane essaiera de trouver la photo automatiquement.',
+      'Du kannst einen Bildlink oder eine öffentliche Seite verwenden. Paper Plane versucht, das Foto automatisch zu finden.',
+    ],
+    'Partilha o teu link para que outros copilotos possam encontrar-te e começar a trocar aviões.': [
+      'Share your link so other co-pilots can find you and start exchanging planes.',
+      'Comparte tu enlace para que otros copilotos puedan encontrarte y empezar a intercambiar aviones.',
+      'Partage ton lien pour que d’autres copilotes puissent te trouver et commencer à échanger des avions.',
+      'Teile deinen Link, damit andere Co-Piloten dich finden und Papierflieger austauschen können.',
+    ],
+    'O teu link de convite pessoal': ['Your personal invitation link', 'Tu enlace de invitación personal', 'Ton lien d’invitation personnel', 'Dein persönlicher Einladungslink'],
+    'Os dados do perfil e os totais são obtidos no servidor Paper Plane.': [
+      'Profile data and totals are retrieved from the Paper Plane server.',
+      'Los datos del perfil y los totales se obtienen del servidor de Paper Plane.',
+      'Les données du profil et les totaux proviennent du serveur Paper Plane.',
+      'Profildaten und Gesamtwerte werden vom Paper-Plane-Server abgerufen.',
+    ],
+    'Piloto associado': ['Linked pilot', 'Piloto asociado', 'Pilote associé', 'Verbundener Pilot'],
+    'Ligação privada de demonstração': ['Private demo link', 'Enlace privado de demostración', 'Lien privé de démonstration', 'Privater Demo-Link'],
+    'Uma chama precisa de respeito, cuidado e consentimento dos dois pilotos.': [
+      'A Chama requires respect, care and consent from both pilots.',
+      'Una Chama necesita respeto, cuidado y consentimiento de ambos pilotos.',
+      'Une Chama exige du respect, de l’attention et le consentement des deux pilotes.',
+      'Eine Chama braucht Respekt, Sorgfalt und die Zustimmung beider Piloten.',
+    ],
+    'A conversa só continua com a escolha livre dos dois.': [
+      'The conversation continues only if both people freely choose to continue.',
+      'La conversación continúa solo si ambas personas eligen libremente continuar.',
+      'La conversation ne continue que si les deux personnes le choisissent librement.',
+      'Das Gespräch wird nur fortgesetzt, wenn beide Personen freiwillig zustimmen.',
+    ],
+    'Pré-visualização — mensagens privadas ainda desativadas.': [
+      'Preview — private messages are not enabled yet.',
+      'Vista previa: los mensajes privados aún no están habilitados.',
+      'Aperçu — les messages privés ne sont pas encore activés.',
+      'Vorschau — private Nachrichten sind noch nicht aktiviert.',
+    ],
+    'Comunicar problema': ['Report a problem', 'Comunicar un problema', 'Signaler un problème', 'Problem melden'],
+    'Sair': ['Exit', 'Salir', 'Quitter', 'Beenden'],
+    'Convida amigos para voar': ['Invite friends to fly', 'Invita a tus amigos a volar', 'Invite tes amis à voler', 'Lade Freunde zum Fliegen ein'],
+    'Partilha o teu convite e espalha palavras gentis.': [
+      'Share your invitation and spread kind words.',
+      'Comparte tu invitación y difunde palabras amables.',
+      'Partage ton invitation et fais circuler des mots gentils.',
+      'Teile deine Einladung und verbreite freundliche Worte.',
+    ],
+    'O teu link de convite': ['Your invitation link', 'Tu enlace de invitación', 'Ton lien d’invitation', 'Dein Einladungslink'],
+    'O link será disponibilizado após configurar os convites.': [
+      'The link will be available once invitations are configured.',
+      'El enlace estará disponible cuando se configuren las invitaciones.',
+      'Le lien sera disponible une fois les invitations configurées.',
+      'Der Link wird verfügbar sein, sobald Einladungen eingerichtet sind.',
+    ],
+    'Código QR de convite (pré-visualização)': [
+      'Invitation QR code (preview)', 'Código QR de invitación (vista previa)',
+      'Code QR d’invitation (aperçu)', 'Einladungs-QR-Code (Vorschau)',
+    ],
+    'A partilha será ligada quando o link estiver ativo.': [
+      'Sharing will be enabled when the link is active.',
+      'La función de compartir se activará cuando el enlace esté disponible.',
+      'Le partage sera activé lorsque le lien sera disponible.',
+      'Teilen wird aktiviert, sobald der Link aktiv ist.',
+    ],
+    'Link de demonstração — ainda não ativo.': [
+      'Demo link — not active yet.', 'Enlace de demostración: aún no está activo.',
+      'Lien de démonstration — pas encore actif.', 'Demo-Link — noch nicht aktiv.',
+    ],
+    'Os convites e recompensas serão ativados após a configuração da conta e do servidor.': [
+      'Invitations and rewards will be enabled after account and server setup.',
+      'Las invitaciones y recompensas se activarán después de configurar la cuenta y el servidor.',
+      'Les invitations et les récompenses seront activées après la configuration du compte et du serveur.',
+      'Einladungen und Belohnungen werden nach der Einrichtung von Konto und Server aktiviert.',
+    ],
+    'Proteção antes da entrega': ['Protection before delivery', 'Protección antes de la entrega', 'Protection avant la livraison', 'Schutz vor der Zustellung'],
+    'A correspondência aleatória usa a faixa etária declarada no perfil para separar grupos. É uma declaração do próprio utilizador, não uma verificação de identidade nem uma prova de idade.': [
+      'Random mail uses the age group declared in the profile to separate groups. This is user-declared information, not identity or age verification.',
+      'El correo aleatorio utiliza el grupo de edad declarado en el perfil para separar grupos. Es una declaración del usuario, no una verificación de identidad ni de edad.',
+      'Le courrier aléatoire utilise la tranche d’âge déclarée dans le profil pour séparer les groupes. Il s’agit d’une déclaration de l’utilisateur, pas d’une vérification d’identité ou d’âge.',
+      'Zufällige Post verwendet die im Profil angegebene Altersgruppe zur Trennung der Gruppen. Dies ist eine Selbstauskunft und keine Identitäts- oder Altersprüfung.',
+    ],
+    'Denunciar uma carta': ['Report a letter', 'Denunciar una carta', 'Signaler une lettre', 'Brief melden'],
+    'Abre o avião recebido e escolhe Denunciar. A denúncia é enviada ao servidor para revisão.': [
+      'Open the received plane and choose Report. The report is sent to the server for review.',
+      'Abre el avión recibido y elige Denunciar. El informe se envía al servidor para su revisión.',
+      'Ouvre l’avion reçu et choisis Signaler. Le signalement est envoyé au serveur pour examen.',
+      'Öffne den empfangenen Papierflieger und wähle Melden. Der Bericht wird zur Prüfung an den Server gesendet.',
+    ],
+    'Bloquear um remetente': ['Block a sender', 'Bloquear a un remitente', 'Bloquer un expéditeur', 'Einen Absender blockieren'],
+    'Abre o avião recebido e escolhe Bloquear. O servidor impede novas correspondências entre as duas contas.': [
+      'Open the received plane and choose Block. The server prevents further mail between the two accounts.',
+      'Abre el avión recibido y elige Bloquear. El servidor impide nuevos mensajes entre las dos cuentas.',
+      'Ouvre l’avion reçu et choisis Bloquer. Le serveur empêche tout nouvel échange entre les deux comptes.',
+      'Öffne den empfangenen Papierflieger und wähle Blockieren. Der Server verhindert weitere Nachrichten zwischen den beiden Konten.',
+    ],
+    'Identidade protegida': ['Identity protected', 'Identidad protegida', 'Identité protégée', 'Identität geschützt'],
+    'Nas cartas aleatórias, o remetente não recebe o teu nome de conta nem o teu identificador Firebase. O país é a única referência geográfica mostrada nesta versão.': [
+      'For random letters, the sender does not receive your account name or Firebase identifier. Your country is the only geographic reference shown in this version.',
+      'En las cartas aleatorias, el remitente no recibe tu nombre de cuenta ni tu identificador de Firebase. El país es la única referencia geográfica que se muestra en esta versión.',
+      'Pour les lettres aléatoires, l’expéditeur ne reçoit ni ton nom de compte ni ton identifiant Firebase. Le pays est la seule référence géographique affichée dans cette version.',
+      'Bei zufälligen Briefen erhält der Absender weder deinen Kontonamen noch deine Firebase-Kennung. Das Land ist in dieser Version die einzige angezeigte geografische Angabe.',
+    ],
+    'Não partilhes morada, contactos, palavras-passe, escola ou outros dados pessoais com desconhecidos. Se uma carta te fizer sentir desconfortável, não respondas: denuncia e bloqueia.': [
+      'Do not share your address, contacts, passwords, school or other personal information with strangers. If a letter makes you uncomfortable, do not reply: report and block.',
+      'No compartas tu dirección, contactos, contraseñas, escuela ni otros datos personales con desconocidos. Si una carta te incomoda, no respondas: denúnciala y bloquea.',
+      'Ne partage pas ton adresse, tes contacts, mots de passe, école ou autres données personnelles avec des inconnus. Si une lettre te met mal à l’aise, ne réponds pas : signale-la et bloque son auteur.',
+      'Teile deine Adresse, Kontakte, Passwörter, Schule oder andere persönliche Daten nicht mit Fremden. Wenn dich ein Brief beunruhigt, antworte nicht: Melde und blockiere den Absender.',
+    ],
 
   };
 }
@@ -3968,7 +4095,7 @@ class PlaneText extends StatelessWidget {
       if (index != null) return '${availableQuestions.group(1)} ${labels[index]}';
     }
 
-    final offlineQuestionCount = RegExp(r'^([0-9]+) perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas\\.
+    final offlineQuestionCount = RegExp(r'^([0-9]+) perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas\.
     if (numeric != null) {
       final count = numeric.group(1)!;
       final phrase = numeric.group(2);
