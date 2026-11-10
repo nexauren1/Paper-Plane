@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 import 'package:flutter/services.dart';
 
 import '../services/paper_plane_api.dart';
@@ -162,14 +163,14 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Eliminar conversa?'),
-        content: Text('A conversa com $name será removida da tua lista. A outra pessoa continuará a ter a sua cópia.'),
+        title: const PlaneText('Eliminar conversa?'),
+        content: PlaneText('A conversa com $name será removida da tua lista. A outra pessoa continuará a ter a sua cópia.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Cancelar')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy),
-            child: const Text('Eliminar'),
+            child: const PlaneText('Eliminar'),
           ),
         ],
       ),
@@ -189,14 +190,14 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Remover amigo?'),
-        content: Text('Queres remover @$handle da tua lista de amigos? A conversa Chama não será apagada.'),
+        title: const PlaneText('Remover amigo?'),
+        content: PlaneText('Queres remover @$handle da tua lista de amigos? A conversa Chama não será apagada.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Cancelar')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy),
-            child: const Text('Remover'),
+            child: const PlaneText('Remover'),
           ),
         ],
       ),
@@ -221,15 +222,15 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
           children: [
-            const Text('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const PlaneText('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
             const SizedBox(height: 6),
-            const Text('Os aviões recebidos serão traduzidos para este idioma.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            const PlaneText('Os aviões recebidos serão traduzidos para este idioma.', style: TextStyle(color: Colors.white60, fontSize: 12)),
             const SizedBox(height: 10),
             for (final entry in _languageNames.entries)
               ListTile(
                 leading: Icon(_myLanguage == entry.key ? Icons.check_circle_rounded : Icons.language_rounded,
                     color: _myLanguage == entry.key ? _chatGoldBright : Colors.white54),
-                title: Text(entry.value),
+                title: PlaneText(entry.value),
                 onTap: () => Navigator.pop(sheetContext, entry.key),
               ),
           ],
@@ -262,7 +263,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   void _notice(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -281,8 +282,8 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Chat & Amigos', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
-                      Text('Liga-te a copilotos de todo o mundo', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                      PlaneText('Chat & Amigos', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+                      PlaneText('Liga-te a copilotos de todo o mundo', style: TextStyle(color: Colors.white60, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -329,9 +330,9 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                             children: [
                               const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 34),
                               const SizedBox(height: 10),
-                              Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                              PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                               const SizedBox(height: 10),
-                              OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                              OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
                             ],
                           ),
                         ),
@@ -369,7 +370,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           children: [
             Icon(icon, size: 18, color: active ? _chatGoldBright : Colors.white70),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontWeight: FontWeight.w800, color: active ? _chatGoldBright : Colors.white70)),
+            PlaneText(label, style: TextStyle(fontWeight: FontWeight.w800, color: active ? _chatGoldBright : Colors.white70)),
           ],
         ),
       ),
@@ -407,7 +408,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       OutlinedButton.icon(
         onPressed: () => setState(() => _section = 2),
         icon: const Icon(Icons.people_alt_outlined),
-        label: const Text('Explorar amigos do mundo'),
+        label: const PlaneText('Explorar amigos do mundo'),
         style: OutlinedButton.styleFrom(
           foregroundColor: _chatGoldBright,
           side: BorderSide(color: _chatGold.withOpacity(0.55)),
@@ -443,7 +444,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       OutlinedButton.icon(
         onPressed: () => setState(() => _section = 2),
         icon: const Icon(Icons.people_alt_outlined),
-        label: const Text('Encontrar amigos'),
+        label: const PlaneText('Encontrar amigos'),
         style: OutlinedButton.styleFrom(
           foregroundColor: _chatGoldBright,
           side: BorderSide(color: _chatGold.withOpacity(0.55)),
@@ -572,7 +573,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       OutlinedButton.icon(
         onPressed: _copyInvite,
         icon: const Icon(Icons.link_rounded),
-        label: const Text('Copiar o meu link de convite'),
+        label: const PlaneText('Copiar o meu link de convite'),
         style: OutlinedButton.styleFrom(
           foregroundColor: _chatGoldBright,
           side: BorderSide(color: _chatGold.withOpacity(0.55)),
@@ -627,15 +628,15 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+                PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
                 const SizedBox(height: 3),
-                Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
                 const SizedBox(height: 5),
-                Text(last?.isNotEmpty == true ? last! : (chama ? 'A Chama está acesa. Continuem a trocar aviões.' : 'O vosso Chat está pronto.'),
+                PlaneText(last?.isNotEmpty == true ? last! : (chama ? 'A Chama está acesa. Continuem a trocar aviões.' : 'O vosso Chat está pronto.'),
                     maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _chatGoldBright, fontSize: 12)),
                 if (chama) ...[
                   const SizedBox(height: 4),
-                  Text(
+                  PlaneText(
                     '${chat['plane_count'] ?? 0} aviões · ${chat['exchange_count'] ?? 0} respostas',
                     style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w700),
                   ),
@@ -653,7 +654,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                 PopupMenuItem(value: 'delete', child: Row(children: [
                   Icon(Icons.delete_outline_rounded, size: 18),
                   SizedBox(width: 8),
-                  Text('Eliminar conversa'),
+                  PlaneText('Eliminar conversa'),
                 ])),
               ],
               icon: const Icon(Icons.more_vert_rounded, color: _chatGold),
@@ -674,8 +675,8 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         const CircleAvatar(backgroundColor: Color(0xFF253E65), child: Icon(Icons.person_add_alt_1_rounded, color: _chatGoldBright)),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-          Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
+          PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         ])),
         IconButton(
           tooltip: 'Aceitar',
@@ -707,28 +708,28 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         PilotAvatar(url: person['avatar_url']?.toString(), size: 42),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
+          PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 3),
-          Text('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         ])),
         if (secondaryAction != null)
           PopupMenuButton<String>(
             padding: EdgeInsets.zero,
             icon: const Icon(Icons.more_vert_rounded, color: Colors.white60),
             onSelected: (_) => secondaryTap?.call(),
-            itemBuilder: (_) => [PopupMenuItem(value: 'secondary', child: Text(secondaryAction))],
+            itemBuilder: (_) => [PopupMenuItem(value: 'secondary', child: PlaneText(secondaryAction))],
           ),
         TextButton(
           onPressed: onTap,
-          child: Text(action, style: TextStyle(color: actionColor, fontWeight: FontWeight.w800, fontSize: 10)),
+          child: PlaneText(action, style: TextStyle(color: actionColor, fontWeight: FontWeight.w800, fontSize: 10)),
         ),
       ]),
     );
   }
 
   Widget _sectionTitle(String title, String count) => Row(children: [
-        Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
-        Text(count, style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w800)),
+        Expanded(child: PlaneText(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+        PlaneText(count, style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w800)),
       ]);
 
   Widget _infoPanel({required IconData icon, required String title, required String body, bool highlight = false}) =>
@@ -738,9 +739,9 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           Icon(icon, color: _chatGoldBright, size: 28),
           const SizedBox(width: 11),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            PlaneText(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
             const SizedBox(height: 6),
-            Text(body, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
+            PlaneText(body, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
           ])),
         ]),
       );
@@ -750,9 +751,9 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         child: Column(children: [
           Icon(icon, color: _chatGoldBright, size: 32),
           const SizedBox(height: 8),
-          Text(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
+          PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 5),
-          Text(body, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+          PlaneText(body, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
         ]),
       );
 
@@ -933,9 +934,9 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         Row(children: [
           Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB36F), size: 21),
           SizedBox(width: 7),
-          Text('A Chama do Deserto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+          PlaneText('A Chama do Deserto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
           Spacer(),
-          Text(ended ? 'ENCERRADA' : 'ACTIVA', style: TextStyle(color: ended ? Colors.white54 : _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
+          PlaneText(ended ? 'ENCERRADA' : 'ACTIVA', style: TextStyle(color: ended ? Colors.white54 : _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -944,7 +945,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           _flameMetric(Icons.local_fire_department_rounded, streak.toString(), 'Dias seguidos'),
         ]),
         const SizedBox(height: 7),
-        Text(lastLabel, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+        PlaneText(lastLabel, style: const TextStyle(color: Colors.white60, fontSize: 10)),
         const SizedBox(height: 9),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -958,7 +959,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                 color: ended ? Colors.white54 : _chatGoldBright, size: 18),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
+              child: PlaneText(
                 ended
                     ? 'Esta rota foi encerrada. O histórico permanece guardado.'
                     : daysLeft <= 0
@@ -979,8 +980,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     child: Column(children: [
       Icon(icon, color: _chatGoldBright, size: 17),
       const SizedBox(height: 3),
-      Text(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-      Text(label, style: const TextStyle(color: Colors.white60, fontSize: 9)),
+      PlaneText(value, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+      PlaneText(label, style: const TextStyle(color: Colors.white60, fontSize: 9)),
     ]),
   );
 
@@ -999,8 +1000,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         childrenPadding: const EdgeInsets.only(bottom: 8),
         iconColor: _chatGoldBright,
         collapsedIconColor: _chatGoldBright,
-        title: const Text('Histórico dos aviões', style: TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w800, fontSize: 11)),
-        subtitle: Text('${_chamaHistory.length} aviões nesta Chama', style: const TextStyle(color: Colors.white54, fontSize: 9)),
+        title: const PlaneText('Histórico dos aviões', style: TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w800, fontSize: 11)),
+        subtitle: PlaneText('${_chamaHistory.length} aviões nesta Chama', style: const TextStyle(color: Colors.white54, fontSize: 9)),
         children: [
           for (final plane in _chamaHistory.reversed.take(12)) _chamaHistoryTile(plane),
         ],
@@ -1021,11 +1022,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         Icon(own ? Icons.flight_takeoff_rounded : Icons.flight_land_rounded, color: _chatGoldBright, size: 16),
         const SizedBox(width: 8),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(own ? 'O teu avião' : 'Avião recebido', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: _chatGoldBright)),
-          Text(plane['message_text']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+          PlaneText(own ? 'O teu avião' : 'Avião recebido', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: _chatGoldBright)),
+          PlaneText(plane['message_text']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.white70)),
         ])),
         const SizedBox(width: 7),
-        Text(time, style: const TextStyle(fontSize: 8, color: Colors.white38)),
+        PlaneText(time, style: const TextStyle(fontSize: 8, color: Colors.white38)),
       ]),
     );
   }
@@ -1078,7 +1079,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: _chatGold.withOpacity(0.2)),
                 ),
-                child: Text(emoji, style: const TextStyle(fontSize: 25)),
+                child: PlaneText(emoji, style: const TextStyle(fontSize: 25)),
               ),
             )).toList(),
           ),
@@ -1110,7 +1111,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error is PaperPlaneApiException ? error.message : 'A tradução não está disponível neste momento.'),
+        content: PlaneText(error is PaperPlaneApiException ? error.message : 'A tradução não está disponível neste momento.'),
         behavior: SnackBarBehavior.floating,
       ));
     } finally {
@@ -1157,7 +1158,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToEnd());
       if (widget.isChama && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('A tua resposta está a voar pela rota da Chama — 3× mais rápida.')),
+          const SnackBar(content: PlaneText('A tua resposta está a voar pela rota da Chama — 3× mais rápida.')),
         );
       }
     } catch (error) {
@@ -1165,7 +1166,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       final message = error is PaperPlaneApiException
           ? error.message
           : 'Não foi possível enviar. Verifica a ligação e tenta novamente.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -1183,7 +1184,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     final planeId = latest?['id']?.toString() ?? '';
     if (planeId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ainda não há aviões nesta Chama para denunciar.')),
+        const SnackBar(content: PlaneText('Ainda não há aviões nesta Chama para denunciar.')),
       );
       return;
     }
@@ -1196,14 +1197,14 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Encerrar esta Chama?'),
-        content: const Text('A troca de aviões nesta rota será encerrada. O histórico ficará guardado para consulta.'),
+        title: const PlaneText('Encerrar esta Chama?'),
+        content: const PlaneText('A troca de aviões nesta rota será encerrada. O histórico ficará guardado para consulta.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Continuar Chama')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const PlaneText('Continuar Chama')),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFC47A), foregroundColor: _chatNavy),
-            child: const Text('Encerrar rota'),
+            child: const PlaneText('Encerrar rota'),
           ),
         ],
       ),
@@ -1216,12 +1217,12 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       await _refresh(silent: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Rota encerrada. O histórico continua disponível.')),
+        const SnackBar(content: PlaneText('Rota encerrada. O histórico continua disponível.')),
       );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível encerrar a rota.')),
+        SnackBar(content: PlaneText(error is PaperPlaneApiException ? error.message : 'Não foi possível encerrar a rota.')),
       );
     }
   }
@@ -1233,14 +1234,14 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Bloquear copiloto?'),
-        content: const Text('Deixarás de receber aviões e mensagens desta conta.'),
+        title: const PlaneText('Bloquear copiloto?'),
+        content: const PlaneText('Deixarás de receber aviões e mensagens desta conta.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Cancelar')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFB1A1), foregroundColor: _chatNavy),
-            child: const Text('Bloquear'),
+            child: const PlaneText('Bloquear'),
           ),
         ],
       ),
@@ -1250,11 +1251,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       await PaperPlaneApi.instance.blockPilot(uid);
       if (!mounted) return;
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copiloto bloqueado.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('Copiloto bloqueado.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear.')),
+        SnackBar(content: PlaneText(error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear.')),
       );
     }
   }
@@ -1274,8 +1275,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                 color: widget.isChama ? const Color(0xFFFFB36F) : _chatGoldBright),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(_name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
-            Text('@$_handle${_countryCode == null ? '' : ' · ${_countryFlag(_countryCode)} ${_countryName(_countryCode)}'}',
+            PlaneText(_name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+            PlaneText('@$_handle${_countryCode == null ? '' : ' · ${_countryFlag(_countryCode)} ${_countryName(_countryCode)}'}',
                 style: const TextStyle(fontSize: 10, color: Colors.white60)),
           ])),
         ]),
@@ -1285,7 +1286,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
               if (value == 'block') _block();
             },
             itemBuilder: (_) => const [
-              PopupMenuItem(value: 'block', child: Text('Bloquear copiloto')),
+              PopupMenuItem(value: 'block', child: PlaneText('Bloquear copiloto')),
             ],
           ),
         ],
@@ -1326,7 +1327,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           child: const Row(children: [
             Icon(Icons.chat_bubble_outline_rounded, color: _chatGoldBright, size: 24),
             SizedBox(width: 9),
-            Expanded(child: Text(
+            Expanded(child: PlaneText(
               'Chat privado: esta conversa é independente da troca de aviões.',
               style: TextStyle(fontSize: 11, height: 1.4, fontWeight: FontWeight.w700),
             )),
@@ -1339,8 +1340,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                   ? Center(child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                        TextButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                        PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                        TextButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
                       ]),
                     ))
                   : RefreshIndicator(
@@ -1355,7 +1356,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                           if (_messages.isEmpty)
                             Padding(
                               padding: EdgeInsets.symmetric(vertical: 50, horizontal: 18),
-                              child: Text(
+                              child: PlaneText(
                                 widget.isChama
                                     ? 'A vossa primeira conversa começa aqui. Escreve algo simpático e mantém a Chama viva.'
                                     : 'Este é o vosso espaço privado. Comecem a conversar quando quiserem.',
@@ -1427,7 +1428,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   }) => OutlinedButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 15),
-        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+        label: PlaneText(label, maxLines: 1, overflow: TextOverflow.ellipsis),
         style: OutlinedButton.styleFrom(
           foregroundColor: emphasis ? _chatGoldBright : Colors.white70,
           side: BorderSide(color: emphasis ? _chatGold.withOpacity(0.5) : Colors.white12),
@@ -1469,7 +1470,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             Row(mainAxisSize: MainAxisSize.min, children: const [
               Icon(Icons.local_fire_department_rounded, color: _chatGoldBright, size: 13),
               SizedBox(width: 5),
-              Text('INÍCIO DA CHAMA', style: TextStyle(color: _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+              PlaneText('INÍCIO DA CHAMA', style: TextStyle(color: _chatGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
             ]),
             const SizedBox(height: 6),
           ],
@@ -1477,7 +1478,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.send_rounded, color: _chatGoldBright.withOpacity(0.9), size: 12),
               const SizedBox(width: 5),
-              Text(isOwn ? 'AVIÃO ENVIADO' : 'AVIÃO RECEBIDO',
+              PlaneText(isOwn ? 'AVIÃO ENVIADO' : 'AVIÃO RECEBIDO',
                   style: const TextStyle(color: _chatGoldBright, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
             ]),
             const SizedBox(height: 6),
@@ -1490,7 +1491,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
               opacity: scale.clamp(0.0, 1.0).toDouble(),
               child: Transform.scale(scale: scale, alignment: Alignment.topLeft, child: child),
             ),
-            child: Text(content, style: const TextStyle(fontSize: 14, height: 1.42)),
+            child: PlaneText(content, style: const TextStyle(fontSize: 14, height: 1.42)),
           ),
           if (content != original)
             Align(
@@ -1498,7 +1499,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
               child: TextButton.icon(
                 onPressed: () => _translateMessage(message),
                 icon: const Icon(Icons.visibility_outlined, size: 13),
-                label: const Text('Ver original', style: TextStyle(fontSize: 10)),
+                label: const PlaneText('Ver original', style: TextStyle(fontSize: 10)),
                 style: TextButton.styleFrom(foregroundColor: _chatGoldBright, padding: EdgeInsets.zero),
               ),
             )
@@ -1510,7 +1511,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                 icon: isTranslating
                     ? const SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 1.8))
                     : const Icon(Icons.translate_rounded, size: 13),
-                label: Text(isTranslating ? 'A traduzir…' : 'Traduzir para ${_chatLanguageNames[_myLanguage] ?? _myLanguage}',
+                label: PlaneText(isTranslating ? 'A traduzir…' : 'Traduzir para ${_chatLanguageNames[_myLanguage] ?? _myLanguage}',
                     style: const TextStyle(fontSize: 10)),
                 style: TextButton.styleFrom(foregroundColor: _chatGoldBright, padding: EdgeInsets.zero),
               ),
@@ -1518,7 +1519,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
           ChatLinkPreview(key: ValueKey(message['id']?.toString() ?? content), message: content),
           const SizedBox(height: 5),
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
+            PlaneText(time, style: const TextStyle(color: Colors.white54, fontSize: 9)),
             IconButton(
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints.tightFor(width: 27, height: 25),
@@ -1528,7 +1529,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                 await Clipboard.setData(ClipboardData(text: original));
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Mensagem copiada.'), behavior: SnackBarBehavior.floating),
+                  const SnackBar(content: PlaneText('Mensagem copiada.'), behavior: SnackBarBehavior.floating),
                 );
               },
               icon: const Icon(Icons.copy_rounded, color: Colors.white54, size: 12),
@@ -1541,7 +1542,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                 color: message['read_at'] == null ? Colors.white54 : const Color(0xFF8BE0FF),
               ),
               const SizedBox(width: 3),
-              Text(
+              PlaneText(
                 message['read_at'] == null ? 'Enviada' : 'Lida',
                 style: TextStyle(fontSize: 8, color: message['read_at'] == null ? Colors.white54 : const Color(0xFF8BE0FF)),
               ),
