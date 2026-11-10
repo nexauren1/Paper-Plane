@@ -748,6 +748,8 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
     PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
     PaperPlaneNotifications.onOpenOpenSky = _openOpenSkyAfterPublish;
+    // Existing opt-ins are reconciled with the current FCM token after login.
+    unawaited(PaperPlaneNotifications.syncRegisteredDeviceIfEnabled());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pendingAirplaneId = PaperPlaneNotifications.consumePendingPlaneOpen();
