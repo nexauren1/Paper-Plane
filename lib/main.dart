@@ -5106,6 +5106,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ProfileLink(icon: Icons.newspaper_rounded, title: 'Novidades', subtitle: 'Notas de versão e melhorias', onTap: () => _openWebsitePage('/news')),
         _ProfileLink(icon: Icons.privacy_tip_outlined, title: 'Política de privacidade', subtitle: 'Como os teus dados são tratados', onTap: () => _openWebsitePage('/privacy')),
         _ProfileLink(icon: Icons.gavel_rounded, title: 'Termos e condições', subtitle: 'Regras de utilização', onTap: () => _openWebsitePage('/terms')),
+        _ProfileLink(icon: Icons.quiz_outlined, title: 'Perguntas frequentes', subtitle: 'Respostas sobre voos, notificações e segurança', onTap: () => _openWebsitePage('/faq')),
+        _ProfileLink(icon: Icons.support_agent_rounded, title: 'Suporte no site', subtitle: 'Informação para resolver problemas', onTap: () => _openWebsitePage('/support')),
         const SizedBox(height: 12),
         const PlaneText('As notificações são sincronizadas com a conta e podem ser desativadas a qualquer momento.', style: TextStyle(color: Colors.white38, fontSize: 11)),
       ]),
