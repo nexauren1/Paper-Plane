@@ -225,19 +225,54 @@ class PaperPlaneNotifications {
     }
 
     final token = await messaging.getToken();
-    await messaging.subscribeToTopic('paper_plane_all');
     if (token == null || token.isEmpty) {
       throw const PaperPlaneApiException('FCM_TOKEN_UNAVAILABLE', 'Não foi possível registar este dispositivo.');
     }
 
-    await PaperPlaneApi.instance.registerDevice(token);
     await _localNotifications
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
-    await _tokenSubscription?.cancel();
+    await PaperPlaneApi.instance.registerDevice(token);
+    _watchTokenRefresh(messaging);
+  }
+
+  static void _watchTokenRefresh(FirebaseMessaging messaging) {
+    if (_tokenSubscription != null) return;
     _tokenSubscription = messaging.onTokenRefresh.listen((newToken) {
-      unawaited(PaperPlaneApi.instance.registerDevice(newToken));
+      unawaited(
+        PaperPlaneApi.instance.registerDevice(newToken).then<void>(
+          (_) {},
+          onError: (Object error, StackTrace stack) {
+            debugPrint('Paper Plane: could not refresh the registered FCM token: $error');
+          },
+        ),
+      );
     });
+  }
+
+  /// Repairs the server-side token record when an already-enabled pilot opens
+  /// an updated app. This does not prompt for permission or enable notifications.
+  static Future<void> syncRegisteredDeviceIfEnabled() async {
+    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
+    try {
+      final profile = await PaperPlaneApi.instance.getProfile();
+      final pilot = profile['pilot'] as Map<String, dynamic>? ?? const {};
+      final enabled = pilot['push_enabled'] == 1 || pilot['push_enabled'] == true;
+      if (!enabled) return;
+
+      final messaging = FirebaseMessaging.instance;
+      final settings = await messaging.getNotificationSettings();
+      if (settings.authorizationStatus != AuthorizationStatus.authorized &&
+          settings.authorizationStatus != AuthorizationStatus.provisional) {
+        return;
+      }
+      final token = await messaging.getToken();
+      if (token == null || token.isEmpty) return;
+      await PaperPlaneApi.instance.registerDevice(token);
+      _watchTokenRefresh(messaging);
+    } catch (error) {
+      debugPrint('Paper Plane: existing notification registration could not be synchronized: $error');
+    }
   }
 
   /// Disabling notifications removes the server-side device registration first,
@@ -247,7 +282,6 @@ class PaperPlaneNotifications {
 
     final messaging = FirebaseMessaging.instance;
     final token = await messaging.getToken();
-    await messaging.unsubscribeFromTopic('paper_plane_all');
     await _tokenSubscription?.cancel();
     _tokenSubscription = null;
 

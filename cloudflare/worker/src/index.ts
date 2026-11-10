@@ -631,76 +631,106 @@ async function sendAdminAnnouncement(
   let sentCount = 0;
   let failedCount = 0;
 
-  if (!targetUid) {
-    // Topic fan-out lets FCM deliver a global announcement without thousands of
-    // sequential HTTP calls inside one Worker request. Only opted-in devices join.
-    const count = await env.DB.prepare(
-      "SELECT COUNT(*) AS total FROM devices d JOIN users u ON u.uid = d.uid WHERE u.push_enabled = 1 AND u.status = 'ACTIVE'",
-    ).first<{ total: number }>();
-    deviceCount = Number(count?.total ?? 0);
-    if (deviceCount > 0) {
-      const response = await fetch(
-        `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`,
-        {
-          method: "POST",
-          headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
-          body: JSON.stringify({
-            message: {
-              topic: "paper_plane_all",
-              notification: { title, body },
-              data: { type: "ADMIN_ANNOUNCEMENT", announcementId: id },
-              android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
+  const deliverPage = async (
+    devices: Array<{ id: string; uid: string; fcm_token: string }>,
+  ) => {
+    deviceCount += devices.length;
+    // Keep a small bounded concurrency so a global announcement does not
+    // overwhelm the Worker or the FCM HTTP v1 endpoint.
+    for (let index = 0; index < devices.length; index += 10) {
+      const batch = devices.slice(index, index + 10);
+      const outcomes = await Promise.all(batch.map(async (device) => {
+        try {
+          const response = await fetch(
+            `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`,
+            {
+              method: "POST",
+              headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
+              body: JSON.stringify({
+                message: {
+                  // Send to the concrete token in D1, not a topic subscription
+                  // that may be missing on older installations.
+                  token: device.fcm_token,
+                  notification: { title, body },
+                  data: { type: "ADMIN_ANNOUNCEMENT", announcementId: id },
+                  android: {
+                    priority: "HIGH",
+                    notification: {
+                      channel_id: "paper_plane_updates",
+                      sound: "default",
+                      visibility: "PUBLIC",
+                    },
+                  },
+                },
+              }),
             },
-          }),
-        },
-      );
-      if (response.ok) sentCount = deviceCount;
-      else failedCount = deviceCount;
+          );
+          if (response.ok) return { device, accepted: true, unregistered: false };
+          const failure = await response.json().catch(() => ({})) as {
+            error?: { details?: Array<{ errorCode?: string }> };
+          };
+          const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
+          return { device, accepted: false, unregistered: errorCode === "UNREGISTERED" };
+        } catch {
+          return { device, accepted: false, unregistered: false };
+        }
+      }));
+
+      for (const outcome of outcomes) {
+        if (outcome.accepted) sentCount++;
+        else failedCount++;
+        if (outcome.unregistered) {
+          // Remove expired FCM tokens so they do not poison future sends.
+          await env.DB.batch([
+            env.DB.prepare("DELETE FROM devices WHERE uid = ? AND id = ?")
+              .bind(outcome.device.uid, outcome.device.id),
+            env.DB.prepare(
+              "UPDATE users SET push_enabled = CASE WHEN EXISTS (SELECT 1 FROM devices WHERE uid = users.uid) THEN 1 ELSE 0 END, updated_at = ? WHERE uid = ?",
+            ).bind(isoNow(), outcome.device.uid),
+          ]).catch(() => undefined);
+        }
+      }
     }
-  } else {
+  };
+
+  if (targetUid) {
     const devices = await env.DB.prepare(
-      `SELECT d.uid, d.fcm_token
+      `SELECT d.id, d.uid, d.fcm_token
        FROM devices d JOIN users u ON u.uid = d.uid
        WHERE d.uid = ? AND u.push_enabled = 1 AND u.status = 'ACTIVE'
-       ORDER BY d.uid LIMIT 20`,
-    ).bind(targetUid).all<{ uid: string; fcm_token: string }>();
-    deviceCount = devices.results?.length ?? 0;
-
-    for (const device of devices.results ?? []) {
-      try {
-        const response = await fetch(
-          `https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`,
-          {
-            method: "POST",
-            headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
-            body: JSON.stringify({
-              message: {
-                token: device.fcm_token,
-                notification: { title, body },
-                data: { type: "ADMIN_ANNOUNCEMENT", announcementId: id },
-                android: { priority: "HIGH", notification: { channel_id: "paper_plane_updates" } },
-              },
-            }),
-          },
-        );
-        if (response.ok) {
-          sentCount++;
-        } else {
-          failedCount++;
-          if (response.status === 404) {
-            const failure = await response.json().catch(() => ({})) as {
-              error?: { details?: Array<{ errorCode?: string }> };
-            };
-            const errorCode = failure.error?.details?.find((detail) => detail.errorCode)?.errorCode;
-            if (errorCode === "UNREGISTERED") {
-              await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND fcm_token = ?")
-                .bind(device.uid, device.fcm_token).run();
-            }
-          }
-        }
-      } catch {
-        failedCount++;
-      }
+         AND d.fcm_token IS NOT NULL AND d.fcm_token <> ''
+       ORDER BY d.id LIMIT 20`,
+    ).bind(targetUid).all<{ id: string; uid: string; fcm_token: string }>();
+    await deliverPage(devices.results ?? []);
+  } else {
+    // Page by (uid,id), so stale-token cleanup cannot skip later rows as OFFSET
+    // pagination would. Every active, opted-in device is addressed individually.
+    let cursorUid: string | null = null;
+    let cursorId: string | null = null;
+    while (true) {
+      const page: D1Result<{ id: string; uid: string; fcm_token: string }> = cursorUid === null
+        ? await env.DB.prepare(
+            `SELECT d.id, d.uid, d.fcm_token
+             FROM devices d JOIN users u ON u.uid = d.uid
+             WHERE u.push_enabled = 1 AND u.status = 'ACTIVE'
+               AND d.fcm_token IS NOT NULL AND d.fcm_token <> ''
+             ORDER BY d.uid, d.id LIMIT 100`,
+          ).all<{ id: string; uid: string; fcm_token: string }>()
+        : await env.DB.prepare(
+            `SELECT d.id, d.uid, d.fcm_token
+             FROM devices d JOIN users u ON u.uid = d.uid
+             WHERE u.push_enabled = 1 AND u.status = 'ACTIVE'
+               AND d.fcm_token IS NOT NULL AND d.fcm_token <> ''
+               AND (d.uid > ? OR (d.uid = ? AND d.id > ?))
+             ORDER BY d.uid, d.id LIMIT 100`,
+          ).bind(cursorUid, cursorUid, cursorId).all<{ id: string; uid: string; fcm_token: string }>();
+      const devices: Array<{ id: string; uid: string; fcm_token: string }> = page.results ?? [];
+      if (devices.length === 0) break;
+      await deliverPage(devices);
+      const last: { id: string; uid: string; fcm_token: string } = devices[devices.length - 1];
+      cursorUid = last.uid;
+      cursorId = last.id;
+      if (devices.length < 100) break;
     }
   }
 
@@ -719,7 +749,6 @@ async function sendAdminAnnouncement(
 
   return { id, deviceCount, sentCount, failedCount };
 }
-
 async function ensureChamaForReply(
   replyAirplaneId: string,
   senderUid: string,
@@ -1536,6 +1565,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     try {
       const result = await sendAdminAnnouncement(uid, recipientUid, title, message, env);
+      if (result.deviceCount === 0) {
+        return json({
+          error: "NO_REGISTERED_DEVICE",
+          message: "Nenhum dispositivo ativo com notificações registadas foi encontrado para este envio.",
+          ...result,
+        }, 409);
+      }
+      if (result.sentCount === 0) {
+        return json({
+          error: "PUSH_DELIVERY_FAILED",
+          message: "O FCM recusou todos os dispositivos. Confirma o projeto Firebase, a credencial FCM e os tokens registados.",
+          ...result,
+        }, 502);
+      }
       return json({ ok: true, ...result }, 201);
     } catch {
       return json({ error: "PUSH_PROVIDER_UNAVAILABLE", message: "O serviço de notificações não está configurado ou indisponível." }, 503);
