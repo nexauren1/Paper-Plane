@@ -163,7 +163,7 @@ describe("Paper Plane Admin API integration", () => {
     const dashboard = await api(ADMIN_UID, "GET", "/v1/admin/dashboard");
     expect(dashboard.status).toBe(200);
     expect(Number(dashboard.data.users.total)).toBeGreaterThanOrEqual(4);
-    expect(Number(dashboard.data.pendingReview.total)).toBe(2);
+    expect(Number(dashboard.data.pendingReview.total)).toBe(3);
 
     const users = await api(ADMIN_UID, "GET", "/v1/admin/users?q=target");
     expect(users.status).toBe(200);
