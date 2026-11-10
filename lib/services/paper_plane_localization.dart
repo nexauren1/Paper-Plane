@@ -56,7 +56,53 @@ class PaperPlaneLocale {
       }
     }
 
-    final categoryCount = RegExp(r'^(.+) · ([0-9]+)
+    final categoryCount = RegExp(r'^(.+) · ([0-9]+)$').firstMatch(source);
+    if (categoryCount != null) {
+      final category = translate(categoryCount.group(1)!, code);
+      if (category != categoryCount.group(1)) {
+        return '$category · \${categoryCount.group(2)}';
+      }
+    }
+
+    final streak = RegExp(r'^([0-9]+) seguidas$').firstMatch(source);
+    if (streak != null) {
+      final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
+      const labels = ['in a row', 'seguidas', 'd’affilée', 'in Folge'];
+      if (index != null) return '\${streak.group(1)} \${labels[index]}';
+    }
+
+    final claimed = RegExp(r'^([0-9]+)/([0-9]+) resgatadas$').firstMatch(source);
+    if (claimed != null) {
+      final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
+      const labels = ['claimed', 'reclamadas', 'récupérées', 'eingelöst'];
+      if (index != null) return '\${claimed.group(1)}/\${claimed.group(2)} \${labels[index]}';
+    }
+
+    final availableQuestions = RegExp(r'^([0-9]+) perguntas disponíveis nesta categoria$').firstMatch(source);
+    if (availableQuestions != null) {
+      final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
+      const labels = [
+        'questions available in this category',
+        'preguntas disponibles en esta categoría',
+        'questions disponibles dans cette catégorie',
+        'Fragen in dieser Kategorie verfügbar',
+      ];
+      if (index != null) return '\${availableQuestions.group(1)} \${labels[index]}';
+    }
+
+    final offlineQuestionCount = RegExp(r'^([0-9]+) perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas\\.$').firstMatch(source);
+    if (offlineQuestionCount != null) {
+      final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
+      const labels = [
+        'offline questions, eight knowledge areas and new random rounds of ten questions.',
+        'preguntas sin conexión, ocho áreas de conocimiento y nuevas rondas aleatorias de diez preguntas.',
+        'questions hors ligne, huit domaines de connaissance et de nouvelles manches aléatoires de dix questions.',
+        'Offline-Fragen, acht Wissensbereiche und neue zufällige Runden mit zehn Fragen.',
+      ];
+      if (index != null) return '\${offlineQuestionCount.group(1)} \${labels[index]}';
+    }
+
+    final numeric = RegExp(r'^([0-9]+) (XP acumulados|destinatário\\(s\\) elegível\\(is\\) neste momento|aviões nesta Chama)$').firstMatch(source);
     if (numeric != null) {
       final count = numeric.group(1)!;
       final phrase = numeric.group(2);
