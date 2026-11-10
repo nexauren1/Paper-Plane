@@ -4987,7 +4987,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final pilot = result['pilot'] as Map<String, dynamic>? ?? const {};
       if (mounted) {
         setState(() {
-          _language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
+          final savedLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
+          _language = PaperPlaneLocale.supportedLanguages.contains(savedLanguage) ? savedLanguage : 'pt';
           PaperPlaneLocale.setLanguage(_language);
           _loadingLanguage = false;
         });
