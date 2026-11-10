@@ -6,7 +6,8 @@
   "observability": { "enabled": true },
   "assets": {
     "directory": "../../website",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": true
   },
   "vars": {
     "FIREBASE_PROJECT_ID": "studio-7819491277-fa972",
