@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/paper_plane_api.dart';
@@ -75,7 +76,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                 ),
               ),
               SizedBox(width: 9),
-              Text('A ler o link…', style: TextStyle(color: Colors.white60, fontSize: 10)),
+              PlaneText('A ler o link…', style: TextStyle(color: Colors.white60, fontSize: 10)),
             ]),
           );
         }
@@ -119,7 +120,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
+                        PlaneText(
                           site.toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -131,7 +132,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                           ),
                         ),
                         const SizedBox(height: 3),
-                        Text(
+                        PlaneText(
                           title.isEmpty ? _url! : title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -144,7 +145,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                         ),
                         if (description.isNotEmpty) ...[
                           const SizedBox(height: 3),
-                          Text(
+                          PlaneText(
                             description,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,

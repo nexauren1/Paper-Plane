@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 
 import '../services/firebase_runtime.dart';
 import '../services/paper_plane_api.dart';
@@ -73,7 +74,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final proceed = _readyToEnter;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
     );
     if (proceed) widget.onAuthenticated?.call(_firstFlightId);
   }
@@ -96,7 +97,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final proceed = _readyToEnter;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
     );
     if (proceed) widget.onAuthenticated?.call(_firstFlightId);
   }
@@ -116,7 +117,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final proceed = _readyToEnter;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
     );
     if (proceed) widget.onAuthenticated?.call(_firstFlightId);
   }
@@ -172,7 +173,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final email = _email.text.trim();
     if (email.isEmpty || !email.contains('@')) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Introduz primeiro o teu endereço de email.')),
+        const SnackBar(content: PlaneText('Introduz primeiro o teu endereço de email.')),
       );
       return;
     }
@@ -188,7 +189,7 @@ class _AccountScreenState extends State<AccountScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -202,7 +203,7 @@ class _AccountScreenState extends State<AccountScreen> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Os teus dados'),
+          title: const PlaneText('Os teus dados'),
           content: SizedBox(
             width: 520,
             height: 420,
@@ -213,7 +214,7 @@ class _AccountScreenState extends State<AccountScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Fechar'),
+              child: const PlaneText('Fechar'),
             ),
             FilledButton.icon(
               onPressed: () async {
@@ -221,12 +222,12 @@ class _AccountScreenState extends State<AccountScreen> {
                 if (dialogContext.mounted) Navigator.pop(dialogContext);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Dados copiados. Guarda-os num local seguro.')),
+                    const SnackBar(content: PlaneText('Dados copiados. Guarda-os num local seguro.')),
                   );
                 }
               },
               icon: const Icon(Icons.copy_rounded),
-              label: const Text('Copiar JSON'),
+              label: const PlaneText('Copiar JSON'),
             ),
           ],
         ),
@@ -234,7 +235,7 @@ class _AccountScreenState extends State<AccountScreen> {
     } catch (error) {
       if (mounted) {
         final message = error is PaperPlaneApiException ? error.message : 'Não foi possível exportar os teus dados.';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -249,12 +250,12 @@ class _AccountScreenState extends State<AccountScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar conta e dados?'),
+        title: const PlaneText('Eliminar conta e dados?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            const PlaneText(
               'Esta ação elimina o perfil, aviões enviados e recebidos, respostas, chats, amizades, denúncias associadas e dispositivos registados. Não pode ser desfeita.',
             ),
             if (needsPassword) ...[
@@ -262,26 +263,26 @@ class _AccountScreenState extends State<AccountScreen> {
               TextField(
                 controller: passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Palavra-passe atual',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Palavra-passe atual'),
                   border: OutlineInputBorder(),
                 ),
               ),
             ] else ...[
               const SizedBox(height: 12),
-              const Text('Será pedida uma nova confirmação pela tua conta Google.'),
+              const PlaneText('Será pedida uma nova confirmação pela tua conta Google.'),
             ],
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancelar'),
+            child: const PlaneText('Cancelar'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Eliminar permanentemente'),
+            child: const PlaneText('Eliminar permanentemente'),
           ),
         ],
       ),
@@ -303,7 +304,7 @@ class _AccountScreenState extends State<AccountScreen> {
       await FirebaseAuth.instance.signOut();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Conta e dados eliminados com sucesso.')),
+          const SnackBar(content: PlaneText('Conta e dados eliminados com sucesso.')),
         );
       }
     } catch (error) {
@@ -312,7 +313,7 @@ class _AccountScreenState extends State<AccountScreen> {
             ? 'Os dados do Paper Plane foram eliminados, mas o Firebase ainda não removeu a identidade. Verifica a sessão e tenta novamente nesta tela. Detalhe: ${_friendlyError(error)}'
             : _friendlyError(error);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+          SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
         );
       }
     } finally {
@@ -327,13 +328,13 @@ class _AccountScreenState extends State<AccountScreen> {
       await PaperPlaneAuth.signOut();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Sessão terminada.')),
+          const SnackBar(content: PlaneText('Sessão terminada.')),
         );
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_friendlyError(error))),
+          SnackBar(content: PlaneText(_friendlyError(error))),
         );
       }
     }
@@ -399,11 +400,11 @@ class _AccountScreenState extends State<AccountScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Conta atual', style: TextStyle(color: _goldLight, fontWeight: FontWeight.w800)),
+                      const PlaneText('Conta atual', style: TextStyle(color: _goldLight, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 10),
-                      Text(user.email ?? 'Conta Google', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                      PlaneText(user.email ?? 'Conta Google', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 6),
-                      Text(
+                      PlaneText(
                         user.providerData.map((provider) => provider.providerId).join(' · '),
                         style: const TextStyle(color: Colors.white60, fontSize: 12),
                       ),
@@ -421,16 +422,16 @@ class _AccountScreenState extends State<AccountScreen> {
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _signOut,
                   icon: const Icon(Icons.logout_rounded),
-                  label: const Text('Terminar sessão'),
+                  label: const PlaneText('Terminar sessão'),
                 ),
                 const SizedBox(height: 22),
                 _AccountCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Zona de segurança', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900)),
+                      const PlaneText('Zona de segurança', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 7),
-                      const Text(
+                      const PlaneText(
                         'Podes solicitar a eliminação da tua conta e dos dados associados. A confirmação exige voltar a autenticar.',
                         style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45),
                       ),
@@ -438,7 +439,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _exportAccountData,
                         icon: const Icon(Icons.download_outlined),
-                        label: const Text('Exportar os meus dados (JSON)'),
+                        label: const PlaneText('Exportar os meus dados (JSON)'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: _goldLight,
                           side: BorderSide(color: _gold.withOpacity(0.45)),
@@ -449,7 +450,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _deleteAccount,
                         icon: const Icon(Icons.delete_forever_outlined, color: Colors.redAccent),
-                        label: const Text('Eliminar conta e todos os dados'),
+                        label: const PlaneText('Eliminar conta e todos os dados'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.redAccent,
                           side: const BorderSide(color: Colors.redAccent),
@@ -501,7 +502,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         alignment: Alignment.center,
                         child: TextButton(
                           onPressed: _busy ? null : _resetPassword,
-                          child: const Text('Esqueci-me da palavra-passe', style: TextStyle(color: _goldLight)),
+                          child: const PlaneText('Esqueci-me da palavra-passe', style: TextStyle(color: _goldLight)),
                         ),
                       ),
                     const Padding(
@@ -511,7 +512,7 @@ class _AccountScreenState extends State<AccountScreen> {
                           Expanded(child: Divider(color: Colors.white24)),
                           Padding(
                             padding: EdgeInsets.symmetric(horizontal: 12),
-                            child: Text('OU', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w800)),
+                            child: PlaneText('OU', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w800)),
                           ),
                           Expanded(child: Divider(color: Colors.white24)),
                         ],
@@ -520,7 +521,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     OutlinedButton.icon(
                       onPressed: _busy ? null : _continueWithGoogle,
                       icon: const Icon(Icons.g_mobiledata_rounded, size: 28),
-                      label: const Text('Continuar com Google'),
+                      label: const PlaneText('Continuar com Google'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
                         side: BorderSide(color: _gold.withOpacity(0.45)),
@@ -532,13 +533,13 @@ class _AccountScreenState extends State<AccountScreen> {
                       const SizedBox(height: 16),
                       const LinearProgressIndicator(color: _gold, backgroundColor: Colors.white12),
                       const SizedBox(height: 6),
-                      const Text('A autenticar a tua conta…', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+                      const PlaneText('A autenticar a tua conta…', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
                     ],
                   ],
                 ),
               ),
               const SizedBox(height: 15),
-              const Text(
+              const PlaneText(
                 'Ao criar uma conta, não partilhes a tua palavra-passe com ninguém. O Paper Plane nunca a pede por mensagem.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45),
@@ -606,7 +607,7 @@ class _AccountScreenState extends State<AccountScreen> {
 
   InputDecoration _inputDecoration(String label, IconData icon, {Widget? suffix}) {
     return InputDecoration(
-      labelText: label,
+      labelText: PaperPlaneLocale.translate(label),
       prefixIcon: Icon(icon, color: _goldLight),
       suffixIcon: suffix,
       filled: true,
@@ -625,7 +626,7 @@ class _AccountScreenState extends State<AccountScreen> {
       appBar: AppBar(
         backgroundColor: _navy,
         foregroundColor: _goldLight,
-        title: const Text('A tua conta', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const PlaneText('A tua conta', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
       body: DecoratedBox(
         decoration: const BoxDecoration(
@@ -663,9 +664,9 @@ class _AccountHero extends StatelessWidget {
           child: Icon(icon, color: _goldLight, size: 32),
         ),
         const SizedBox(height: 14),
-        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+        PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
         const SizedBox(height: 6),
-        Text(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, height: 1.4)),
+        PlaneText(subtitle, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, height: 1.4)),
       ],
     );
   }
@@ -708,7 +709,7 @@ class _ModeTab extends StatelessWidget {
           side: BorderSide(color: selected ? _gold.withOpacity(0.65) : Colors.white12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+        child: PlaneText(label, style: const TextStyle(fontWeight: FontWeight.w800)),
       ),
     );
   }
@@ -731,7 +732,7 @@ class _GoldAction extends StatelessWidget {
         icon: busy
             ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2, color: _navy))
             : Icon(icon),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+        label: PlaneText(label, style: const TextStyle(fontWeight: FontWeight.w900)),
         style: FilledButton.styleFrom(
           backgroundColor: _gold,
           foregroundColor: _navy,
@@ -758,9 +759,9 @@ class _InfoPanel extends StatelessWidget {
           children: [
             Icon(icon, color: _goldLight, size: 48),
             const SizedBox(height: 16),
-            Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
+            PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900)),
             const SizedBox(height: 8),
-            Text(body, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, height: 1.5)),
+            PlaneText(body, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, height: 1.5)),
           ],
         ),
       ),

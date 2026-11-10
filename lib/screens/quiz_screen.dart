@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 import '../data/quiz_question_bank.dart';
 import '../services/paper_plane_api.dart';
 
@@ -117,7 +118,7 @@ class _QuizScreenState extends State<QuizScreen> {
   }
 
   void _notice(String value) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(value), behavior: SnackBarBehavior.floating),
+    SnackBar(content: PlaneText(value), behavior: SnackBarBehavior.floating),
   );
 
   @override
@@ -129,8 +130,8 @@ class _QuizScreenState extends State<QuizScreen> {
           const Icon(Icons.auto_awesome_rounded, color: _gold, size: 27),
           const SizedBox(width: 9),
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Clube do Céu', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
-            Text('Joga, cumpre missões e sobe de nível', style: TextStyle(color: Colors.white60, fontSize: 11)),
+            PlaneText('Clube do Céu', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+            PlaneText('Joga, cumpre missões e sobe de nível', style: TextStyle(color: Colors.white60, fontSize: 11)),
           ])),
           IconButton(onPressed: _loading ? null : _refresh, icon: const Icon(Icons.refresh_rounded, color: _lightGold)),
         ]),
@@ -162,7 +163,7 @@ class _QuizScreenState extends State<QuizScreen> {
           child: Column(children: [
             Icon(icons[i], size: 17, color: _tab == i ? _lightGold : Colors.white60),
             const SizedBox(height: 3),
-            Text(labels[i], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: _tab == i ? _lightGold : Colors.white60)),
+            PlaneText(labels[i], style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: _tab == i ? _lightGold : Colors.white60)),
           ]),
         ),
       )))),
@@ -186,18 +187,18 @@ class _QuizScreenState extends State<QuizScreen> {
           width: 62, height: 62, alignment: Alignment.center,
           decoration: BoxDecoration(shape: BoxShape.circle, color: _gold.withOpacity(0.14), border: Border.all(color: _gold, width: 2)),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text('$level', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: _lightGold)),
-            const Text('NÍVEL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+            PlaneText('$level', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: _lightGold)),
+            const PlaneText('NÍVEL', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
           ]),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
-          Text('$xp XP acumulados', style: const TextStyle(color: _lightGold, fontWeight: FontWeight.w800, fontSize: 11)),
+          PlaneText(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+          PlaneText('$xp XP acumulados', style: const TextStyle(color: _lightGold, fontWeight: FontWeight.w800, fontSize: 11)),
           const SizedBox(height: 8),
           ClipRRect(borderRadius: BorderRadius.circular(20), child: LinearProgressIndicator(value: ratio.clamp(0, 1), minHeight: 7, backgroundColor: Colors.white12, color: _gold)),
           const SizedBox(height: 4),
-          Text('Próximo nível: $next XP', style: const TextStyle(color: Colors.white54, fontSize: 9)),
+          PlaneText('Próximo nível: $next XP', style: const TextStyle(color: Colors.white54, fontSize: 9)),
         ])),
       ]),
     );
@@ -208,7 +209,7 @@ class _QuizScreenState extends State<QuizScreen> {
     decoration: BoxDecoration(color: Colors.black.withOpacity(0.18), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white12)),
     child: Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, size: 13, color: _lightGold), const SizedBox(width: 4),
-      Text(label, style: const TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.w700)),
+      PlaneText(label, style: const TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.w700)),
     ]),
   );
 
@@ -221,9 +222,9 @@ class _QuizScreenState extends State<QuizScreen> {
       child: Column(children: [
         const Icon(Icons.public_rounded, size: 43, color: _lightGold),
         const SizedBox(height: 9),
-        const Text('O mundo é o teu campo de jogo', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+        const PlaneText('O mundo é o teu campo de jogo', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
         const SizedBox(height: 6),
-        Text(quizQuestionBank.length.toString() + ' perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas.',
+        PlaneText(quizQuestionBank.length.toString() + ' perguntas offline, oito áreas de conhecimento e novas rondas aleatórias de dez perguntas.',
           textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
         const SizedBox(height: 9),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -232,20 +233,20 @@ class _QuizScreenState extends State<QuizScreen> {
       ]),
     ),
     const SizedBox(height: 17),
-    const Text('Escolhe o teu desafio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+    const PlaneText('Escolhe o teu desafio', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
     const SizedBox(height: 8),
     Wrap(spacing: 7, runSpacing: 7, children: _categories.map(_categoryChip).toList()),
     const SizedBox(height: 11),
-    Text(_available.length.toString() + ' perguntas disponíveis nesta categoria', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+    PlaneText(_available.length.toString() + ' perguntas disponíveis nesta categoria', style: const TextStyle(color: Colors.white70, fontSize: 11)),
     const SizedBox(height: 15),
     SizedBox(height: 56, child: FilledButton.icon(
       onPressed: _available.length < 10 ? null : _start,
       icon: const Icon(Icons.play_arrow_rounded),
-      label: const Text('Começar ronda · 10 perguntas'),
+      label: const PlaneText('Começar ronda · 10 perguntas'),
       style: FilledButton.styleFrom(backgroundColor: _gold, foregroundColor: _navy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), textStyle: const TextStyle(fontWeight: FontWeight.w900)),
     )),
     const SizedBox(height: 9),
-    const Text('As perguntas funcionam sem Internet. O teu XP e as conquistas sincronizam quando estiveres ligado.',
+    const PlaneText('As perguntas funcionam sem Internet. O teu XP e as conquistas sincronizam quando estiveres ligado.',
       textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 10, height: 1.4)),
   ]);
 
@@ -254,7 +255,7 @@ class _QuizScreenState extends State<QuizScreen> {
     final count = value == 'Todas' ? quizQuestionBank.length : quizQuestionBank.where((q) => q.category == value).length;
     return ChoiceChip(
       selected: selected, onSelected: (_) => setState(() => _category = value),
-      label: Text('$value · $count'), selectedColor: _gold, backgroundColor: _panel,
+      label: PlaneText('$value · $count'), selectedColor: _gold, backgroundColor: _panel,
       side: BorderSide(color: selected ? _gold : Colors.white24),
       labelStyle: TextStyle(color: selected ? _navy : Colors.white70, fontSize: 10, fontWeight: FontWeight.w800),
     );
@@ -265,11 +266,11 @@ class _QuizScreenState extends State<QuizScreen> {
     final correct = _selected == q.correctIndex;
     return ListView(padding: const EdgeInsets.fromLTRB(17, 3, 17, 23), children: [
       Row(children: [
-        Text(q.category.toUpperCase(), style: const TextStyle(color: _lightGold, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+        PlaneText(q.category.toUpperCase(), style: const TextStyle(color: _lightGold, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
         const Spacer(),
         if (_streak >= 2) _pill(Icons.local_fire_department_rounded, '$_streak seguidas'),
         const SizedBox(width: 7),
-        Text((_index + 1).toString() + '/10', style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w800)),
+        PlaneText((_index + 1).toString() + '/10', style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w800)),
       ]),
       const SizedBox(height: 9),
       ClipRRect(borderRadius: BorderRadius.circular(18), child: LinearProgressIndicator(value: (_index + 1) / 10, minHeight: 7, backgroundColor: Colors.white12, color: _gold)),
@@ -280,7 +281,7 @@ class _QuizScreenState extends State<QuizScreen> {
         child: Column(children: [
           const Icon(Icons.psychology_alt_rounded, color: _lightGold, size: 34),
           const SizedBox(height: 13),
-          Text(q.prompt, textAlign: TextAlign.center, style: const TextStyle(fontSize: 21, height: 1.35, fontWeight: FontWeight.w900)),
+          PlaneText(q.prompt, textAlign: TextAlign.center, style: const TextStyle(fontSize: 21, height: 1.35, fontWeight: FontWeight.w900)),
         ]),
       ),
       const SizedBox(height: 15),
@@ -293,17 +294,17 @@ class _QuizScreenState extends State<QuizScreen> {
             Row(children: [
               Icon(correct ? Icons.check_circle_rounded : Icons.lightbulb_rounded, color: correct ? _mint : _lightGold, size: 18),
               const SizedBox(width: 7),
-              Text(correct ? 'Excelente! +1 ponto' : 'Aprender também é ganhar', style: const TextStyle(fontWeight: FontWeight.w900)),
+              PlaneText(correct ? 'Excelente! +1 ponto' : 'Aprender também é ganhar', style: const TextStyle(fontWeight: FontWeight.w900)),
             ]),
             const SizedBox(height: 6),
-            Text(q.explanation, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+            PlaneText(q.explanation, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
           ]),
         ),
         const SizedBox(height: 13),
         SizedBox(height: 52, child: FilledButton(
           onPressed: _next,
           style: FilledButton.styleFrom(backgroundColor: _gold, foregroundColor: _navy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-          child: Text(_index == 9 ? 'Ver resultado' : 'Próxima pergunta', style: const TextStyle(fontWeight: FontWeight.w900)),
+          child: PlaneText(_index == 9 ? 'Ver resultado' : 'Próxima pergunta', style: const TextStyle(fontWeight: FontWeight.w900)),
         )),
       ],
     ]);
@@ -323,9 +324,9 @@ class _QuizScreenState extends State<QuizScreen> {
         )),
         child: Row(children: [
           Container(width: 29, height: 29, alignment: Alignment.center, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.08)),
-            child: Text(String.fromCharCode(65 + index), style: const TextStyle(fontWeight: FontWeight.w900, color: _lightGold))),
+            child: PlaneText(String.fromCharCode(65 + index), style: const TextStyle(fontWeight: FontWeight.w900, color: _lightGold))),
           const SizedBox(width: 11),
-          Expanded(child: Text(q.answers[index], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
+          Expanded(child: PlaneText(q.answers[index], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13))),
           if (revealed && correct) const Icon(Icons.check_circle_rounded, color: _mint),
           if (revealed && chosen && !correct) const Icon(Icons.close_rounded, color: Color(0xFFFFB1B1)),
         ]),
@@ -342,12 +343,12 @@ class _QuizScreenState extends State<QuizScreen> {
       child: Column(children: [
         Icon(pct >= 90 ? Icons.emoji_events_rounded : Icons.flight_takeoff_rounded, color: _lightGold, size: 58),
         const SizedBox(height: 10),
-        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+        PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
         const SizedBox(height: 7),
-        const Text('A tua ronda terminou. Cada resposta é mais uma descoberta.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const PlaneText('A tua ronda terminou. Cada resposta é mais uma descoberta.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12)),
         const SizedBox(height: 18),
-        Text('$_score / 10', style: const TextStyle(fontSize: 46, fontWeight: FontWeight.w900, color: _lightGold)),
-        const Text('respostas certas', style: TextStyle(color: Colors.white60, fontSize: 11)),
+        PlaneText('$_score / 10', style: const TextStyle(fontSize: 46, fontWeight: FontWeight.w900, color: _lightGold)),
+        const PlaneText('respostas certas', style: TextStyle(color: Colors.white60, fontSize: 11)),
         const SizedBox(height: 10),
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           _pill(Icons.local_fire_department_rounded, '$_bestStreak seguidas'),
@@ -356,20 +357,20 @@ class _QuizScreenState extends State<QuizScreen> {
         ]),
         if (_saving) ...[
           const SizedBox(height: 15), const LinearProgressIndicator(color: _gold, backgroundColor: Colors.white12),
-          const SizedBox(height: 6), const Text('A guardar os pontos…', style: TextStyle(color: Colors.white60, fontSize: 10)),
+          const SizedBox(height: 6), const PlaneText('A guardar os pontos…', style: TextStyle(color: Colors.white60, fontSize: 10)),
         ],
         if (_saveError != null) ...[
-          const SizedBox(height: 12), Text(_saveError!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFFFC0B6), fontSize: 11)),
-          OutlinedButton.icon(onPressed: _saving ? null : _saveResult, icon: const Icon(Icons.sync_rounded), label: const Text('Tentar sincronizar')),
+          const SizedBox(height: 12), PlaneText(_saveError!, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFFFFC0B6), fontSize: 11)),
+          OutlinedButton.icon(onPressed: _saving ? null : _saveResult, icon: const Icon(Icons.sync_rounded), label: const PlaneText('Tentar sincronizar')),
         ],
-        if (_saved) const Padding(padding: EdgeInsets.only(top: 12), child: Text('Os pontos foram guardados na tua conta.', style: TextStyle(color: _mint, fontWeight: FontWeight.w800, fontSize: 11))),
+        if (_saved) const Padding(padding: EdgeInsets.only(top: 12), child: PlaneText('Os pontos foram guardados na tua conta.', style: TextStyle(color: _mint, fontWeight: FontWeight.w800, fontSize: 11))),
         const SizedBox(height: 18),
         SizedBox(width: double.infinity, height: 52, child: FilledButton.icon(
-          onPressed: _start, icon: const Icon(Icons.replay_rounded), label: const Text('Jogar outra ronda'),
+          onPressed: _start, icon: const Icon(Icons.replay_rounded), label: const PlaneText('Jogar outra ronda'),
           style: FilledButton.styleFrom(backgroundColor: _gold, foregroundColor: _navy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
         )),
         TextButton(onPressed: () { setState(() { _started = false; _finished = false; _tab = 1; }); _refresh(silent: true); },
-          child: const Text('Ver as minhas missões', style: TextStyle(color: _lightGold))),
+          child: const PlaneText('Ver as minhas missões', style: TextStyle(color: _lightGold))),
       ]),
     )));
   }
@@ -381,11 +382,11 @@ class _QuizScreenState extends State<QuizScreen> {
       _levelCard(),
       const SizedBox(height: 14),
       Row(children: [
-        const Expanded(child: Text('Missões do piloto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
-        Text(claimed.toString() + '/' + missions.length.toString() + ' resgatadas', style: const TextStyle(color: _lightGold, fontSize: 10, fontWeight: FontWeight.w800)),
+        const Expanded(child: PlaneText('Missões do piloto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+        PlaneText(claimed.toString() + '/' + missions.length.toString() + ' resgatadas', style: const TextStyle(color: _lightGold, fontSize: 10, fontWeight: FontWeight.w800)),
       ]),
       const SizedBox(height: 5),
-      const Text('Cumpre objectivos reais no Paper Plane. Cada recompensa só pode ser resgatada uma vez.', style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.4)),
+      const PlaneText('Cumpre objectivos reais no Paper Plane. Cada recompensa só pode ser resgatada uma vez.', style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.4)),
       if (_loading && missions.isEmpty) const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator(color: _gold)))
       else if (_error != null && missions.isEmpty) _retry(_error!)
       else for (final m in missions) ...[const SizedBox(height: 9), _missionCard(m)],
@@ -401,22 +402,22 @@ class _QuizScreenState extends State<QuizScreen> {
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(17), border: Border.all(color: canClaim ? _gold.withOpacity(0.75) : Colors.white.withOpacity(0.1))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Expanded(child: Text(m['title']?.toString() ?? 'Missão', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13))), Text('+$xp XP', style: const TextStyle(color: _lightGold, fontWeight: FontWeight.w900, fontSize: 11))]),
+        Row(children: [Expanded(child: PlaneText(m['title']?.toString() ?? 'Missão', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13))), PlaneText('+$xp XP', style: const TextStyle(color: _lightGold, fontWeight: FontWeight.w900, fontSize: 11))]),
         const SizedBox(height: 4),
-        Text(m['description']?.toString() ?? '', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+        PlaneText(m['description']?.toString() ?? '', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         const SizedBox(height: 9),
         Row(children: [
           Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(20), child: LinearProgressIndicator(value: (current / max(1, target)).clamp(0, 1), minHeight: 7, backgroundColor: Colors.white12, color: claimed ? _mint : _gold))),
-          const SizedBox(width: 9), Text('$current/$target', style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800)),
+          const SizedBox(width: 9), PlaneText('$current/$target', style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800)),
         ]),
         const SizedBox(height: 8),
-        if (claimed) const Row(children: [Icon(Icons.check_circle_rounded, size: 16, color: _mint), SizedBox(width: 6), Text('Recompensa resgatada', style: TextStyle(color: _mint, fontSize: 10, fontWeight: FontWeight.w800))])
+        if (claimed) const Row(children: [Icon(Icons.check_circle_rounded, size: 16, color: _mint), SizedBox(width: 6), PlaneText('Recompensa resgatada', style: TextStyle(color: _mint, fontSize: 10, fontWeight: FontWeight.w800))])
         else if (canClaim) SizedBox(height: 37, child: FilledButton.icon(
           onPressed: () => _claim(m['key']?.toString() ?? ''), icon: const Icon(Icons.card_giftcard_rounded, size: 16),
-          label: const Text('Resgatar XP'),
+          label: const PlaneText('Resgatar XP'),
           style: FilledButton.styleFrom(backgroundColor: _gold, foregroundColor: _navy, textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
         ))
-        else const Text('Continua a jogar para desbloquear.', style: TextStyle(color: Colors.white38, fontSize: 10)),
+        else const PlaneText('Continua a jogar para desbloquear.', style: TextStyle(color: Colors.white38, fontSize: 10)),
       ]),
     );
   }
@@ -428,11 +429,11 @@ class _QuizScreenState extends State<QuizScreen> {
       _levelCard(),
       const SizedBox(height: 15),
       Row(children: [
-        const Expanded(child: Text('A tua colecção', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
-        Text(unlocked.toString() + '/' + badges.length.toString() + ' desbloqueados', style: const TextStyle(color: _lightGold, fontSize: 10, fontWeight: FontWeight.w800)),
+        const Expanded(child: PlaneText('A tua colecção', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+        PlaneText(unlocked.toString() + '/' + badges.length.toString() + ' desbloqueados', style: const TextStyle(color: _lightGold, fontSize: 10, fontWeight: FontWeight.w800)),
       ]),
       const SizedBox(height: 5),
-      const Text('Os crachás são atribuídos por acções reais na aplicação.', style: TextStyle(color: Colors.white60, fontSize: 11)),
+      const PlaneText('Os crachás são atribuídos por acções reais na aplicação.', style: TextStyle(color: Colors.white60, fontSize: 11)),
       if (_loading && badges.isEmpty) const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator(color: _gold)))
       else if (_error != null && badges.isEmpty) _retry(_error!)
       else Wrap(spacing: 9, runSpacing: 9, children: [
@@ -450,11 +451,11 @@ class _QuizScreenState extends State<QuizScreen> {
         Container(width: 48, height: 48, decoration: BoxDecoration(shape: BoxShape.circle, color: unlocked ? _gold.withOpacity(0.15) : Colors.black.withOpacity(0.16), border: Border.all(color: unlocked ? _gold : Colors.white24)),
           child: Icon(_badgeIcon(b['icon']?.toString()), color: unlocked ? _lightGold : Colors.white30, size: 24)),
         const SizedBox(height: 8),
-        Text(b['title']?.toString() ?? 'Crachá', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: unlocked ? Colors.white : Colors.white54)),
+        PlaneText(b['title']?.toString() ?? 'Crachá', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: unlocked ? Colors.white : Colors.white54)),
         const SizedBox(height: 4),
-        Text(b['description']?.toString() ?? '', textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white54, height: 1.35)),
+        PlaneText(b['description']?.toString() ?? '', textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white54, height: 1.35)),
         const SizedBox(height: 5),
-        Text(unlocked ? 'DESBLOQUEADO' : 'POR DESBLOQUEAR', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.4, color: unlocked ? _mint : Colors.white30)),
+        PlaneText(unlocked ? 'DESBLOQUEADO' : 'POR DESBLOQUEAR', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.4, color: unlocked ? _mint : Colors.white30)),
       ]),
     );
   }
@@ -473,9 +474,9 @@ class _QuizScreenState extends State<QuizScreen> {
   Widget _retry(String message) => Container(
     padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(16)),
     child: Column(children: [
-      Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      PlaneText(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 11)),
       const SizedBox(height: 8),
-      OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded), label: const Text('Tentar novamente')),
+      OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded), label: const PlaneText('Tentar novamente')),
     ]),
   );
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
 
@@ -77,7 +78,7 @@ class _SupportScreenState extends State<SupportScreen> {
     final details = _details.text.trim();
     if (subject.length < 3 || details.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Preenche o assunto e descreve o problema com pelo menos 10 caracteres.')),
+        const SnackBar(content: PlaneText('Preenche o assunto e descreve o problema com pelo menos 10 caracteres.')),
       );
       return;
     }
@@ -93,7 +94,7 @@ class _SupportScreenState extends State<SupportScreen> {
       _details.clear();
       FocusScope.of(context).unfocus();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pedido enviado. Podes acompanhar o estado nesta página.')),
+        const SnackBar(content: PlaneText('Pedido enviado. Podes acompanhar o estado nesta página.')),
       );
       await _loadTickets();
     } catch (error) {
@@ -101,7 +102,7 @@ class _SupportScreenState extends State<SupportScreen> {
       final message = error is PaperPlaneApiException
           ? error.message
           : 'Não foi possível enviar o pedido. Verifica a ligação e tenta novamente.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -127,7 +128,7 @@ class _SupportScreenState extends State<SupportScreen> {
       backgroundColor: _navy,
       appBar: AppBar(
         backgroundColor: _navy,
-        title: const Text('Ajuda e suporte', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const PlaneText('Ajuda e suporte', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
       body: SafeArea(
         child: RefreshIndicator(
@@ -147,29 +148,29 @@ class _SupportScreenState extends State<SupportScreen> {
                 child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Icon(Icons.support_agent_rounded, color: _goldLight, size: 34),
                   SizedBox(height: 10),
-                  Text('Estamos aqui para ajudar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                  PlaneText('Estamos aqui para ajudar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                   SizedBox(height: 6),
-                  Text(
+                  PlaneText(
                     'Comunica falhas, dificuldades com a conta ou entrega, questões de segurança e sugestões. Não incluas palavras-passe nem documentos pessoais.',
                     style: TextStyle(color: Colors.white70, height: 1.45),
                   ),
                 ]),
               ),
               const SizedBox(height: 18),
-              const Text('Novo pedido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const PlaneText('Novo pedido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
                 value: _category,
                 isExpanded: true,
                 dropdownColor: _panel,
-                decoration: const InputDecoration(
-                  labelText: 'Categoria',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Categoria'),
                   filled: true,
                   fillColor: _panel,
                   border: OutlineInputBorder(),
                 ),
                 items: _supportCategories.entries
-                    .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                    .map((entry) => DropdownMenuItem(value: entry.key, child: PlaneText(entry.value)))
                     .toList(),
                 onChanged: _sending ? null : (value) => setState(() => _category = value ?? _category),
               ),
@@ -179,8 +180,8 @@ class _SupportScreenState extends State<SupportScreen> {
                 enabled: !_sending,
                 maxLength: 100,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Assunto',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Assunto'),
                   filled: true,
                   fillColor: _panel,
                   border: OutlineInputBorder(),
@@ -194,9 +195,9 @@ class _SupportScreenState extends State<SupportScreen> {
                 maxLines: 7,
                 maxLength: 1200,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Descreve o problema',
-                  hintText: 'O que aconteceu? Em que ecrã? O que esperavas que acontecesse?',
+                decoration: InputDecoration(
+                  labelText: PaperPlaneLocale.translate('Descreve o problema'),
+                  hintText: PaperPlaneLocale.translate('O que aconteceu? Em que ecrã? O que esperavas que acontecesse?'),
                   filled: true,
                   fillColor: _panel,
                   border: OutlineInputBorder(),
@@ -211,7 +212,7 @@ class _SupportScreenState extends State<SupportScreen> {
                   icon: _sending
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.send_rounded),
-                  label: Text(_sending ? 'A enviar pedido…' : 'Enviar pedido'),
+                  label: PlaneText(_sending ? 'A enviar pedido…' : 'Enviar pedido'),
                   style: FilledButton.styleFrom(
                     backgroundColor: _gold,
                     foregroundColor: _navy,
@@ -220,7 +221,7 @@ class _SupportScreenState extends State<SupportScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text('Os teus pedidos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const PlaneText('Os teus pedidos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               if (_loading)
                 const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: _gold)))
@@ -240,13 +241,13 @@ class _SupportScreenState extends State<SupportScreen> {
                     ),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [
-                        Expanded(child: Text(ticket['subject']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w800))),
-                        Text(_statusLabel(ticket['status']?.toString()), style: TextStyle(color: _statusColor(ticket['status']?.toString()), fontSize: 11, fontWeight: FontWeight.w700)),
+                        Expanded(child: PlaneText(ticket['subject']?.toString() ?? '', style: const TextStyle(fontWeight: FontWeight.w800))),
+                        PlaneText(_statusLabel(ticket['status']?.toString()), style: TextStyle(color: _statusColor(ticket['status']?.toString()), fontSize: 11, fontWeight: FontWeight.w700)),
                       ]),
                       const SizedBox(height: 5),
-                      Text(_supportCategories[ticket['category']?.toString()] ?? 'Outro assunto', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                      PlaneText(_supportCategories[ticket['category']?.toString()] ?? 'Outro assunto', style: const TextStyle(color: Colors.white60, fontSize: 12)),
                       const SizedBox(height: 7),
-                      Text(ticket['details']?.toString() ?? '', style: const TextStyle(color: Colors.white70, height: 1.4)),
+                      PlaneText(ticket['details']?.toString() ?? '', style: const TextStyle(color: Colors.white70, height: 1.4)),
                     ]),
                   ),
                 ],
@@ -268,10 +269,10 @@ class _TicketNotice extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(15)),
         child: Column(children: [
-          Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+          PlaneText(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
           if (onRetry != null) ...[
             const SizedBox(height: 8),
-            TextButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+            TextButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
           ],
         ]),
       );

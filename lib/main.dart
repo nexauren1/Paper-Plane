@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
 import 'services/paper_plane_notifications.dart';
 import 'services/paper_plane_analytics.dart';
+import 'services/paper_plane_localization.dart';
 import 'screens/account_screen.dart';
 import 'screens/pilot_profile_setup_screen.dart';
 import 'screens/first_flight_workshop_screen.dart';
@@ -94,7 +97,12 @@ class _PaperPlaneAppState extends State<PaperPlaneApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return ValueListenableBuilder<Locale>(
+      valueListenable: PaperPlaneLocale.current,
+      builder: (context, locale, _) => MaterialApp(
+      locale: locale,
+      supportedLocales: const [Locale('pt'), Locale('en'), Locale('es'), Locale('fr'), Locale('de')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       scaffoldMessengerKey: PaperPlaneNotifications.scaffoldMessengerKey,
       title: 'Paper Plane',
       debugShowCheckedModeBanner: false,
@@ -127,6 +135,7 @@ class _PaperPlaneAppState extends State<PaperPlaneApp> {
         ),
       ),
       home: const LaunchRouter(),
+    ),
     );
   }
 }
@@ -481,7 +490,7 @@ class GoldButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[Icon(icon, size: 22), const SizedBox(width: 10)],
-            Text(label),
+            PlaneText(label),
           ],
         ),
       ),
@@ -503,7 +512,7 @@ class SoftButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon ?? Icons.arrow_forward_rounded, size: 19),
-        label: Text(label),
+        label: PlaneText(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: ppGoldBright,
           side: BorderSide(color: ppGold.withOpacity(0.48)),
@@ -525,7 +534,7 @@ class SectionTitle extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 12, top: 18),
         child: Row(
           children: [
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800))),
+            Expanded(child: PlaneText(text, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800))),
             if (trailing != null) trailing!,
           ],
         ),
@@ -555,7 +564,7 @@ class ScreenFrame extends StatelessWidget {
                       icon: const Icon(Icons.arrow_back_ios_new_rounded, color: ppGoldBright, size: 20),
                     ),
                     Expanded(
-                      child: Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      child: PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                     ),
                     SizedBox(width: 44, child: action ?? const SizedBox.shrink()),
                   ],
@@ -620,6 +629,9 @@ class _LaunchRouterState extends State<LaunchRouter> {
           .getProfile()
           .timeout(const Duration(seconds: 8));
       final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+      PaperPlaneLocale.setLanguage(
+        pilot['preferred_language']?.toString() ?? pilot['language']?.toString(),
+      );
       // A completed profile is enough to enter the app. The first-flight
       // workshop belongs to registration, never to every app reopening.
       if (pilot['profile_completed'] == 1) return const MainShell();
@@ -706,13 +718,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       const Spacer(flex: 2),
                       const AnimatedPlane(width: 245, color: Colors.white),
                       const SizedBox(height: 36),
-                      const Text(
+                      const PlaneText(
                         'PAPER PLANE',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 34, letterSpacing: 3.5, fontWeight: FontWeight.w400),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
+                      const PlaneText(
                         'Send a message to a stranger',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 17, color: Colors.white70),
@@ -720,7 +732,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       const Spacer(flex: 3),
                       GoldButton(label: 'Start Flying', icon: Icons.flight_takeoff_rounded, onPressed: _start, height: 66),
                       const SizedBox(height: 18),
-                      const Text('Um pensamento. Um avião. O mundo inteiro.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                      const PlaneText('Um pensamento. Um avião. O mundo inteiro.', style: TextStyle(color: Colors.white38, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -885,7 +897,7 @@ class _MainShellState extends State<MainShell> {
               const SizedBox(height: 3),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(
+                child: PlaneText(
                   label,
                   maxLines: 1,
                   style: TextStyle(
@@ -1008,20 +1020,20 @@ class _HomePageState extends State<HomePage> {
           Row(children: [
             const Icon(Icons.send_rounded, color: ppGold, size: 22),
             const SizedBox(width: 8),
-            const Text('PAPER PLANE', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.w800, color: ppGoldBright)),
+            const PlaneText('PAPER PLANE', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.w800, color: ppGoldBright)),
             const Spacer(),
             IconButton(onPressed: widget.onOpenInbox, icon: const Icon(Icons.notifications_none_rounded, color: ppGoldBright)),
             IconButton(onPressed: () => ppPush(context, const ProfilePage()), icon: const Icon(Icons.account_circle_outlined, color: ppGoldBright)),
           ]),
           const SizedBox(height: 12),
-          Text('Olá, ' + (name == null || name.isEmpty ? 'Piloto' : name), style: const TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
+          PlaneText('Olá, ' + (name == null || name.isEmpty ? 'Piloto' : name), style: const TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
           if (handle != null && handle.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('@' + handle, style: const TextStyle(color: ppGoldBright, fontSize: 13)),
+              child: PlaneText('@' + handle, style: const TextStyle(color: ppGoldBright, fontSize: 13)),
             ),
           const SizedBox(height: 5),
-          const Text('O teu correio digital está ligado ao mundo.', style: TextStyle(color: Color(0xFFB8C8E5), fontSize: 14)),
+          const PlaneText('O teu correio digital está ligado ao mundo.', style: TextStyle(color: Color(0xFFB8C8E5), fontSize: 14)),
           const SizedBox(height: 19),
           if (_loading)
             const Center(child: Padding(padding: EdgeInsets.all(26), child: CircularProgressIndicator(color: ppGold)))
@@ -1030,9 +1042,9 @@ class _HomePageState extends State<HomePage> {
               child: Column(children: [
                 const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 30),
                 const SizedBox(height: 8),
-                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 9),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]),
             )
           else ...[
@@ -1040,9 +1052,9 @@ class _HomePageState extends State<HomePage> {
               GlassPanel(
                 highlight: true,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('Completa o teu perfil de copiloto', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+                  const PlaneText('Completa o teu perfil de copiloto', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
                   const SizedBox(height: 6),
-                  const Text('Escolhe o teu nome único, ano de nascimento e país para preparar a rota.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  const PlaneText('Escolhe o teu nome único, ano de nascimento e país para preparar a rota.', style: TextStyle(color: Colors.white70, fontSize: 12)),
                   const SizedBox(height: 10),
                   GoldButton(
                     label: 'Completar perfil',
@@ -1063,10 +1075,10 @@ class _HomePageState extends State<HomePage> {
                   const Row(children: [
                     Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 26),
                     SizedBox(width: 10),
-                    Expanded(child: Text('O teu primeiro avião está pronto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+                    Expanded(child: PlaneText('O teu primeiro avião está pronto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
                   ]),
                   const SizedBox(height: 6),
-                  const Text('O teu primeiro avião está guardado no servidor e pronto para a viagem. Retoma a oficina para rever o desenho e lança-o quando estiveres preparado.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
+                  const PlaneText('O teu primeiro avião está guardado no servidor e pronto para a viagem. Retoma a oficina para rever o desenho e lança-o quando estiveres preparado.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
                   const SizedBox(height: 12),
                   GoldButton(
                     label: 'Lançar o primeiro avião',
@@ -1100,7 +1112,7 @@ class _HomePageState extends State<HomePage> {
               child: OutlinedButton.icon(
                 onPressed: widget.onOpenInbox,
                 icon: const Icon(Icons.markunread_mailbox_outlined),
-                label: Text(_unread == 0 ? 'Abrir caixa de entrada' : 'Abrir ' + _unread.toString() + ' carta(s) nova(s)'),
+                label: PlaneText(_unread == 0 ? 'Abrir caixa de entrada' : 'Abrir ' + _unread.toString() + ' carta(s) nova(s)'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: ppGoldBright,
                   side: BorderSide(color: ppGold.withOpacity(0.58)),
@@ -1111,7 +1123,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SectionTitle('Acompanhar voos'),
             if (_sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).isEmpty)
-              const GlassPanel(child: Text('Não tens aviões em viagem neste momento.', style: TextStyle(color: Colors.white70)))
+              const GlassPanel(child: PlaneText('Não tens aviões em viagem neste momento.', style: TextStyle(color: Colors.white70)))
             else
               for (final plane in _sent.where((item) => ['QUEUED', 'FLYING'].contains(item['status'])).take(3)) ...[
                 const SizedBox(height: 9),
@@ -1122,7 +1134,7 @@ class _HomePageState extends State<HomePage> {
                     child: Row(children: [
                       const Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 27),
                       const SizedBox(width: 11),
-                      Expanded(child: Text(
+                      Expanded(child: PlaneText(
                         plane['status'] == 'QUEUED' ? 'À procura de destinatário' : 'Em viagem · ' + (plane['flight_distance_km']?.toString() ?? 'a calcular') + ' km',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       )),
@@ -1132,7 +1144,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             const SizedBox(height: 10),
-            const Text('Os totais e os estados acima são carregados da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+            const PlaneText('Os totais e os estados acima são carregados da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
           ],
         ],
       ),
@@ -1144,9 +1156,9 @@ class _HomePageState extends State<HomePage> {
     child: Column(children: [
       Icon(icon, color: ppGoldBright),
       const SizedBox(height: 5),
-      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+      PlaneText(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.white70)),
       const SizedBox(height: 1),
-      Text(value, style: const TextStyle(fontSize: 27, color: ppGoldBright, fontWeight: FontWeight.w800)),
+      PlaneText(value, style: const TextStyle(fontSize: 27, color: ppGoldBright, fontWeight: FontWeight.w800)),
     ]),
   );
 }
@@ -1190,12 +1202,12 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
 
   Future<void> _send() async {
     if (_message.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Escreve uma mensagem antes de lançar o avião.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('Escreve uma mensagem antes de lançar o avião.')));
       return;
     }
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não foi possível iniciar: liga a configuração Firebase e o servidor Cloudflare.')),
+        const SnackBar(content: PlaneText('Não foi possível iniciar: liga a configuração Firebase e o servidor Cloudflare.')),
       );
       return;
     }
@@ -1251,11 +1263,11 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
         if (published) {
           PaperPlaneNotifications.onOpenOpenSky?.call();
           PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
-            const SnackBar(content: Text('Avião publicado no Open Sky.')),
+            const SnackBar(content: PlaneText('Avião publicado no Open Sky.')),
           );
         } else {
           PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
-            const SnackBar(content: Text('Avião recebido e colocado em revisão de segurança. Só será mostrado no Open Sky depois de aprovado.')),
+            const SnackBar(content: PlaneText('Avião recebido e colocado em revisão de segurança. Só será mostrado no Open Sky depois de aprovado.')),
           );
         }
         return;
@@ -1267,7 +1279,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
       final message = error is PaperPlaneApiException
           ? error.message
           : 'Não foi possível lançar o avião. Verifica a ligação e tenta novamente.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     }
   }
 
@@ -1300,9 +1312,9 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                 left: 18,
                 bottom: 17,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-                  Text('PREPARA A TUA MENSAGEM', style: TextStyle(color: ppGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                  PlaneText('PREPARA A TUA MENSAGEM', style: TextStyle(color: ppGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
                   SizedBox(height: 5),
-                  Text('Uma ideia. Um voo. Outro mundo.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  PlaneText('Uma ideia. Um voo. Outro mundo.', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ]),
               ),
               Positioned(
@@ -1345,8 +1357,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                     maxLines: null,
                     expands: true,
                     style: const TextStyle(color: ppInk, fontSize: 18, height: 1.45),
-                    decoration: const InputDecoration(
-                      hintText: 'Escreve algo gentil...',
+                    decoration: InputDecoration(
+                      hintText: PaperPlaneLocale.translate('Escreve algo gentil...'),
                       hintStyle: TextStyle(color: Color(0xFF77736B)),
                       border: InputBorder.none,
                       counterText: '',
@@ -1357,7 +1369,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                   alignment: Alignment.bottomRight,
                   child: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _message,
-                    builder: (_, value, __) => Text(
+                    builder: (_, value, __) => PlaneText(
                       value.text.length.toString() + '/200',
                       style: const TextStyle(color: Color(0xFF8A7856), fontWeight: FontWeight.w700),
                     ),
@@ -1368,16 +1380,16 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
           ),
           const SizedBox(height: 10),
           Row(children: [
-            const Expanded(child: Text('Expressa-te com um símbolo', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700))),
+            const Expanded(child: PlaneText('Expressa-te com um símbolo', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700))),
             TextButton(
               onPressed: () => _insertEmoji(' ✨'),
-              child: const Text('Adicionar ✨', style: TextStyle(color: ppGoldBright, fontSize: 11)),
+              child: const PlaneText('Adicionar ✨', style: TextStyle(color: ppGoldBright, fontSize: 11)),
             ),
           ]),
           Wrap(
             spacing: 7,
             children: ['😊', '💌', '🌍', '❤️', '🌙', '🌸'].map((emoji) => ActionChip(
-              label: Text(emoji, style: const TextStyle(fontSize: 17)),
+              label: PlaneText(emoji, style: const TextStyle(fontSize: 17)),
               backgroundColor: const Color(0xFF172844),
               side: BorderSide(color: ppGold.withOpacity(0.22)),
               onPressed: () => _insertEmoji(emoji),
@@ -1391,7 +1403,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
               final selected = _mood == mood;
               return ChoiceChip(
                 selected: selected,
-                label: Text(mood),
+                label: PlaneText(mood),
                 avatar: Icon(_moodIcon(mood), size: 17),
                 onSelected: (_) => setState(() => _mood = mood),
                 selectedColor: ppGold.withOpacity(0.22),
@@ -1405,8 +1417,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
             padding: const EdgeInsets.all(8),
             child: SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'Público', label: Text('Público'), icon: Icon(Icons.public)),
-                ButtonSegment(value: 'Aleatório 1-para-1', label: Text('Aleatório'), icon: Icon(Icons.person_outline)),
+                ButtonSegment(value: 'Público', label: PlaneText('Público'), icon: Icon(Icons.public)),
+                ButtonSegment(value: 'Aleatório 1-para-1', label: PlaneText('Aleatório'), icon: Icon(Icons.person_outline)),
               ],
               selected: {_visibility},
               onSelectionChanged: (value) => setState(() => _visibility = value.first),
@@ -1422,8 +1434,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.public, color: ppGoldBright, size: 30),
-              title: const Text('Destino'),
-              subtitle: Text(_destination, style: const TextStyle(color: Colors.white70)),
+              title: const PlaneText('Destino'),
+              subtitle: PlaneText(_destination, style: const TextStyle(color: Colors.white70)),
               trailing: const Icon(Icons.chevron_right, color: ppGold),
               onTap: _chooseDestination,
             ),
@@ -1434,8 +1446,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               activeColor: ppGold,
-              title: const Text('Permitir resposta'),
-              subtitle: const Text('A pessoa poderá responder com outro avião.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              title: const PlaneText('Permitir resposta'),
+              subtitle: const PlaneText('A pessoa poderá responder com outro avião.', style: TextStyle(color: Colors.white60, fontSize: 12)),
               value: _allowReply,
               onChanged: (value) => setState(() => _allowReply = value),
             ),
@@ -1443,7 +1455,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
           const SizedBox(height: 18),
           GoldButton(label: 'Lançar avião', icon: Icons.send_rounded, onPressed: _send, height: 64),
           const SizedBox(height: 9),
-          const Text('Máximo de 200 caracteres. O servidor gere a procura de destinatário, a rota e a entrega.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const PlaneText('Máximo de 200 caracteres. O servidor gere a procura de destinatário, a rota e a entrega.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
         ],
       ),
     );
@@ -1465,11 +1477,11 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
       showDragHandle: true,
       builder: (context) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const ListTile(title: Text('Escolher destino', style: TextStyle(fontWeight: FontWeight.w800))),
-          ListTile(leading: const Icon(Icons.public, color: ppGold), title: const Text('Qualquer lugar do mundo'), onTap: () => Navigator.pop(context, 'Qualquer lugar do mundo')),
-          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const Text('Japão'), onTap: () => Navigator.pop(context, 'Japão')),
-          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const Text('Portugal'), onTap: () => Navigator.pop(context, 'Portugal')),
-          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const Text('Brasil'), onTap: () => Navigator.pop(context, 'Brasil')),
+          const ListTile(title: PlaneText('Escolher destino', style: TextStyle(fontWeight: FontWeight.w800))),
+          ListTile(leading: const Icon(Icons.public, color: ppGold), title: const PlaneText('Qualquer lugar do mundo'), onTap: () => Navigator.pop(context, 'Qualquer lugar do mundo')),
+          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const PlaneText('Japão'), onTap: () => Navigator.pop(context, 'Japão')),
+          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const PlaneText('Portugal'), onTap: () => Navigator.pop(context, 'Portugal')),
+          ListTile(leading: const Icon(Icons.flag_outlined, color: ppGold), title: const PlaneText('Brasil'), onTap: () => Navigator.pop(context, 'Brasil')),
         ]),
       ),
     );
@@ -1505,9 +1517,9 @@ class _LaunchDialogState extends State<LaunchDialog> with SingleTickerProviderSt
             ),
           ),
           const SizedBox(height: 22),
-          const Text('A preparar o teu avião...', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          const PlaneText('A preparar o teu avião...', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
           const SizedBox(height: 8),
-          const Text('A dobrar a mensagem e preparar o voo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const PlaneText('A dobrar a mensagem e preparar o voo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 22),
           const LinearProgressIndicator(color: ppGold, backgroundColor: Colors.white12),
         ]),
@@ -2366,14 +2378,14 @@ class _FlightScreenState extends State<FlightScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Cancelar avião?'),
-        content: const Text('O servidor vai parar a procura ou o voo antes da entrega.'),
+        title: const PlaneText('Cancelar avião?'),
+        content: const PlaneText('O servidor vai parar a procura ou o voo antes da entrega.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Continuar voo')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Continuar voo')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB94E64)),
-            child: const Text('Cancelar voo'),
+            child: const PlaneText('Cancelar voo'),
           ),
         ],
       ),
@@ -2383,11 +2395,11 @@ class _FlightScreenState extends State<FlightScreen> {
       await PaperPlaneApi.instance.cancelAirplane(widget.airplaneId);
       if (!mounted) return;
       await _refresh();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O avião foi cancelado.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('O avião foi cancelado.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível cancelar o avião.'),
+        content: PlaneText(error is PaperPlaneApiException ? error.message : 'Não foi possível cancelar o avião.'),
       ));
     }
   }
@@ -2397,14 +2409,14 @@ class _FlightScreenState extends State<FlightScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Eliminar do histórico?'),
-        content: const Text('O avião deixa de aparecer no teu histórico. A cópia já entregue à outra pessoa mantém-se.'),
+        title: const PlaneText('Eliminar do histórico?'),
+        content: const PlaneText('O avião deixa de aparecer no teu histórico. A cópia já entregue à outra pessoa mantém-se.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Manter')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Manter')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB94E64)),
-            child: const Text('Eliminar'),
+            child: const PlaneText('Eliminar'),
           ),
         ],
       ),
@@ -2417,7 +2429,7 @@ class _FlightScreenState extends State<FlightScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar o avião.'),
+        content: PlaneText(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar o avião.'),
       ));
     }
   }
@@ -2501,12 +2513,12 @@ class _FlightScreenState extends State<FlightScreen> {
 
     return ScreenFrame(
       title: 'O teu avião está a voar',
-      action: IconButton(onPressed: _refresh, tooltip: 'Atualizar voo', icon: const Icon(Icons.refresh_rounded, color: ppGoldBright)),
+      action: IconButton(onPressed: _refresh, tooltip: PaperPlaneLocale.translate('Atualizar voo'), icon: const Icon(Icons.refresh_rounded, color: ppGoldBright)),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
         children: [
           const SizedBox(height: 5),
-          Text(
+          PlaneText(
             _loading ? 'A contactar o servidor…' : moderationPending
                 ? 'A preparar o teu avião'
                 : searching ? 'À procura de alguém para receber a tua carta'
@@ -2541,9 +2553,9 @@ class _FlightScreenState extends State<FlightScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('PARTIDA', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                  const PlaneText('PARTIDA', style: TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1)),
                   const SizedBox(height: 4),
-                  Text(
+                  PlaneText(
                     _countryFlag(route['originCountry']?.toString()) + ' ' + (originName?.trim().isNotEmpty == true ? originName! : _countryName(route['originCountry']?.toString())),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2555,9 +2567,9 @@ class _FlightScreenState extends State<FlightScreen> {
                   child: Icon(Icons.flight_rounded, color: ppGoldBright, size: 22),
                 ),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  const Text('DESTINO LOCALIZADO', style: TextStyle(color: Color(0xFFFF8393), fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
+                  const PlaneText('DESTINO LOCALIZADO', style: TextStyle(color: Color(0xFFFF8393), fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.7)),
                   const SizedBox(height: 4),
-                  Text(
+                  PlaneText(
                     _countryFlag(route['destinationCountry']?.toString()) + ' ' + (destinationName?.trim().isNotEmpty == true ? destinationName! : _countryName(route['destinationCountry']?.toString())),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -2576,9 +2588,9 @@ class _FlightScreenState extends State<FlightScreen> {
               child: Column(children: [
                 const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 30),
                 const SizedBox(height: 8),
-                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 10),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]),
             )
           else if (moderationPending)
@@ -2587,9 +2599,9 @@ class _FlightScreenState extends State<FlightScreen> {
               child: Column(children: [
                 const Icon(Icons.shield_outlined, color: ppGoldBright, size: 34),
                 const SizedBox(height: 8),
-                const Text('A tua carta está guardada em segurança.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
+                const PlaneText('A tua carta está guardada em segurança.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 7),
-                const Text('O serviço de segurança está a recuperar. O servidor vai tentar novamente automaticamente; não precisas de escrever outra mensagem nem repetir o envio.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
+                const PlaneText('O serviço de segurança está a recuperar. O servidor vai tentar novamente automaticamente; não precisas de escrever outra mensagem nem repetir o envio.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
                 const SizedBox(height: 10),
                 const LinearProgressIndicator(color: ppGold, backgroundColor: Colors.white12),
               ]),
@@ -2600,16 +2612,16 @@ class _FlightScreenState extends State<FlightScreen> {
               child: Column(children: [
                 const Icon(Icons.radar_rounded, color: ppGoldBright, size: 34),
                 const SizedBox(height: 7),
-                const Text('O avião continua à procura de um destinatário elegível.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
+                const PlaneText('O avião continua à procura de um destinatário elegível.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
-                Text(
+                PlaneText(
                   matchingDescription,
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
                 ),
                 if (matchingInfo != null && eligibleRecipients > 0) ...[
                   const SizedBox(height: 8),
-                  Text(
+                  PlaneText(
                     '$eligibleRecipients destinatário(s) elegível(is) neste momento',
                     style: const TextStyle(color: ppGoldBright, fontSize: 11, fontWeight: FontWeight.w800),
                   ),
@@ -2633,9 +2645,9 @@ class _FlightScreenState extends State<FlightScreen> {
                 ),
                 const SizedBox(height: 9),
                 Row(children: [
-                  Text((_progress * 100).round().toString() + '% percorrido', style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
+                  PlaneText((_progress * 100).round().toString() + '% percorrido', style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
                   const Spacer(),
-                  Text(status == 'FLYING' ? 'Chegada em ' + _flightTimeLeft(flight?['estimatedArrivalAt']?.toString()) : 'Chegada confirmada', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                  PlaneText(status == 'FLYING' ? 'Chegada em ' + _flightTimeLeft(flight?['estimatedArrivalAt']?.toString()) : 'Chegada confirmada', style: const TextStyle(color: Colors.white70, fontSize: 11)),
                 ]),
               ]),
             ),
@@ -2643,29 +2655,29 @@ class _FlightScreenState extends State<FlightScreen> {
           if (route != null)
             GlassPanel(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Percurso do avião', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
+                const PlaneText('Percurso do avião', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Text(_countryFlag(route['originCountry']?.toString()), style: const TextStyle(fontSize: 24)),
+                  PlaneText(_countryFlag(route['originCountry']?.toString()), style: const TextStyle(fontSize: 24)),
                   const SizedBox(width: 9),
-                  Expanded(child: Text(_countryName(route['originCountry']?.toString()))),
+                  Expanded(child: PlaneText(_countryName(route['originCountry']?.toString()))),
                   const Icon(Icons.flight_takeoff_rounded, color: ppGold),
                 ]),
                 const Padding(padding: EdgeInsets.symmetric(vertical: 7), child: Divider(color: Colors.white12)),
                 Row(children: [
-                  Text(_countryFlag(route['destinationCountry']?.toString()), style: const TextStyle(fontSize: 24)),
+                  PlaneText(_countryFlag(route['destinationCountry']?.toString()), style: const TextStyle(fontSize: 24)),
                   const SizedBox(width: 9),
-                  Expanded(child: Text(_countryName(route['destinationCountry']?.toString()))),
+                  Expanded(child: PlaneText(_countryName(route['destinationCountry']?.toString()))),
                   const Icon(Icons.location_on_outlined, color: ppGold),
                 ]),
               ]),
             ),
           if (status == 'HELD_REVIEW')
-            const GlassPanel(child: Text('A mensagem está retida para revisão de segurança. Não será entregue até a revisão terminar.', style: TextStyle(color: Colors.white70))),
+            const GlassPanel(child: PlaneText('A mensagem está retida para revisão de segurança. Não será entregue até a revisão terminar.', style: TextStyle(color: Colors.white70))),
           if (['DELIVERED', 'READ', 'RESPONDED'].contains(status))
-            const GlassPanel(child: Text('Entrega registada no servidor. O estado da carta será atualizado quando o destinatário a abrir ou responder.', style: TextStyle(color: Colors.white70))),
+            const GlassPanel(child: PlaneText('Entrega registada no servidor. O estado da carta será atualizado quando o destinatário a abrir ou responder.', style: TextStyle(color: Colors.white70))),
           const SizedBox(height: 14),
-          const Text('O globo mostra uma rota digital estimada entre os centros geográficos dos países. O avião acompanha o progresso guardado pelo servidor; não usa GPS nem representa a posição de uma aeronave física.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45)),
+          const PlaneText('O globo mostra uma rota digital estimada entre os centros geográficos dos países. O avião acompanha o progresso guardado pelo servidor; não usa GPS nem representa a posição de uma aeronave física.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.45)),
           const SizedBox(height: 14),
           if (['QUEUED', 'FLYING'].contains(status))
             SoftButton(label: 'Cancelar voo', icon: Icons.cancel_outlined, onPressed: _cancelFlight),
@@ -2681,8 +2693,8 @@ class _FlightScreenState extends State<FlightScreen> {
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Icon(icon, color: ppGoldBright),
       const SizedBox(height: 5),
-      Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
-      Text(value, style: const TextStyle(color: ppGoldBright, fontSize: 21, fontWeight: FontWeight.w800)),
+      PlaneText(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+      PlaneText(value, style: const TextStyle(color: ppGoldBright, fontSize: 21, fontWeight: FontWeight.w800)),
     ]),
   );
 }
@@ -2752,9 +2764,9 @@ class _InboxPageState extends State<InboxPage> {
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(20, 21, 20, 24),
         children: [
-          const Text('A tua caixa', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
+          const PlaneText('A tua caixa', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
           const SizedBox(height: 5),
-          const Text('Correio sincronizado com o servidor', style: TextStyle(color: Colors.white70)),
+          const PlaneText('Correio sincronizado com o servidor', style: TextStyle(color: Colors.white70)),
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
@@ -2765,15 +2777,15 @@ class _InboxPageState extends State<InboxPage> {
               child: Column(children: [
                 const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 32),
                 const SizedBox(height: 8),
-                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 10),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]),
             )
           else ...[
             const SectionTitle('Recebidos'),
             if (_received.isEmpty)
-              const GlassPanel(child: Text('Ainda não recebeste aviões. Quando uma carta chegar, aparecerá aqui.', style: TextStyle(color: Colors.white70)))
+              const GlassPanel(child: PlaneText('Ainda não recebeste aviões. Quando uma carta chegar, aparecerá aqui.', style: TextStyle(color: Colors.white70)))
             else
               for (final plane in _received) ...[
                 const SizedBox(height: 10),
@@ -2793,11 +2805,11 @@ class _InboxPageState extends State<InboxPage> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('Alguém em ' + _countryName(plane['sender_country_code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800)),
+                        PlaneText('Alguém em ' + _countryName(plane['sender_country_code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        const Text('Uma carta selada chegou até ti.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        const PlaneText('Uma carta selada chegou até ti.', style: TextStyle(color: Colors.white70, fontSize: 12)),
                         const SizedBox(height: 4),
-                        Text(plane['status'] == 'READ' ? 'Já aberta' : 'Nova carta', style: const TextStyle(color: ppGold, fontSize: 11)),
+                        PlaneText(plane['status'] == 'READ' ? 'Já aberta' : 'Nova carta', style: const TextStyle(color: ppGold, fontSize: 11)),
                       ])),
                       const Icon(Icons.chevron_right, color: ppGold),
                     ]),
@@ -2806,7 +2818,7 @@ class _InboxPageState extends State<InboxPage> {
               ],
             const SectionTitle('A sair'),
             if (_sent.isEmpty)
-              const GlassPanel(child: Text('Ainda não lançaste nenhum avião.', style: TextStyle(color: Colors.white70)))
+              const GlassPanel(child: PlaneText('Ainda não lançaste nenhum avião.', style: TextStyle(color: Colors.white70)))
             else
               for (final plane in _sent) ...[
                 const SizedBox(height: 10),
@@ -2818,7 +2830,7 @@ class _InboxPageState extends State<InboxPage> {
                       const Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 28),
                       const SizedBox(width: 12),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(
+                        PlaneText(
                           plane['status'] == 'QUEUED'
                               ? 'À procura de destinatário'
                               : plane['status'] == 'FLYING'
@@ -2827,7 +2839,7 @@ class _InboxPageState extends State<InboxPage> {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
-                        Text('Lançado ' + (plane['created_at']?.toString() ?? ''), style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        PlaneText('Lançado ' + (plane['created_at']?.toString() ?? ''), style: const TextStyle(color: Colors.white54, fontSize: 11)),
                       ])),
                       const Icon(Icons.chevron_right, color: ppGold),
                     ]),
@@ -2836,7 +2848,7 @@ class _InboxPageState extends State<InboxPage> {
               ],
           ],
           const SizedBox(height: 12),
-          const Text('Puxa para baixo para sincronizar os aviões e os seus estados.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const PlaneText('Puxa para baixo para sincronizar os aviões e os seus estados.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
         ],
       ),
     );
@@ -2877,7 +2889,7 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível abrir a carta.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2888,12 +2900,12 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
     try {
       await PaperPlaneApi.instance.releasePlane(widget.airplaneId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O avião foi libertado.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('O avião foi libertado.')));
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível libertar este avião.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2904,14 +2916,14 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF172844),
-        title: const Text('Eliminar este avião?'),
-        content: const Text('A carta será removida apenas da tua Caixa.'),
+        title: const PlaneText('Eliminar este avião?'),
+        content: const PlaneText('A carta será removida apenas da tua Caixa.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Manter')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Manter')),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFB94E64)),
-            child: const Text('Eliminar'),
+            child: const PlaneText('Eliminar'),
           ),
         ],
       ),
@@ -2925,7 +2937,7 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar este avião.'),
+        content: PlaneText(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar este avião.'),
       ));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2941,12 +2953,12 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
     try {
       await PaperPlaneApi.instance.blockSenderOfPlane(widget.airplaneId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Remetente bloqueado. Não receberás novas correspondências desta conta.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('Remetente bloqueado. Não receberás novas correspondências desta conta.')));
       Navigator.pop(context);
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear este remetente.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -2971,14 +2983,14 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
             ),
           ),
           const SizedBox(height: 12),
-          const Text('Recebeste um novo avião', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
+          const PlaneText('Recebeste um novo avião', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
-          Text('De: Alguém em ' + _countryName(widget.countryCode) + ' ' + _countryFlag(widget.countryCode), style: const TextStyle(color: ppGoldBright, fontSize: 16)),
+          PlaneText('De: Alguém em ' + _countryName(widget.countryCode) + ' ' + _countryFlag(widget.countryCode), style: const TextStyle(color: ppGoldBright, fontSize: 16)),
           const SizedBox(height: 22),
           const GlassPanel(child: Row(children: [
             Icon(Icons.lock_outline_rounded, color: ppGold, size: 31),
             SizedBox(width: 13),
-            Expanded(child: Text('Mensagem selada · Abre quando estiveres pronto.', style: TextStyle(color: Colors.white70))),
+            Expanded(child: PlaneText('Mensagem selada · Abre quando estiveres pronto.', style: TextStyle(color: Colors.white70))),
           ])),
           const Spacer(),
           GoldButton(label: _busy ? 'A abrir…' : 'Abrir devagar', icon: Icons.mail_outline, onPressed: _busy ? () {} : _open),
@@ -2988,12 +3000,12 @@ class _IncomingPlaneScreenState extends State<IncomingPlaneScreen>
           TextButton.icon(
             onPressed: _busy ? null : _deleteReceivedPlane,
             icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54),
-            label: const Text('Eliminar da minha Caixa', style: TextStyle(color: Colors.white54)),
+            label: const PlaneText('Eliminar da minha Caixa', style: TextStyle(color: Colors.white54)),
           ),
           const SizedBox(height: 8),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: false), icon: const Icon(Icons.flag_outlined, color: Colors.white54), label: const Text('Denunciar', style: TextStyle(color: Colors.white54))),
-            TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: true), icon: const Icon(Icons.block_rounded, color: Colors.white54), label: const Text('Bloquear', style: TextStyle(color: Colors.white54))),
+            TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: false), icon: const Icon(Icons.flag_outlined, color: Colors.white54), label: const PlaneText('Denunciar', style: TextStyle(color: Colors.white54))),
+            TextButton.icon(onPressed: _busy ? null : () => _reportOrBlock(block: true), icon: const Icon(Icons.block_rounded, color: Colors.white54), label: const PlaneText('Bloquear', style: TextStyle(color: Colors.white54))),
           ]),
         ]),
       ),
@@ -3256,7 +3268,7 @@ class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
         padding: const EdgeInsets.fromLTRB(18, 10, 18, 25),
         child: Column(children: [
           const SizedBox(height: 8),
-          const Text('Uma carta encontrou o caminho até ti.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700, fontSize: 17)),
+          const PlaneText('Uma carta encontrou o caminho até ti.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700, fontSize: 17)),
           const SizedBox(height: 14),
           Expanded(
             child: AnimatedBuilder(
@@ -3268,9 +3280,9 @@ class _ArrivalExperienceScreenState extends State<ArrivalExperienceScreen>
             ),
           ),
           const SizedBox(height: 16),
-          const Text('O avião pousou à tua porta.', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900), textAlign: TextAlign.center),
+          const PlaneText('O avião pousou à tua porta.', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w900), textAlign: TextAlign.center),
           const SizedBox(height: 7),
-          const Text('Abre a tua carta e descobre quem te encontrou no mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const PlaneText('Abre a tua carta e descobre quem te encontrou no mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 20),
           AnimatedBuilder(
             animation: _arrival,
@@ -3591,7 +3603,7 @@ class _LetterScreenState extends State<LetterScreen> {
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar a resposta.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3604,11 +3616,11 @@ class _LetterScreenState extends State<LetterScreen> {
       await PaperPlaneApi.instance.sendHeart(widget.airplane['id'].toString());
       if (!mounted) return;
       setState(() => _hearted = true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coração enviado.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('Coração enviado.')));
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o coração.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3640,7 +3652,7 @@ class _LetterScreenState extends State<LetterScreen> {
               boxShadow: [BoxShadow(color: ppGold.withOpacity(0.16), blurRadius: 19)],
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('De: Alguém em ' + _countryName(country) + ' ' + _countryFlag(country), style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
+              PlaneText('De: Alguém em ' + _countryName(country) + ' ' + _countryFlag(country), style: const TextStyle(color: Color(0xFF82745A), fontSize: 13)),
               const SizedBox(height: 24),
               if (translatedMessage?.isNotEmpty == true)
                 const Padding(
@@ -3648,11 +3660,11 @@ class _LetterScreenState extends State<LetterScreen> {
                   child: Row(children: [
                     Icon(Icons.translate_rounded, size: 15, color: Color(0xFF82745A)),
                     SizedBox(width: 6),
-                    Text('TRADUÇÃO AUTOMÁTICA · CLOUDFLARE AI',
+                    PlaneText('TRADUÇÃO AUTOMÁTICA · CLOUDFLARE AI',
                         style: TextStyle(color: Color(0xFF82745A), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                   ]),
                 ),
-              Text(message, style: const TextStyle(color: ppInk, fontSize: 22, height: 1.6, fontStyle: FontStyle.italic)),
+              PlaneText(message, style: const TextStyle(color: ppInk, fontSize: 22, height: 1.6, fontStyle: FontStyle.italic)),
               if (translatedMessage?.isNotEmpty == true) ...[
                 const SizedBox(height: 12),
                 Theme(
@@ -3662,18 +3674,18 @@ class _LetterScreenState extends State<LetterScreen> {
                     childrenPadding: EdgeInsets.zero,
                     iconColor: const Color(0xFF82745A),
                     collapsedIconColor: const Color(0xFF82745A),
-                    title: const Text('Ver mensagem original', style: TextStyle(color: Color(0xFF82745A), fontSize: 12, fontWeight: FontWeight.w700)),
+                    title: const PlaneText('Ver mensagem original', style: TextStyle(color: Color(0xFF82745A), fontSize: 12, fontWeight: FontWeight.w700)),
                     children: [
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: Text(originalMessage, style: const TextStyle(color: ppInk, fontSize: 16, height: 1.5)),
+                        child: PlaneText(originalMessage, style: const TextStyle(color: ppInk, fontSize: 16, height: 1.5)),
                       ),
                     ],
                   ),
                 ),
               ],
               const SizedBox(height: 22),
-              Text('Recebido · ' + (widget.airplane['delivered_at']?.toString() ?? ''), style: const TextStyle(color: Color(0xFF82745A), fontSize: 11)),
+              PlaneText('Recebido · ' + (widget.airplane['delivered_at']?.toString() ?? ''), style: const TextStyle(color: Color(0xFF82745A), fontSize: 11)),
             ]),
           ),
           const SizedBox(height: 18),
@@ -3688,7 +3700,7 @@ class _LetterScreenState extends State<LetterScreen> {
                 maxLines: 4,
                 minLines: 3,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: 'Escreve uma resposta gentil…', border: InputBorder.none, counterStyle: TextStyle(color: Colors.white54)),
+                decoration: InputDecoration(hintText: PaperPlaneLocale.translate('Escreve uma resposta gentil…'), border: InputBorder.none, counterStyle: TextStyle(color: Colors.white54)),
               ),
             ),
             const SizedBox(height: 12),
@@ -3700,7 +3712,7 @@ class _LetterScreenState extends State<LetterScreen> {
                 Icon(Icons.local_fire_department_rounded, color: ppGoldBright, size: 17),
                 SizedBox(width: 7),
                 Expanded(
-                  child: Text(
+                  child: PlaneText(
                     'Quando a resposta passar na segurança, a Chama acende e a conversa abre automaticamente.',
                     style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.4),
                   ),
@@ -3709,14 +3721,14 @@ class _LetterScreenState extends State<LetterScreen> {
             ),
             const SizedBox(height: 10),
           ] else
-            const GlassPanel(child: Text('O remetente desativou as respostas para esta carta.', style: TextStyle(color: Colors.white70))),
+            const GlassPanel(child: PlaneText('O remetente desativou as respostas para esta carta.', style: TextStyle(color: Colors.white70))),
           SoftButton(
             label: _hearted ? 'Coração enviado' : 'Enviar coração',
             icon: _hearted ? Icons.favorite : Icons.favorite_border,
             onPressed: _busy || _hearted ? () {} : _sendHeart,
           ),
           const SizedBox(height: 8),
-          Center(child: TextButton.icon(onPressed: _report, icon: const Icon(Icons.shield_outlined, color: Colors.white54), label: const Text('Denunciar mensagem', style: TextStyle(color: Colors.white54)))),
+          Center(child: TextButton.icon(onPressed: _report, icon: const Icon(Icons.shield_outlined, color: Colors.white54), label: const PlaneText('Denunciar mensagem', style: TextStyle(color: Colors.white54)))),
         ],
       ),
     );
@@ -3768,7 +3780,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o coração.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     }
   }
 
@@ -3787,15 +3799,15 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
         builder: (sheetContext) => Padding(
           padding: EdgeInsets.fromLTRB(18, 8, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('Respostas públicas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const PlaneText('Respostas públicas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
             if (items.isEmpty)
-              const Text('Ainda não há respostas.', style: TextStyle(color: Colors.white70))
+              const PlaneText('Ainda não há respostas.', style: TextStyle(color: Colors.white70))
             else
               for (final item in items)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 9),
-                  child: Text(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white70)),
+                  child: PlaneText(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white70)),
                 ),
             const Divider(color: Colors.white24),
             TextField(
@@ -3803,7 +3815,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               maxLength: 200,
               maxLines: 3,
               style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(hintText: 'Escreve uma resposta…'),
+              decoration: InputDecoration(hintText: PaperPlaneLocale.translate('Escreve uma resposta…')),
             ),
             const SizedBox(height: 8),
             FilledButton.icon(
@@ -3818,18 +3830,18 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                     final notice = status == 'PUBLISHED'
                         ? 'A tua resposta já está publicada no Open Sky.'
                         : 'A tua resposta foi recebida e aguarda revisão de segurança.';
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(notice)));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(notice)));
                     _refresh();
                   }
                 } catch (error) {
                   if (sheetContext.mounted) {
                     final message = error is PaperPlaneApiException ? error.message : 'Não foi possível responder.';
-                    ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text(message)));
+                    ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: PlaneText(message)));
                   }
                 }
               },
               icon: const Icon(Icons.send_rounded),
-              label: const Text('Enviar resposta'),
+              label: const PlaneText('Enviar resposta'),
             ),
           ]),
         ),
@@ -3838,7 +3850,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException ? error.message : 'Não foi possível carregar as respostas.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     }
   }
 
@@ -3872,9 +3884,9 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
         children: [
           Row(children: [
             const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+              PlaneText('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
               SizedBox(height: 3),
-              Text('Mensagens do mundo inteiro', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              PlaneText('Mensagens do mundo inteiro', style: TextStyle(color: Colors.white60, fontSize: 12)),
             ])),
             Container(
               padding: const EdgeInsets.all(10),
@@ -3893,7 +3905,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
             child: const Row(children: [
               Icon(Icons.tune_rounded, color: ppGoldBright, size: 18),
               SizedBox(width: 8),
-              Text('Filtrar por país', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+              PlaneText('Filtrar por país', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
               Spacer(),
               Icon(Icons.expand_more_rounded, color: Colors.white60),
             ]),
@@ -3918,9 +3930,9 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               child: Column(children: [
                 const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 34),
                 const SizedBox(height: 8),
-                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 10),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]),
             )
           else if (_messages.isEmpty)
@@ -3928,9 +3940,9 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               child: Column(children: const [
                 Icon(Icons.mark_email_unread_outlined, color: ppGoldBright, size: 34),
                 SizedBox(height: 9),
-                Text('Ainda não há aviões neste céu.', style: TextStyle(fontWeight: FontWeight.w900)),
+                PlaneText('Ainda não há aviões neste céu.', style: TextStyle(fontWeight: FontWeight.w900)),
                 SizedBox(height: 5),
-                Text('Sê o primeiro a lançar uma mensagem pública para o mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.4)),
+                PlaneText('Sê o primeiro a lançar uma mensagem pública para o mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.4)),
               ]),
             )
           else
@@ -3950,16 +3962,16 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                       PilotAvatar(url: message['avatar_url']?.toString(), size: 42),
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                        PlaneText(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
                         const SizedBox(height: 2),
-                        Text(
+                        PlaneText(
                           '${_countryFlag(message['sender_country_code']?.toString())} ${_skyCountryName(message['sender_country_code']?.toString())} · ${_timeAgo(message['created_at']?.toString())}',
                           style: const TextStyle(color: Colors.white60, fontSize: 10),
                         ),
                       ])),
                       if (message['is_own'] != 1 && message['is_own'] != true)
                         PopupMenuButton<String>(
-                          tooltip: 'Mais opções',
+                          tooltip: PaperPlaneLocale.translate('Mais opções'),
                           icon: const Icon(Icons.more_horiz_rounded, color: Colors.white70),
                           onSelected: (action) async {
                             final airplaneId = message['id'].toString();
@@ -3969,22 +3981,22 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                               try {
                                 await PaperPlaneApi.instance.blockSenderOfPlane(airplaneId);
                                 await _refresh();
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Remetente bloqueado.')));
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('Remetente bloqueado.')));
                               } catch (error) {
-                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear esta conta.')));
+                                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(error is PaperPlaneApiException ? error.message : 'Não foi possível bloquear esta conta.')));
                               }
                             }
                           },
                           itemBuilder: (_) => const [
-                            PopupMenuItem(value: 'report', child: Text('Denunciar mensagem')),
-                            PopupMenuItem(value: 'block', child: Text('Bloquear remetente')),
+                            PopupMenuItem(value: 'report', child: PlaneText('Denunciar mensagem')),
+                            PopupMenuItem(value: 'block', child: PlaneText('Bloquear remetente')),
                           ],
                         ),
                     ]),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(15, 1, 15, 5),
-                    child: Text(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 14, height: 1.48, fontWeight: FontWeight.w500)),
+                    child: PlaneText(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 14, height: 1.48, fontWeight: FontWeight.w500)),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 13),
@@ -4000,13 +4012,13 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                       TextButton.icon(
                         onPressed: () => _like(message['id'].toString()),
                         icon: const Icon(Icons.favorite_border_rounded, color: ppGold, size: 18),
-                        label: Text((message['likes_count'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
+                        label: PlaneText((message['likes_count'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
                       ),
                       const Spacer(),
                       TextButton.icon(
                         onPressed: () => _showReplies(message['id'].toString()),
                         icon: const Icon(Icons.chat_bubble_outline_rounded, size: 17, color: ppGoldBright),
-                        label: Text('Responder · ${message['replies_count'] ?? 0}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        label: PlaneText('Responder · ${message['replies_count'] ?? 0}', style: const TextStyle(color: Colors.white70, fontSize: 11)),
                       ),
                     ]),
                   ),
@@ -4028,7 +4040,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
           setState(() => _selectedCountry = code);
           _refresh();
         },
-        label: Text(label),
+        label: PlaneText(label),
         selectedColor: ppGold,
         backgroundColor: const Color(0xFF172844),
         side: BorderSide(color: selected ? ppGold : Colors.white.withOpacity(0.12)),
@@ -4044,7 +4056,7 @@ class _CountryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Chip(
-        label: Text(label),
+        label: PlaneText(label),
         backgroundColor: ppBlue.withOpacity(0.38),
         side: BorderSide(color: Colors.white.withOpacity(0.12)),
         labelStyle: const TextStyle(color: Colors.white),
@@ -4096,7 +4108,7 @@ class _ProfilePageState extends State<ProfilePage> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, updateDialog) => AlertDialog(
           backgroundColor: const Color(0xFF142541),
-          title: const Text('A tua foto de perfil'),
+          title: const PlaneText('A tua foto de perfil'),
           content: SizedBox(
             width: 420,
             child: Column(
@@ -4110,10 +4122,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   autocorrect: false,
                   onChanged: (_) => updateDialog(() {}),
                   style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     prefixIcon: Icon(Icons.link_rounded, color: ppGoldBright),
-                    labelText: 'Link da foto ou perfil público',
-                    hintText: 'https://…',
+                    labelText: PaperPlaneLocale.translate('Link da foto ou perfil público'),
+                    hintText: PaperPlaneLocale.translate('https://…'),
                     labelStyle: TextStyle(color: Colors.white70),
                     hintStyle: TextStyle(color: Colors.white38),
                     enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
@@ -4121,7 +4133,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                const PlaneText(
                   'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.',
                   style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
                 ),
@@ -4129,9 +4141,9 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
-            TextButton(onPressed: () { controller.clear(); updateDialog(() {}); }, child: const Text('Remover')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Guardar')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const PlaneText('Cancelar')),
+            TextButton(onPressed: () { controller.clear(); updateDialog(() {}); }, child: const PlaneText('Remover')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const PlaneText('Guardar')),
           ],
         ),
       ),
@@ -4145,7 +4157,7 @@ class _ProfilePageState extends State<ProfilePage> {
       } catch (error) {
         if (!mounted) return;
         final message = error is PaperPlaneApiException ? error.message : 'Não foi possível actualizar a foto.';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
       }
     }
     controller.dispose();
@@ -4156,7 +4168,7 @@ class _ProfilePageState extends State<ProfilePage> {
     await Clipboard.setData(ClipboardData(text: link));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Link de convite copiado.')),
+      const SnackBar(content: PlaneText('Link de convite copiado.')),
     );
   }
 
@@ -4180,7 +4192,7 @@ class _ProfilePageState extends State<ProfilePage> {
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
         children: [
           Row(children: [
-            const Expanded(child: Text('Perfil & Convidar', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
+            const Expanded(child: PlaneText('Perfil & Convidar', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
             IconButton(onPressed: () => ppPush(context, const SettingsScreen()), icon: const Icon(Icons.settings_outlined, color: ppGold)),
           ]),
           if (_loading)
@@ -4190,9 +4202,9 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(children: [
                 const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 30),
                 const SizedBox(height: 8),
-                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                 const SizedBox(height: 9),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]),
             )
           else ...[
@@ -4220,12 +4232,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(width: 15),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                  if (handle != null) Text('@' + handle, style: const TextStyle(color: ppGoldBright)),
+                  PlaneText(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                  if (handle != null) PlaneText('@' + handle, style: const TextStyle(color: ppGoldBright)),
                   const SizedBox(height: 4),
-                  Text(country == null ? 'País não definido' : _countryFlag(country) + ' ' + _countryName(country), style: const TextStyle(color: Colors.white60, fontSize: 12)),
+                  PlaneText(country == null ? 'País não definido' : _countryFlag(country) + ' ' + _countryName(country), style: const TextStyle(color: Colors.white60, fontSize: 12)),
                   const SizedBox(height: 4),
-                  Text(complete ? 'Perfil sincronizado' : 'Perfil por completar', style: TextStyle(color: complete ? const Color(0xFF8DE0AF) : ppGold, fontSize: 11)),
+                  PlaneText(complete ? 'Perfil sincronizado' : 'Perfil por completar', style: TextStyle(color: complete ? const Color(0xFF8DE0AF) : ppGold, fontSize: 11)),
                 ])),
               ]),
             ),
@@ -4257,10 +4269,10 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Row(children: [
                   Icon(Icons.card_giftcard_rounded, color: ppGoldBright, size: 25),
                   SizedBox(width: 10),
-                  Expanded(child: Text('Cada convite aproxima mais o mundo.', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
+                  Expanded(child: PlaneText('Cada convite aproxima mais o mundo.', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15))),
                 ]),
                 const SizedBox(height: 7),
-                const Text('Partilha o teu link para que outros copilotos possam encontrar-te e começar a trocar aviões.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                const PlaneText('Partilha o teu link para que outros copilotos possam encontrar-te e começar a trocar aviões.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
                 const SizedBox(height: 13),
                 if (handle != null && handle.isNotEmpty)
                   Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
@@ -4277,14 +4289,14 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('@$handle', style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w900)),
+                      PlaneText('@$handle', style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 5),
-                      const Text('O teu link de convite pessoal', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                      const PlaneText('O teu link de convite pessoal', style: TextStyle(color: Colors.white60, fontSize: 11)),
                       const SizedBox(height: 8),
                       FilledButton.icon(
                         onPressed: () => _copyInvite(handle),
                         icon: const Icon(Icons.copy_rounded, size: 16),
-                        label: const Text('Copiar convite'),
+                        label: const PlaneText('Copiar convite'),
                         style: FilledButton.styleFrom(backgroundColor: ppBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9)),
                       ),
                     ])),
@@ -4305,7 +4317,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Informações sobre o Paper Plane', onTap: () => showAboutDialog(context: context, applicationName: 'Paper Plane', applicationVersion: '0.1.0')),
           ],
           const SizedBox(height: 10),
-          const Text('Os dados do perfil e os totais são obtidos no servidor Paper Plane.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const PlaneText('Os dados do perfil e os totais são obtidos no servidor Paper Plane.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
         ],
       ),
     );
@@ -4372,7 +4384,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
       title: 'Atlas do Céu',
       action: IconButton(
         onPressed: _refresh,
-        tooltip: 'Atualizar atlas',
+        tooltip: PaperPlaneLocale.translate('Atualizar atlas'),
         icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
       ),
       child: RefreshIndicator(
@@ -4382,7 +4394,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
           children: [
-            const Text(
+            const PlaneText(
               'O mundo que as tuas cartas estão a ligar.',
               style: TextStyle(color: Colors.white70, height: 1.45),
             ),
@@ -4397,12 +4409,12 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 child: Column(children: [
                   const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 32),
                   const SizedBox(height: 8),
-                  Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                  PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     onPressed: _refresh,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Tentar novamente'),
+                    label: const PlaneText('Tentar novamente'),
                   ),
                 ]),
               )
@@ -4412,8 +4424,8 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 child: Column(children: [
                   const Icon(Icons.public_rounded, color: ppGoldBright, size: 52),
                   const SizedBox(height: 8),
-                  Text(countryCount.toString(), style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: ppGoldBright)),
-                  const Text('PAÍSES LIGADOS ÀS TUAS CARTAS', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 10, letterSpacing: 1.3)),
+                  PlaneText(countryCount.toString(), style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w900, color: ppGoldBright)),
+                  const PlaneText('PAÍSES LIGADOS ÀS TUAS CARTAS', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 10, letterSpacing: 1.3)),
                   const SizedBox(height: 17),
                   Row(children: [
                     Expanded(child: _atlasStat('Quilómetros', totalDistance.toString(), Icons.route_rounded)),
@@ -4430,9 +4442,9 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                   child: Column(children: [
                     Icon(Icons.explore_outlined, color: ppGoldBright, size: 34),
                     SizedBox(height: 9),
-                    Text('O teu atlas está à espera da primeira rota.', style: TextStyle(fontWeight: FontWeight.w800)),
+                    PlaneText('O teu atlas está à espera da primeira rota.', style: TextStyle(fontWeight: FontWeight.w800)),
                     SizedBox(height: 5),
-                    Text('Quando uma carta encontrar um destinatário e tiver uma rota registada, os países ligados aparecerão aqui.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+                    PlaneText('Quando uma carta encontrar um destinatário e tiver uma rota registada, os países ligados aparecerão aqui.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
                   ]),
                 )
               else
@@ -4441,9 +4453,9 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                   GlassPanel(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     child: Row(children: [
-                      Text(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
+                      PlaneText(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
                       const SizedBox(width: 12),
-                      Expanded(child: Text(country['name']?.toString() ?? _countryName(country['code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800))),
+                      Expanded(child: PlaneText(country['name']?.toString() ?? _countryName(country['code']?.toString()), style: const TextStyle(fontWeight: FontWeight.w800))),
                       const Icon(Icons.verified_rounded, color: ppGoldBright, size: 19),
                     ]),
                   ),
@@ -4457,7 +4469,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 ]),
               ),
               const SizedBox(height: 10),
-              Text(
+              PlaneText(
                 totalFlights == 0
                     ? 'Os dados serão acrescentados quando o servidor registar os teus voos.'
                     : '$totalFlights aviões registados na tua conta.',
@@ -4476,16 +4488,16 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
     child: Column(children: [
       Icon(icon, color: ppGoldBright, size: 19),
       const SizedBox(height: 5),
-      Text(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: ppGoldBright)),
-      Text(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+      PlaneText(value, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: ppGoldBright)),
+      PlaneText(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
     ]),
   );
 
   Widget _modelStat(String title, String value, IconData icon) => Column(children: [
     Icon(icon, color: ppGoldBright, size: 25),
     const SizedBox(height: 5),
-    Text(value, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
-    Text(title, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+    PlaneText(value, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w900)),
+    PlaneText(title, style: const TextStyle(fontSize: 10, color: Colors.white60)),
   ]);
 }
 
@@ -4496,8 +4508,8 @@ class _ProfileNumber extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(children: [
-    Text(number, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: ppGoldBright)),
-    Text(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+    PlaneText(number, style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: ppGoldBright)),
+    PlaneText(label, style: const TextStyle(color: Colors.white60, fontSize: 12)),
   ]);
 }
 
@@ -4520,9 +4532,9 @@ class _ProfileLink extends StatelessWidget {
           Icon(icon, color: ppGoldBright, size: 25),
           const SizedBox(width: 13),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            PlaneText(title, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 3),
-            Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+            PlaneText(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 12)),
           ])),
           const Icon(Icons.chevron_right, color: Colors.white54),
         ]),
@@ -4553,8 +4565,8 @@ class ChamaScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Piloto associado', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                  Text('Ligação privada de demonstração', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                  PlaneText('Piloto associado', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                  PlaneText('Ligação privada de demonstração', style: TextStyle(color: Colors.white60, fontSize: 11)),
                 ])),
                 const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFA15A), size: 29),
               ]),
@@ -4567,7 +4579,7 @@ class ChamaScreen extends StatelessWidget {
               child: const Row(children: [
                 Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFAA65), size: 30),
                 SizedBox(width: 10),
-                Expanded(child: Text('Uma chama precisa de respeito, cuidado e consentimento dos dois pilotos.', style: TextStyle(fontWeight: FontWeight.w700))),
+                Expanded(child: PlaneText('Uma chama precisa de respeito, cuidado e consentimento dos dois pilotos.', style: TextStyle(fontWeight: FontWeight.w700))),
               ]),
             ),
           ),
@@ -4580,7 +4592,7 @@ class ChamaScreen extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.symmetric(vertical: 14),
                   child: Center(
-                    child: Text('A conversa só continua com a escolha livre dos dois.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontSize: 11)),
+                    child: PlaneText('A conversa só continua com a escolha livre dos dois.', textAlign: TextAlign.center, style: TextStyle(color: ppGoldBright, fontSize: 11)),
                   ),
                 ),
                 _FlameBubble(text: 'Consegui ver as estrelas aqui esta noite. Foi muito bonito!', time: 'hoje · 09:34', mine: true),
@@ -4592,14 +4604,14 @@ class ChamaScreen extends StatelessWidget {
             child: GlassPanel(
               padding: const EdgeInsets.all(12),
               child: Column(children: [
-                const Text('Pré-visualização — mensagens privadas ainda desativadas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
+                const PlaneText('Pré-visualização — mensagens privadas ainda desativadas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
                 const SizedBox(height: 10),
                 Row(children: [
-                  const Expanded(
+                  Expanded(
                     child: TextField(
                       enabled: false,
                       decoration: InputDecoration(
-                        hintText: 'Enviar mensagem em papel...',
+                        hintText: PaperPlaneLocale.translate('Enviar mensagem em papel...'),
                         filled: true,
                         fillColor: Color(0x3310182A),
                         border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.all(Radius.circular(18))),
@@ -4614,8 +4626,8 @@ class ChamaScreen extends StatelessWidget {
                 Wrap(
                   spacing: 7,
                   children: [
-                    TextButton.icon(onPressed: () => ppPush(context, const SupportScreen()), icon: const Icon(Icons.support_agent_rounded), label: const Text('Comunicar problema')),
-                    TextButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded), label: const Text('Sair')),
+                    TextButton.icon(onPressed: () => ppPush(context, const SupportScreen()), icon: const Icon(Icons.support_agent_rounded), label: const PlaneText('Comunicar problema')),
+                    TextButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded), label: const PlaneText('Sair')),
                   ],
                 ),
               ]),
@@ -4652,9 +4664,9 @@ class _FlameBubble extends StatelessWidget {
           border: Border.all(color: Colors.white.withOpacity(0.10)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(text, style: const TextStyle(fontSize: 15, height: 1.4)),
+          PlaneText(text, style: const TextStyle(fontSize: 15, height: 1.4)),
           const SizedBox(height: 6),
-          Text(time, style: const TextStyle(fontSize: 10, color: Colors.white60)),
+          PlaneText(time, style: const TextStyle(fontSize: 10, color: Colors.white60)),
         ]),
       ),
     );
@@ -4674,19 +4686,19 @@ class InviteScreen extends StatelessWidget {
           const SizedBox(height: 8),
           const Center(child: PlaneMark(width: 120)),
           const SizedBox(height: 20),
-          const Text('Convida amigos para voar', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+          const PlaneText('Convida amigos para voar', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
           const SizedBox(height: 7),
-          const Text('Partilha o teu convite e espalha palavras gentis.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
+          const PlaneText('Partilha o teu convite e espalha palavras gentis.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70)),
           const SizedBox(height: 24),
           GlassPanel(
             highlight: true,
             child: Column(children: [
-              const Text('O teu link de convite', style: TextStyle(color: Colors.white70)),
+              const PlaneText('O teu link de convite', style: TextStyle(color: Colors.white70)),
               const SizedBox(height: 9),
               Row(children: [
                 const Expanded(child: SelectableText('paperplane.app/invite/P7X9K2', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w700))),
                 IconButton(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O link será disponibilizado após configurar os convites.'))),
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('O link será disponibilizado após configurar os convites.'))),
                   icon: const Icon(Icons.copy_rounded, color: ppGold),
                 ),
               ]),
@@ -4704,13 +4716,13 @@ class InviteScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 9),
-          const Text('Código QR de convite (pré-visualização)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
+          const PlaneText('Código QR de convite (pré-visualização)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12)),
           const SizedBox(height: 22),
-          GoldButton(label: 'Partilhar convite', icon: Icons.ios_share_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A partilha será ligada quando o link estiver ativo.')))),
+          GoldButton(label: 'Partilhar convite', icon: Icons.ios_share_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('A partilha será ligada quando o link estiver ativo.')))),
           const SizedBox(height: 12),
-          SoftButton(label: 'Copiar link', icon: Icons.copy_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link de demonstração — ainda não ativo.')))),
+          SoftButton(label: 'Copiar link', icon: Icons.copy_rounded, onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: PlaneText('Link de demonstração — ainda não ativo.')))),
           const SizedBox(height: 15),
-          const Text('Os convites e recompensas serão ativados após a configuração da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
+          const PlaneText('Os convites e recompensas serão ativados após a configuração da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
         ],
       ),
     );
@@ -4804,7 +4816,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
       title: 'A minha coleção',
       action: IconButton(
         onPressed: _load,
-        tooltip: 'Atualizar coleção',
+        tooltip: PaperPlaneLocale.translate('Atualizar coleção'),
         icon: const Icon(Icons.refresh_rounded, color: ppGoldBright),
       ),
       child: RefreshIndicator(
@@ -4823,8 +4835,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
               GlassPanel(child: Column(children: [
                 const Icon(Icons.cloud_off_rounded, color: Colors.orangeAccent, size: 32),
                 const SizedBox(height: 8),
-                Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const Text('Tentar novamente')),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                TextButton.icon(onPressed: _load, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]))
             else ...[
               Row(children: [
@@ -4858,7 +4870,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
               const SectionTitle('Países visitados'),
               if (_countries.isEmpty)
                 const GlassPanel(
-                  child: Text('Ainda não há países registados nos teus voos. Quando uma rota real for concluída, os países aparecem aqui.',
+                  child: PlaneText('Ainda não há países registados nos teus voos. Quando uma rota real for concluída, os países aparecem aqui.',
                     textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, height: 1.5)),
                 )
               else
@@ -4868,9 +4880,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
                     child: GlassPanel(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       child: Row(children: [
-                        Text(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
+                        PlaneText(_countryFlag(country['code']?.toString()), style: const TextStyle(fontSize: 27)),
                         const SizedBox(width: 12),
-                        Expanded(child: Text(country['name']?.toString() ?? 'País', style: const TextStyle(fontWeight: FontWeight.w800))),
+                        Expanded(child: PlaneText(country['name']?.toString() ?? 'País', style: const TextStyle(fontWeight: FontWeight.w800))),
                         const Icon(Icons.verified_rounded, color: ppGoldBright, size: 19),
                       ]),
                     ),
@@ -4885,8 +4897,8 @@ class _CollectionScreenState extends State<CollectionScreen> {
   Widget _collectionMetric(String label, int value, IconData icon) => Column(children: [
     Icon(icon, color: ppGoldBright, size: 22),
     const SizedBox(height: 5),
-    Text(value.toString(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-    Text(label, style: const TextStyle(fontSize: 11, color: Colors.white60)),
+    PlaneText(value.toString(), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+    PlaneText(label, style: const TextStyle(fontSize: 11, color: Colors.white60)),
   ]);
 }
 
@@ -4900,9 +4912,9 @@ class _CollectionStat extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 17, horizontal: 7),
     highlight: true,
     child: Column(children: [
-      FittedBox(child: Text(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: ppGoldBright))),
+      FittedBox(child: PlaneText(value, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: ppGoldBright))),
       const SizedBox(height: 5),
-      Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      PlaneText(label, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 11)),
     ]),
   );
 }
@@ -4920,9 +4932,9 @@ class _BadgeTile extends StatelessWidget {
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Icon(icon, color: unlocked ? ppGoldBright : Colors.white24, size: 35),
       const SizedBox(height: 8),
-      Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: unlocked ? Colors.white : Colors.white38)),
+      PlaneText(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: unlocked ? Colors.white : Colors.white38)),
       const SizedBox(height: 4),
-      Text(unlocked ? 'Conquistado' : 'Por conquistar', style: const TextStyle(fontSize: 9, color: Colors.white38)),
+      PlaneText(unlocked ? 'Conquistado' : 'Por conquistar', style: const TextStyle(fontSize: 9, color: Colors.white38)),
     ]),
   );
 }
@@ -4938,7 +4950,7 @@ class _PlaneStamp extends StatelessWidget {
     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       const PlaneMark(width: 40),
       const SizedBox(height: 8),
-      Text(flag + ' ' + country, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+      PlaneText(flag + ' ' + country, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white70)),
     ]),
   );
 }
@@ -4956,21 +4968,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const Map<String, String> _languageNames = {
     'pt': 'Português',
     'en': 'English',
-    'ja': '日本語',
     'es': 'Español',
     'fr': 'Français',
     'de': 'Deutsch',
-    'zh': '中文',
-    'ko': '한국어',
-    'ar': 'العربية',
-    'ru': 'Русский',
-    'hi': 'हिन्दी',
-    'id': 'Bahasa Indonesia',
-    'it': 'Italiano',
-    'nl': 'Nederlands',
-    'tr': 'Türkçe',
-    'th': 'ไทย',
-    'vi': 'Tiếng Việt',
   };
 
   @override
@@ -4989,12 +4989,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final pilot = result['pilot'] as Map<String, dynamic>? ?? const {};
       if (mounted) {
         setState(() {
-          _language = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
+          final savedLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
+          _language = PaperPlaneLocale.supportedLanguages.contains(savedLanguage) ? savedLanguage : 'pt';
+          PaperPlaneLocale.setLanguage(_language);
           _loadingLanguage = false;
         });
       }
     } catch (_) {
       if (mounted) setState(() => _loadingLanguage = false);
+    }
+  }
+
+  Future<void> _openWebsitePage(String path) async {
+    final uri = Uri.https('paper-plane.nexaurenstore.workers.dev', path);
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: PlaneText('Não foi possível abrir a página.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: PlaneText('Não foi possível abrir a página.')),
+      );
     }
   }
 
@@ -5009,10 +5028,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
           children: [
-            const Text('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const PlaneText('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
             const SizedBox(height: 6),
-            const Text(
-              'Os aviões recebidos e as traduções das mensagens usam este idioma.',
+            const PlaneText(
+              'Os aviões recebidos, a aplicação e as traduções usam este idioma.',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
             const SizedBox(height: 10),
@@ -5022,7 +5041,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _language == entry.key ? Icons.check_circle_rounded : Icons.language_rounded,
                   color: _language == entry.key ? ppGoldBright : Colors.white54,
                 ),
-                title: Text(entry.value),
+                title: PlaneText(entry.value),
                 onTap: () => Navigator.pop(sheetContext, entry.key),
               ),
           ],
@@ -5032,17 +5051,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (selected == null || selected == _language) return;
     try {
       await PaperPlaneApi.instance.updateLanguagePreference(selected);
+      PaperPlaneLocale.setLanguage(selected);
       if (!mounted) return;
       setState(() => _language = selected);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Idioma preferido alterado para ' + (_languageNames[selected] ?? selected) + '.')),
+        SnackBar(content: PlaneText('Idioma preferido alterado para ' + (_languageNames[selected] ?? selected) + '.')),
       );
     } catch (error) {
       if (!mounted) return;
       final message = error is PaperPlaneApiException
           ? error.message
           : 'Não foi possível alterar o idioma preferido.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
     }
   }
 
@@ -5056,8 +5076,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.translate_rounded, color: ppGoldBright),
-            title: const Text('Idioma preferido dos aviões'),
-            subtitle: Text(
+            title: const PlaneText('Idioma preferido dos aviões'),
+            subtitle: PlaneText(
               _loadingLanguage
                   ? 'A consultar o idioma da tua conta…'
                   : _languageNames[_language] ?? _language,
@@ -5072,8 +5092,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.notifications_active_outlined, color: ppGoldBright),
-            title: const Text('Notificações'),
-            subtitle: const Text(
+            title: const PlaneText('Notificações'),
+            subtitle: const PlaneText(
               'A permissão é controlada pelo Android. Podes alterá-la nas definições do dispositivo.',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
@@ -5083,8 +5103,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
         _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
         _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Comunicar problemas e acompanhar pedidos', onTap: () => ppPush(context, const SupportScreen())),
+        const SectionTitle('Informação do Paper Plane'),
+        _ProfileLink(icon: Icons.public_outlined, title: 'Site oficial', subtitle: 'Conhece o projeto e acompanha as novidades', onTap: () => _openWebsitePage('/')),
+        _ProfileLink(icon: Icons.info_outline_rounded, title: 'Sobre o Paper Plane', subtitle: 'A ideia e os princípios do aplicativo', onTap: () => _openWebsitePage('/about')),
+        _ProfileLink(icon: Icons.newspaper_rounded, title: 'Novidades', subtitle: 'Notas de versão e melhorias', onTap: () => _openWebsitePage('/news')),
+        _ProfileLink(icon: Icons.privacy_tip_outlined, title: 'Política de privacidade', subtitle: 'Como os teus dados são tratados', onTap: () => _openWebsitePage('/privacy')),
+        _ProfileLink(icon: Icons.gavel_rounded, title: 'Termos e condições', subtitle: 'Regras de utilização', onTap: () => _openWebsitePage('/terms')),
+        _ProfileLink(icon: Icons.quiz_outlined, title: 'Perguntas frequentes', subtitle: 'Respostas sobre voos, notificações e segurança', onTap: () => _openWebsitePage('/faq')),
+        _ProfileLink(icon: Icons.support_agent_rounded, title: 'Suporte no site', subtitle: 'Informação para resolver problemas', onTap: () => _openWebsitePage('/support')),
         const SizedBox(height: 12),
-        const Text('As notificações são sincronizadas com a conta e podem ser desativadas a qualquer momento.', style: TextStyle(color: Colors.white38, fontSize: 11)),
+        const PlaneText('As notificações são sincronizadas com a conta e podem ser desativadas a qualquer momento.', style: TextStyle(color: Colors.white38, fontSize: 11)),
       ]),
     );
   }
@@ -5106,9 +5134,9 @@ class SafetyScreen extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Icon(Icons.shield_moon_outlined, color: ppGoldBright, size: 38),
               SizedBox(height: 12),
-              Text('Proteção antes da entrega', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+              PlaneText('Proteção antes da entrega', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
               SizedBox(height: 7),
-              Text(
+              PlaneText(
                 'A correspondência aleatória usa a faixa etária declarada no perfil para separar grupos. É uma declaração do próprio utilizador, não uma verificação de identidade nem uma prova de idade.',
                 style: TextStyle(color: Colors.white70, height: 1.5),
               ),
@@ -5120,9 +5148,9 @@ class SafetyScreen extends StatelessWidget {
               Icon(Icons.flag_outlined, color: ppGoldBright),
               SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Denunciar uma carta', style: TextStyle(fontWeight: FontWeight.w800)),
+                PlaneText('Denunciar uma carta', style: TextStyle(fontWeight: FontWeight.w800)),
                 SizedBox(height: 4),
-                Text('Abre o avião recebido e escolhe Denunciar. A denúncia é enviada ao servidor para revisão.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                PlaneText('Abre o avião recebido e escolhe Denunciar. A denúncia é enviada ao servidor para revisão.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
               ])),
             ]),
           ),
@@ -5132,9 +5160,9 @@ class SafetyScreen extends StatelessWidget {
               Icon(Icons.block_rounded, color: ppGoldBright),
               SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Bloquear um remetente', style: TextStyle(fontWeight: FontWeight.w800)),
+                PlaneText('Bloquear um remetente', style: TextStyle(fontWeight: FontWeight.w800)),
                 SizedBox(height: 4),
-                Text('Abre o avião recebido e escolhe Bloquear. O servidor impede novas correspondências entre as duas contas.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                PlaneText('Abre o avião recebido e escolhe Bloquear. O servidor impede novas correspondências entre as duas contas.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
               ])),
             ]),
           ),
@@ -5144,14 +5172,14 @@ class SafetyScreen extends StatelessWidget {
               Icon(Icons.visibility_off_outlined, color: ppGoldBright),
               SizedBox(width: 12),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Identidade protegida', style: TextStyle(fontWeight: FontWeight.w800)),
+                PlaneText('Identidade protegida', style: TextStyle(fontWeight: FontWeight.w800)),
                 SizedBox(height: 4),
-                Text('Nas cartas aleatórias, o remetente não recebe o teu nome de conta nem o teu identificador Firebase. O país é a única referência geográfica mostrada nesta versão.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                PlaneText('Nas cartas aleatórias, o remetente não recebe o teu nome de conta nem o teu identificador Firebase. O país é a única referência geográfica mostrada nesta versão.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
               ])),
             ]),
           ),
           SizedBox(height: 14),
-          Text(
+          PlaneText(
             'Não partilhes morada, contactos, palavras-passe, escola ou outros dados pessoais com desconhecidos. Se uma carta te fizer sentir desconfortável, não respondas: denuncia e bloqueia.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.45),
@@ -5174,10 +5202,10 @@ class WeeklyCountryScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           highlight: true,
           child: const Column(children: [
-            Text('🇯🇵', style: TextStyle(fontSize: 74)),
+            PlaneText('🇯🇵', style: TextStyle(fontSize: 74)),
             SizedBox(height: 10),
-            Text('Japão', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-            Text('Uma viagem de palavras até ao Japão', style: TextStyle(color: Colors.white70)),
+            PlaneText('Japão', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
+            PlaneText('Uma viagem de palavras até ao Japão', style: TextStyle(color: Colors.white70)),
           ]),
         ),
         const SizedBox(height: 15),
@@ -5187,8 +5215,8 @@ class WeeklyCountryScreen extends StatelessWidget {
             Icon(Icons.star_rounded, color: ppGoldBright, size: 35),
             SizedBox(width: 12),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Bónus especial', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w900)),
-              Text('Recompensas temáticas serão ativadas numa fase futura.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+              PlaneText('Bónus especial', style: TextStyle(color: ppGoldBright, fontWeight: FontWeight.w900)),
+              PlaneText('Recompensas temáticas serão ativadas numa fase futura.', style: TextStyle(color: Colors.white70, fontSize: 12)),
             ])),
           ]),
         ),
@@ -5212,9 +5240,9 @@ class _SimpleMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GlassPanel(
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(flag + '  ' + country, style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
+      PlaneText(flag + '  ' + country, style: const TextStyle(color: ppGoldBright, fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
-      Text(text, style: const TextStyle(height: 1.5)),
+      PlaneText(text, style: const TextStyle(height: 1.5)),
     ]),
   );
 }
