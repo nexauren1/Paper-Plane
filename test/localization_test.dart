@@ -36,6 +36,22 @@ void main() {
     expect(PaperPlaneLocale.translate('10 XP acumulados'), '10 XP earned');
   });
 
+  test('translates generated math and geography questions', () {
+    PaperPlaneLocale.setLanguage('en');
+    expect(PaperPlaneLocale.translate('Quanto é 8 × 9?'), 'What is 8 × 9?');
+    expect(PaperPlaneLocale.translate('5 multiplicado por 6 é igual a 30.'), '5 multiplied by 6 equals 30.');
+    expect(PaperPlaneLocale.translate('Qual é a capital de Moçambique?'), 'What is the capital of Mozambique?');
+  });
+
+  test('translates category counters and country names while preserving flags', () {
+    PaperPlaneLocale.setLanguage('en');
+    expect(PaperPlaneLocale.translate('Matemática · 221'), 'Mathematics · 221');
+    expect(PaperPlaneLocale.translate('🇲🇿 Moçambique'), '🇲🇿 Mozambique');
+
+    PaperPlaneLocale.setLanguage('fr');
+    expect(PaperPlaneLocale.translate('Geografia'), 'Géographie');
+  });
+
   test('normalizes region-specific language codes and falls back safely', () {
     PaperPlaneLocale.setLanguage('de-DE');
     expect(PaperPlaneLocale.current.value.languageCode, 'de');
