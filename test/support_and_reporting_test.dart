@@ -6,7 +6,7 @@ import 'package:paper_plane/widgets/report_dialog.dart';
 
 void main() {
   testWidgets('support screen exposes problem categories and ticket history', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SupportScreen()));
+    await tester.pumpWidget(const MaterialApp(locale: Locale('pt'), supportedLocales: [Locale('pt')], home: SupportScreen()));
     await tester.pumpAndSettle();
 
     expect(find.text('Ajuda e suporte'), findsOneWidget);
@@ -28,6 +28,8 @@ void main() {
 
   testWidgets('airplane report dialog presents distinct safety categories', (tester) async {
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('pt'),
+      supportedLocales: const [Locale('pt')],
       home: Scaffold(
         body: Builder(
           builder: (context) => Center(
