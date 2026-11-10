@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:paper_plane/main.dart';
+import 'package:paper_plane/services/paper_plane_localization.dart';
 
 void main() {
   testWidgets('settings expose the preferred translation language', (tester) async {
@@ -18,6 +19,7 @@ void main() {
   });
 
   testWidgets('welcome screen routes to the Firebase account gate', (tester) async {
+    PaperPlaneLocale.setLanguage('pt');
     tester.view.physicalSize = const Size(1080, 2200);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
