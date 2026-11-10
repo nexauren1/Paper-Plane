@@ -313,7 +313,9 @@ describe("Paper Plane Admin API integration", () => {
       target_type: string; recipient_uid: string | null; sent_count: number; failed_count: number;
     }>();
     expect(notificationHistory.results?.length).toBe(2);
-    expect(notificationHistory.results?.every((item) => item.sent_count === 1 && item.failed_count === 0)).toBe(true);
+    expect(notificationHistory.results?.find((item) => item.target_type === "USER")?.sent_count).toBe(1);
+    expect(notificationHistory.results?.find((item) => item.target_type === "ALL")?.sent_count).toBe(2);
+    expect(notificationHistory.results?.every((item) => item.failed_count === 0)).toBe(true);
 
     const auditCount = await DB.prepare(
       "SELECT COUNT(*) AS total FROM audit_events WHERE actor_uid = ?",
