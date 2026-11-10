@@ -99,7 +99,7 @@ void main() {
     );
     expect(
       PaperPlaneLocale.translate(
-        'Novos aviões, mensagens e avisos importantes',
+        'Novos aviões, mensagens e avisos importantes.',
         'es',
       ),
       'Nuevos aviones, mensajes y avisos importantes.',
