@@ -615,13 +615,19 @@ class _LaunchRouterState extends State<LaunchRouter> {
     }
     if (!FirebaseRuntime.isInitialized) return const SplashScreen();
 
+    User? user;
     try {
-      final user = await FirebaseAuth.instance
+      user = await FirebaseAuth.instance
           .authStateChanges()
           .first
           .timeout(const Duration(seconds: 8));
-      if (user == null || user.isAnonymous) return const SplashScreen();
+    } catch (error) {
+      debugPrint('Paper Plane: could not restore Firebase session: $error');
+      return const SplashScreen();
+    }
+    if (user == null || user.isAnonymous) return const SplashScreen();
 
+    try {
       await PaperPlaneApi.instance
           .bootstrapPilot()
           .timeout(const Duration(seconds: 8));
@@ -632,18 +638,23 @@ class _LaunchRouterState extends State<LaunchRouter> {
       PaperPlaneLocale.setLanguage(
         pilot['preferred_language']?.toString() ?? pilot['language']?.toString(),
       );
-      // A completed profile is enough to enter the app. The first-flight
-      // workshop belongs to registration, never to every app reopening.
-      if (pilot['profile_completed'] == 1) return const MainShell();
-    } catch (_) {
-      // Keep the account entry available when the session needs to be retried online.
+      // A completed profile opens Home immediately. The first-flight workshop
+      // belongs to registration, never to every app reopening.
+      final profileCompleted = pilot['profile_completed'] == 1 ||
+          pilot['profile_completed'] == true;
+      if (profileCompleted) return const MainShell();
+      return AccountScreen(
+        onAuthenticated: (firstFlightId) {
+          if (!mounted) return;
+          _replaceWithMain(Navigator.of(context), firstFlightId);
+        },
+      );
+    } catch (error) {
+      // A temporary API/D1/network failure is not a sign-out. Keep an existing
+      // Firebase pilot in the app; Home displays the sync error and can retry.
+      debugPrint('Paper Plane: profile bootstrap unavailable; opening Home: $error');
+      return const MainShell();
     }
-    return AccountScreen(
-      onAuthenticated: (firstFlightId) {
-        if (!mounted) return;
-        _replaceWithMain(Navigator.of(context), firstFlightId);
-      },
-    );
   }
 
   @override
@@ -725,12 +736,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                       ),
                       const SizedBox(height: 12),
                       const PlaneText(
-                        'Send a message to a stranger',
+                        'Envia uma mensagem e descobre o mundo.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 17, color: Colors.white70),
                       ),
                       const Spacer(flex: 3),
-                      GoldButton(label: 'Start Flying', icon: Icons.flight_takeoff_rounded, onPressed: _start, height: 66),
+                      GoldButton(label: 'Começar a voar', icon: Icons.flight_takeoff_rounded, onPressed: _start, height: 66),
                       const SizedBox(height: 18),
                       const PlaneText('Um pensamento. Um avião. O mundo inteiro.', style: TextStyle(color: Colors.white38, fontSize: 12)),
                     ],
@@ -863,7 +874,7 @@ class _MainShellState extends State<MainShell> {
           child: SizedBox(
             height: 66,
             child: Row(children: [
-              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
               _navItem(1, Icons.inbox_outlined, Icons.inbox_rounded, 'Caixa'),
               _navItem(2, Icons.public_outlined, Icons.public_rounded, 'Open Sky'),
               _navItem(3, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chat'),
@@ -1255,19 +1266,27 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
       if (id == null || id.isEmpty) {
         throw const PaperPlaneApiException('AIRPLANE_NOT_CREATED', 'O servidor não confirmou a criação do avião.');
       }
-      final isPublic = const {'Público', 'Public', 'PUBLIC', 'Open Sky'}.contains(_visibility.trim());
+      final isPublic = PaperPlaneApi.isPublicVisibility(_visibility);
       if (isPublic) {
         Navigator.of(context).pop();
-        final published = airplane['status']?.toString() == 'DELIVERED' &&
-            airplane['moderation']?.toString() == 'SAFE';
-        if (published) {
+        final status = airplane['status']?.toString().toUpperCase();
+        final moderation = airplane['moderation']?.toString().toUpperCase();
+        if (status == 'DELIVERED' && moderation == 'SAFE') {
           PaperPlaneNotifications.onOpenOpenSky?.call();
           PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
             const SnackBar(content: PlaneText('Avião publicado no Open Sky.')),
           );
+        } else if (status == 'PENDING_MODERATION' || moderation == 'PENDING') {
+          PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: PlaneText('O teu avião foi guardado e aguarda a verificação automática. Aparecerá no Open Sky se for aprovado.')),
+          );
+        } else if (status == 'HELD_REVIEW' || moderation == 'REVIEW') {
+          PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(content: PlaneText('A tua publicação foi retida para revisão da equipa. Só aparecerá no Open Sky se for aprovada.')),
+          );
         } else {
           PaperPlaneNotifications.scaffoldMessengerKey.currentState?.showSnackBar(
-            const SnackBar(content: PlaneText('Avião recebido e colocado em revisão de segurança. Só será mostrado no Open Sky depois de aprovado.')),
+            const SnackBar(content: PlaneText('O servidor recebeu o pedido, mas ainda não confirmou a publicação. Atualiza o Open Sky mais tarde.')),
           );
         }
         return;
@@ -2079,6 +2098,13 @@ class GlobeFlightPainter extends CustomPainter {
 
     canvas.drawCircle(
       center,
+      radius + 12,
+      Paint()
+        ..color = const Color(0xFF20C9FF).withOpacity(0.17)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 34),
+    );
+    canvas.drawCircle(
+      center,
       radius + 8,
       Paint()
         ..color = const Color(0xFFFFC86E).withOpacity(0.13)
@@ -2103,11 +2129,18 @@ class GlobeFlightPainter extends CustomPainter {
 
     canvas.save();
     canvas.clipPath(Path()..addOval(sphereRect));
+    canvas.drawCircle(
+      Offset(center.dx - radius * 0.32, center.dy - radius * 0.35),
+      radius * 0.62,
+      Paint()
+        ..color = const Color(0xFF9CEBFF).withOpacity(0.055)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22),
+    );
 
     final gridPaint = Paint()
-      ..color = const Color(0xFF9FCFFF).withOpacity(0.065)
+      ..color = const Color(0xFF9FCFFF).withOpacity(0.095)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.65;
+      ..strokeWidth = 0.72;
     for (var factor = -0.75; factor <= 0.75; factor += 0.25) {
       final y = center.dy + radius * factor;
       final rx = radius * math.sqrt(1 - factor * factor);
@@ -2120,14 +2153,16 @@ class GlobeFlightPainter extends CustomPainter {
         gridPaint,
       );
     }
-    canvas.drawOval(
-      Rect.fromCenter(center: center, width: radius * 0.72, height: radius * 2),
-      gridPaint,
-    );
-    canvas.drawOval(
-      Rect.fromCenter(center: center, width: radius * 1.45, height: radius * 2),
-      gridPaint,
-    );
+    for (final longitudeScale in [0.36, 0.72, 1.08, 1.45, 1.72]) {
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: center,
+          width: radius * longitudeScale,
+          height: radius * 2,
+        ),
+        gridPaint,
+      );
+    }
 
     for (final continent in _continents) {
       _drawLand(canvas, continent, centerLat, centerLng, center, radius * 0.99);
@@ -2303,6 +2338,54 @@ class GlobeFlightPainter extends CustomPainter {
     }
 
     canvas.restore();
+
+    // A thin orbital track, with a moving cyan beacon, gives the globe a
+    // layered 3D silhouette without hiding the destination route.
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(-0.22 + rotation * math.pi / 180);
+    final orbitRect = Rect.fromCenter(
+      center: Offset.zero,
+      width: radius * 2.12,
+      height: radius * 0.58,
+    );
+    canvas.drawOval(
+      orbitRect,
+      Paint()
+        ..color = const Color(0xFF38D9FF).withOpacity(0.46)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.35,
+    );
+    final orbitPhase = pulse * math.pi * 2;
+    final orbitBeacon = Offset(
+      math.cos(orbitPhase) * radius * 1.06,
+      math.sin(orbitPhase) * radius * 0.29,
+    );
+    canvas.drawCircle(
+      orbitBeacon,
+      8,
+      Paint()
+        ..color = const Color(0xFF38D9FF).withOpacity(0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+    );
+    canvas.drawCircle(
+      orbitBeacon,
+      2.8,
+      Paint()..color = const Color(0xFFB8F7FF),
+    );
+    canvas.restore();
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius + 5),
+      -math.pi * 0.78,
+      math.pi * 0.38,
+      false,
+      Paint()
+        ..color = const Color(0xFF53DFFF).withOpacity(0.72)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.3
+        ..strokeCap = StrokeCap.round,
+    );
     canvas.drawCircle(
       center,
       radius + 9,
@@ -5028,10 +5111,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
           children: [
-            const PlaneText('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const PlaneText('Idioma da aplicação', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
             const SizedBox(height: 6),
             const PlaneText(
-              'Os aviões recebidos, a aplicação e as traduções usam este idioma.',
+              'A aplicação, os aviões recebidos e as notificações usam este idioma.',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
             const SizedBox(height: 10),
@@ -5076,7 +5159,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.translate_rounded, color: ppGoldBright),
-            title: const PlaneText('Idioma preferido dos aviões'),
+            title: const PlaneText('Idioma da aplicação'),
             subtitle: PlaneText(
               _loadingLanguage
                   ? 'A consultar o idioma da tua conta…'
