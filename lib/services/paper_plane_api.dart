@@ -291,6 +291,11 @@ class PaperPlaneApi {
     return _request('/v1/open-sky$suffix');
   }
 
+  static bool isPublicVisibility(String? visibility) {
+    final normalized = (visibility ?? '').trim().toLowerCase();
+    return const {'público', 'publico', 'public', 'open sky'}.contains(normalized);
+  }
+
   Future<Map<String, dynamic>> sendPlane({
     required String message,
     required String language,
@@ -308,7 +313,7 @@ class PaperPlaneApi {
         'message': message,
         'language': language,
         'mood': mood,
-        'visibility': const {'Público', 'Public', 'PUBLIC', 'Open Sky'}.contains(visibility.trim()) ? 'PUBLIC' : 'RANDOM',
+        'visibility': isPublicVisibility(visibility) ? 'PUBLIC' : 'RANDOM',
         'destinationCountry': destinationCountry,
         'allowReply': allowReply,
         'planeModel': planeModel,
