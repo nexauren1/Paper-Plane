@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'firebase_runtime.dart';
 import 'paper_plane_api.dart';
+import 'paper_plane_localization.dart';
 
 class PaperPlaneNotifications {
   PaperPlaneNotifications._();
@@ -55,7 +56,7 @@ class PaperPlaneNotifications {
       const channel = AndroidNotificationChannel(
         'paper_plane_updates',
         'Paper Plane',
-        description: 'Novos aviões, mensagens e avisos importantes.',
+        description: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes'),
         importance: Importance.max,
         playSound: true,
         enableVibration: true,
@@ -80,10 +81,10 @@ class PaperPlaneNotifications {
       final notification = message.notification;
       final title = notification?.title?.trim().isNotEmpty == true
           ? notification!.title!
-          : 'Nova atividade no Paper Plane';
+          : PaperPlaneLocale.translate('Nova atividade no Paper Plane');
       final body = notification?.body?.trim().isNotEmpty == true
           ? notification!.body!
-          : 'Tens uma atualização na tua caixa de entrada.';
+          : PaperPlaneLocale.translate('Tens uma atualização na tua caixa de entrada.');
 
       await _localNotifications.show(
         id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -93,7 +94,7 @@ class PaperPlaneNotifications {
           android: AndroidNotificationDetails(
             'paper_plane_updates',
             'Paper Plane',
-            channelDescription: 'Novos aviões, mensagens e avisos importantes.',
+            channelDescription: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes'),
             importance: Importance.max,
             priority: Priority.high,
             category: AndroidNotificationCategory.message,
@@ -110,12 +111,12 @@ class PaperPlaneNotifications {
           content: Text('$title  $body'),
           action: SnackBarAction(
             label: message.data['type'] == 'CHAT_MESSAGE'
-                ? 'Abrir Chat'
+                ? PaperPlaneLocale.translate('Abrir Chat')
                 : message.data['type'] == 'PLANE_DELIVERED'
-                    ? 'Ver voo'
+                    ? PaperPlaneLocale.translate('Ver voo')
                     : message.data['airplaneId']?.toString().isNotEmpty == true
-                        ? 'Abrir carta'
-                        : 'Abrir caixa',
+                        ? PaperPlaneLocale.translate('Abrir carta')
+                        : PaperPlaneLocale.translate('Abrir caixa'),
             onPressed: () => _routeMessage(message),
           ),
         ),
