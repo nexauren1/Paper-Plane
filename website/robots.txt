@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://paper-plane.nexaurenstore.workers.dev/sitemap.xml
