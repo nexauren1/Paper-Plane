@@ -790,6 +790,21 @@ class PaperPlaneLocale {
     ],
     'Os teus pedidos': ['Your requests', 'Tus solicitudes', 'Tes demandes', 'Deine Anfragen'],
 
+    'A ler o link…': ['Reading link…', 'Leyendo el enlace…', 'Lecture du lien…', 'Link wird gelesen…'],
+    'Denunciar avião': ['Report plane', 'Denunciar avión', 'Signaler un avion', 'Papierflieger melden'],
+    'Escolhe o motivo que melhor descreve o problema. A denúncia será enviada para análise.': [
+      'Choose the reason that best describes the issue. Your report will be sent for review.',
+      'Elige el motivo que mejor describe el problema. Tu denuncia se enviará para su revisión.',
+      'Choisis le motif qui décrit le mieux le problème. Ton signalement sera envoyé pour examen.',
+      'Wähle den Grund, der das Problem am besten beschreibt. Deine Meldung wird zur Prüfung gesendet.',
+    ],
+    'Denúncia enviada para análise. Obrigado por ajudares a manter o céu seguro.': [
+      'Report sent for review. Thank you for helping keep the sky safe.',
+      'Denuncia enviada para revisión. Gracias por ayudar a mantener el cielo seguro.',
+      'Signalement envoyé pour examen. Merci de contribuer à la sécurité du ciel.',
+      'Meldung zur Prüfung gesendet. Danke, dass du hilfst, den Himmel sicher zu halten.',
+    ],
+
   };
 }
 
