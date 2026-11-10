@@ -2975,7 +2975,7 @@ export default {
     // Serve the public product website from this same Worker while keeping
     // API and invitation endpoints on their existing handlers.
     const url = new URL(request.url);
-    const staticPaths = new Set(["/", "/privacy", "/terms", "/about", "/news", "/support", "/faq", "/styles.css", "/site.js", "/favicon.svg"]);
+    const staticPaths = new Set(["/", "/privacy", "/terms", "/about", "/news", "/support", "/faq", "/styles.css", "/site.js", "/favicon.svg", "/robots.txt", "/sitemap.xml"]);
     if (request.method === "GET" && env.ASSETS && staticPaths.has(url.pathname)) {
       if (url.pathname !== "/" && !url.pathname.includes(".")) url.pathname += ".html";
       return env.ASSETS.fetch(new Request(url.toString(), request));
