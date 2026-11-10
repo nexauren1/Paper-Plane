@@ -50,8 +50,8 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
                     value: category,
                     isExpanded: true,
                     dropdownColor: const Color(0xFF203653),
-                    decoration: const InputDecoration(
-                      labelText: 'Categoria',
+                    decoration: InputDecoration(
+                      labelText: PaperPlaneLocale.translate('Categoria'),
                       border: OutlineInputBorder(),
                     ),
                     items: _reportOptions.entries
@@ -74,9 +74,9 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
                     maxLines: 4,
                     maxLength: 500,
                     style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      labelText: 'Detalhes (opcional)',
-                      hintText: 'Conta-nos o que aconteceu…',
+                    decoration: InputDecoration(
+                      labelText: PaperPlaneLocale.translate('Detalhes (opcional)'),
+                      hintText: PaperPlaneLocale.translate('Conta-nos o que aconteceu…'),
                       border: OutlineInputBorder(),
                     ),
                   ),
