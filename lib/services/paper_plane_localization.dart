@@ -228,6 +228,49 @@ class PaperPlaneLocale {
   }
 
   static const Map<String, List<String>> _translations = {
+    'Início': ['Home', 'Inicio', 'Accueil', 'Startseite'],
+    'Começar a voar': [
+      'Start Flying',
+      'Empezar a volar',
+      'Commencer à voler',
+      'Jetzt losfliegen',
+    ],
+    'Envia uma mensagem e descobre o mundo.': [
+      'Send a message and discover the world.',
+      'Envía un mensaje y descubre el mundo.',
+      'Envoie un message et découvre le monde.',
+      'Sende eine Nachricht und entdecke die Welt.',
+    ],
+    'Idioma da aplicação': [
+      'App language',
+      'Idioma de la aplicación',
+      'Langue de l’application',
+      'App-Sprache',
+    ],
+    'A aplicação, os aviões recebidos e as notificações usam este idioma.': [
+      'The app, incoming planes and notifications use this language.',
+      'La aplicación, los aviones recibidos y las notificaciones usan este idioma.',
+      'L’application, les avions reçus et les notifications utilisent cette langue.',
+      'Die App, eingehende Papierflieger und Benachrichtigungen verwenden diese Sprache.',
+    ],
+    'O teu avião foi guardado e aguarda a verificação automática. Aparecerá no Open Sky se for aprovado.': [
+      'Your plane has been saved and is waiting for the automatic safety check. It will appear in Open Sky if approved.',
+      'Tu avión se ha guardado y espera la comprobación automática de seguridad. Aparecerá en Open Sky si se aprueba.',
+      'Ton avion a été enregistré et attend la vérification automatique de sécurité. Il apparaîtra dans Open Sky s’il est approuvé.',
+      'Dein Papierflieger wurde gespeichert und wartet auf die automatische Sicherheitsprüfung. Bei Freigabe erscheint er in Open Sky.',
+    ],
+    'A tua publicação foi retida para revisão da equipa. Só aparecerá no Open Sky se for aprovada.': [
+      'Your post has been held for team review. It will appear in Open Sky only if approved.',
+      'Tu publicación está retenida para que el equipo la revise. Solo aparecerá en Open Sky si se aprueba.',
+      'Ta publication a été retenue pour examen par l’équipe. Elle apparaîtra dans Open Sky uniquement si elle est approuvée.',
+      'Dein Beitrag wurde zur Prüfung durch das Team zurückgehalten. Er erscheint nur nach Freigabe in Open Sky.',
+    ],
+    'O servidor recebeu o pedido, mas ainda não confirmou a publicação. Atualiza o Open Sky mais tarde.': [
+      'The server received the request, but publication is not confirmed yet. Refresh Open Sky later.',
+      'El servidor recibió la solicitud, pero todavía no confirmó la publicación. Actualiza Open Sky más tarde.',
+      'Le serveur a reçu la demande, mais la publication n’est pas encore confirmée. Actualise Open Sky plus tard.',
+      'Der Server hat die Anfrage erhalten, die Veröffentlichung aber noch nicht bestätigt. Aktualisiere Open Sky später.',
+    ],
     'Um pensamento. Um avião. O mundo inteiro.': [
       'One thought. One plane. The whole world.',
       'Una idea. Un avión. El mundo entero.',
