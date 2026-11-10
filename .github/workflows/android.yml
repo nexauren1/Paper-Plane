@@ -415,6 +415,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Analyze Flutter and Dart code
+        run: flutter analyze
+
       - name: Run widget tests
         run: flutter test
 
@@ -547,6 +550,10 @@ jobs:
       - name: Type-check Cloudflare Worker
         working-directory: cloudflare/worker
         run: npm run typecheck
+
+      - name: Run Cloudflare Worker integration tests
+        working-directory: cloudflare/worker
+        run: npm run test:integration
 
       - name: Validate D1 migrations
         working-directory: cloudflare/worker
