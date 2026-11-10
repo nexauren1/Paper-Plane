@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
 
@@ -118,7 +119,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
       appBar: AppBar(
         backgroundColor: _workshopNavy,
         foregroundColor: _workshopGoldBright,
-        title: const Text('Constrói o teu primeiro avião', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const PlaneText('Constrói o teu primeiro avião', style: TextStyle(fontWeight: FontWeight.w800)),
       ),
       body: Stack(children: [
         const Positioned.fill(child: CustomPaint(painter: _WorkshopStarsPainter())),
@@ -126,9 +127,9 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
           child: ListView(
             padding: const EdgeInsets.fromLTRB(19, 8, 19, 28),
             children: [
-              const Text('Toda a viagem começa com uma dobra.', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+              const PlaneText('Toda a viagem começa com uma dobra.', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
               const SizedBox(height: 6),
-              const Text('Escolhe o desenho, escreve a tua primeira carta e vê o papel ganhar asas.', style: TextStyle(color: Colors.white70, height: 1.45)),
+              const PlaneText('Escolhe o desenho, escreve a tua primeira carta e vê o papel ganhar asas.', style: TextStyle(color: Colors.white70, height: 1.45)),
               const SizedBox(height: 16),
               Container(
                 height: 190,
@@ -147,7 +148,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                 ),
               ),
               const SizedBox(height: 18),
-              const Text('Escolhe o formato do avião', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _workshopGoldBright)),
+              const PlaneText('Escolhe o formato do avião', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _workshopGoldBright)),
               const SizedBox(height: 11),
               Row(children: [
                 Expanded(child: _planeOption('DART', 'Dardo', 'Rápido e direto')),
@@ -165,7 +166,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 14, offset: const Offset(0, 6))],
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('A tua primeira carta', style: TextStyle(color: Color(0xFF766B58), fontWeight: FontWeight.w800)),
+                  const PlaneText('A tua primeira carta', style: TextStyle(color: Color(0xFF766B58), fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _message,
@@ -184,7 +185,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
               ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: Color(0xFFFF9D9D), fontSize: 12)),
+                PlaneText(_error!, style: const TextStyle(color: Color(0xFFFF9D9D), fontSize: 12)),
               ],
               const SizedBox(height: 16),
               SizedBox(
@@ -194,7 +195,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                   icon: _busy
                       ? const SizedBox(width: 19, height: 19, child: CircularProgressIndicator(strokeWidth: 2, color: _workshopNavy))
                       : const Icon(Icons.send_rounded),
-                  label: Text(_busy ? 'A dobrar e lançar…' : 'Lançar o meu primeiro avião'),
+                  label: PlaneText(_busy ? 'A dobrar e lançar…' : 'Lançar o meu primeiro avião'),
                   style: FilledButton.styleFrom(
                     backgroundColor: _workshopGold,
                     foregroundColor: _workshopNavy,
@@ -205,7 +206,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                 ),
               ),
               const SizedBox(height: 9),
-              const Text('O avião e o texto são guardados online. Não há envio fictício nem destinatário inventado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 11)),
+              const PlaneText('O avião e o texto são guardados online. Não há envio fictício nem destinatário inventado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 11)),
             ],
           ),
         ),
@@ -236,9 +237,9 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
             child: CustomPaint(painter: _PlaneTypePainter(model: model), child: const SizedBox.expand()),
           ),
           const SizedBox(height: 5),
-          Text(title, style: TextStyle(fontWeight: FontWeight.w900, color: selected ? _workshopGoldBright : Colors.white)),
+          PlaneText(title, style: TextStyle(fontWeight: FontWeight.w900, color: selected ? _workshopGoldBright : Colors.white)),
           const SizedBox(height: 3),
-          Text(description, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+          PlaneText(description, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
         ]),
       ),
     );
