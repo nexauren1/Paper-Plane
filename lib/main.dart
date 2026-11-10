@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
 import 'services/paper_plane_auth.dart';
@@ -4996,6 +4997,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openWebsitePage(String path) async {
+    final uri = Uri.https('paper-plane.nexaurenstore.workers.dev', path);
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: PlaneText('Não foi possível abrir a página.')),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: PlaneText('Não foi possível abrir a página.')),
+      );
+    }
+  }
+
   Future<void> _changeLanguage() async {
     if (_loadingLanguage || !FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
     final selected = await showModalBottomSheet<String>(
@@ -5082,6 +5100,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, const AccountScreen())),
         _ProfileLink(icon: Icons.shield_outlined, title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos', onTap: () => ppPush(context, const SafetyScreen())),
         _ProfileLink(icon: Icons.help_outline, title: 'Ajuda e suporte', subtitle: 'Comunicar problemas e acompanhar pedidos', onTap: () => ppPush(context, const SupportScreen())),
+        const SectionTitle('Informação do Paper Plane'),
+        _ProfileLink(icon: Icons.public_outlined, title: 'Site oficial', subtitle: 'Conhece o projeto e acompanha as novidades', onTap: () => _openWebsitePage('/')),
+        _ProfileLink(icon: Icons.info_outline_rounded, title: 'Sobre o Paper Plane', subtitle: 'A ideia e os princípios do aplicativo', onTap: () => _openWebsitePage('/about')),
+        _ProfileLink(icon: Icons.newspaper_rounded, title: 'Novidades', subtitle: 'Notas de versão e melhorias', onTap: () => _openWebsitePage('/news')),
+        _ProfileLink(icon: Icons.privacy_tip_outlined, title: 'Política de privacidade', subtitle: 'Como os teus dados são tratados', onTap: () => _openWebsitePage('/privacy')),
+        _ProfileLink(icon: Icons.gavel_rounded, title: 'Termos e condições', subtitle: 'Regras de utilização', onTap: () => _openWebsitePage('/terms')),
         const SizedBox(height: 12),
         const PlaneText('As notificações são sincronizadas com a conta e podem ser desativadas a qualquer momento.', style: TextStyle(color: Colors.white38, fontSize: 11)),
       ]),
