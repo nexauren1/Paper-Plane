@@ -289,17 +289,17 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                 ),
                 IconButton(
                   onPressed: _copyInvite,
-                  tooltip: 'Copiar link de convite',
+                  tooltip: PaperPlaneLocale.translate('Copiar link de convite'),
                   icon: const Icon(Icons.link_rounded, color: _chatGoldBright),
                 ),
                 IconButton(
                   onPressed: _changeLanguage,
-                  tooltip: 'Idioma: ${_languageNames[_myLanguage] ?? _myLanguage}',
+                  tooltip: PaperPlaneLocale.translate('Idioma: ${_languageNames[_myLanguage] ?? _myLanguage}'),
                   icon: const Icon(Icons.translate_rounded, color: _chatGoldBright),
                 ),
                 IconButton(
                   onPressed: () => _refresh(),
-                  tooltip: 'Atualizar',
+                  tooltip: PaperPlaneLocale.translate('Atualizar'),
                   icon: const Icon(Icons.refresh_rounded, color: _chatGoldBright),
                 ),
               ],
@@ -501,7 +501,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
               onSubmitted: (_) => _searchPilots(),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
-                hintText: 'Pesquisar @nome_de_copiloto',
+                hintText: PaperPlaneLocale.translate('Pesquisar @nome_de_copiloto'),
                 prefixIcon: const Icon(Icons.search_rounded, color: _chatGoldBright),
                 filled: true,
                 fillColor: const Color(0xFF132541),
@@ -644,7 +644,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
               ]),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Opções da conversa',
+              tooltip: PaperPlaneLocale.translate('Opções da conversa'),
               onSelected: (value) {
                 if (value == 'delete' && conversationId.isNotEmpty) {
                   _deleteConversation(conversationId, chama: chama, name: name);
@@ -679,12 +679,12 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
         ])),
         IconButton(
-          tooltip: 'Aceitar',
+          tooltip: PaperPlaneLocale.translate('Aceitar'),
           onPressed: id.isEmpty ? null : () => _respond(id, true),
           icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF8EE0B1)),
         ),
         IconButton(
-          tooltip: 'Recusar',
+          tooltip: PaperPlaneLocale.translate('Recusar'),
           onPressed: id.isEmpty ? null : () => _respond(id, false),
           icon: const Icon(Icons.cancel_outlined, color: Color(0xFFFFA6A6)),
         ),
@@ -1380,7 +1380,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
             child: Row(children: [
               IconButton(
                 onPressed: widget.isChama && _chamaEnded ? null : _openEmojiPicker,
-                tooltip: 'Adicionar emoji',
+                tooltip: PaperPlaneLocale.translate('Adicionar emoji'),
                 icon: const Icon(Icons.emoji_emotions_outlined, color: _chatGoldBright),
               ),
               Expanded(
@@ -1392,7 +1392,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
                   textCapitalization: TextCapitalization.sentences,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
-                    hintText: widget.isChama ? (_chamaEnded ? 'Chama encerrada' : 'Enviar próximo avião…') : 'Mensagem instantânea…',
+                    hintText: PaperPlaneLocale.translate(widget.isChama ? (_chamaEnded ? 'Chama encerrada' : 'Enviar próximo avião…') : 'Mensagem instantânea…'),
                     counterText: '',
                     filled: true,
                     fillColor: const Color(0xFF1B2A43),
@@ -1524,7 +1524,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints.tightFor(width: 27, height: 25),
               padding: EdgeInsets.zero,
-              tooltip: 'Copiar mensagem',
+              tooltip: PaperPlaneLocale.translate('Copiar mensagem'),
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: original));
                 if (!mounted) return;
