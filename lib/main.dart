@@ -4605,7 +4605,7 @@ class ChamaScreen extends StatelessWidget {
                 const PlaneText('Pré-visualização — mensagens privadas ainda desativadas.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 11)),
                 const SizedBox(height: 10),
                 Row(children: [
-                  const Expanded(
+                  Expanded(
                     child: TextField(
                       enabled: false,
                       decoration: InputDecoration(
