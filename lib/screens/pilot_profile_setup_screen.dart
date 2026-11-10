@@ -232,6 +232,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
         language: _preferredLanguage,
         avatarUrl: _avatarUrl.text.trim().isEmpty ? null : _avatarUrl.text.trim(),
       );
+      PaperPlaneLocale.setLanguage(_preferredLanguage);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (error) {
