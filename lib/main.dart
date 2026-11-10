@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/services.dart';
@@ -101,6 +102,7 @@ class _PaperPlaneAppState extends State<PaperPlaneApp> {
       builder: (context, locale, _) => MaterialApp(
       locale: locale,
       supportedLocales: const [Locale('pt'), Locale('en'), Locale('es'), Locale('fr'), Locale('de')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       scaffoldMessengerKey: PaperPlaneNotifications.scaffoldMessengerKey,
       title: 'Paper Plane',
       debugShowCheckedModeBanner: false,
