@@ -754,18 +754,18 @@ class PaperPlaneLocale {
       'Eingehende Papierflieger können automatisch in dieser Sprache angezeigt werden. Die Originalnachricht bleibt verfügbar.',
     ],
     'Eliminar conversa?': ['Delete conversation?', '¿Eliminar conversación?', 'Supprimer la conversation ?', 'Unterhaltung löschen?'],
-    'A conversa com $name será removida da tua lista. A outra pessoa continuará a ter a sua cópia.': [
-      'The conversation with $name will be removed from your list. The other person will keep their copy.',
-      'La conversación con $name se quitará de tu lista. La otra persona conservará su copia.',
-      'La conversation avec $name sera retirée de ta liste. L’autre personne conservera sa copie.',
-      'Die Unterhaltung mit $name wird aus deiner Liste entfernt. Die andere Person behält ihre Kopie.',
+    r'A conversa com $name será removida da tua lista. A outra pessoa continuará a ter a sua cópia.': [
+      r'The conversation with $name will be removed from your list. The other person will keep their copy.',
+      r'La conversación con $name se quitará de tu lista. La otra persona conservará su copia.',
+      r'La conversation avec $name sera retirée de ta liste. L’autre personne conservera sa copie.',
+      r'Die Unterhaltung mit $name wird aus deiner Liste entfernt. Die andere Person behält ihre Kopie.',
     ],
     'Remover amigo?': ['Remove friend?', '¿Eliminar amigo?', 'Retirer cet ami ?', 'Freund entfernen?'],
-    'Queres remover @$handle da tua lista de amigos? A conversa Chama não será apagada.': [
-      'Do you want to remove @$handle from your friends list? The Chama conversation will not be deleted.',
-      '¿Quieres quitar a @$handle de tu lista de amigos? La conversación Chama no se eliminará.',
-      'Veux-tu retirer @$handle de ta liste d’amis ? La conversation Chama ne sera pas supprimée.',
-      'Möchtest du @$handle aus deiner Freundesliste entfernen? Die Chama-Unterhaltung wird nicht gelöscht.',
+    r'Queres remover @$handle da tua lista de amigos? A conversa Chama não será apagada.': [
+      r'Do you want to remove @$handle from your friends list? The Chama conversation will not be deleted.',
+      r'¿Quieres quitar a @$handle de tu lista de amigos? La conversación Chama no se eliminará.',
+      r'Veux-tu retirer @$handle de ta liste d’amis ? La conversation Chama ne sera pas supprimée.',
+      r'Möchtest du @$handle aus deiner Freundesliste entfernen? Die Chama-Unterhaltung wird nicht gelöscht.',
     ],
     'Os aviões recebidos serão traduzidos para este idioma.': [
       'Incoming planes will be translated into this language.',
