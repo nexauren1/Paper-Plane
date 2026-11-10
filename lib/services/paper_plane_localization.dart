@@ -42,6 +42,18 @@ class PaperPlaneLocale {
         if (index != null) return entry.value[index] + source.substring(entry.key.length);
       }
     }
+    final dynamicTranslations = <String, List<String>>{
+      'Olá, ': ['Hello, ', 'Hola, ', 'Bonjour, ', 'Hallo, '],
+      'Idioma: ': ['Language: ', 'Idioma: ', 'Langue : ', 'Sprache: '],
+      'Alguém em ': ['Someone in ', 'Alguien en ', 'Quelqu’un à ', 'Jemand aus '],
+      'Responder · ': ['Reply · ', 'Responder · ', 'Répondre · ', 'Antworten · '],
+    };
+    for (final entry in dynamicTranslations.entries) {
+      if (source.startsWith(entry.key)) {
+        final index = const {'en': 0, 'es': 1, 'fr': 2, 'de': 3}[code];
+        if (index != null) return entry.value[index] + source.substring(entry.key.length);
+      }
+    }
     return source;
   }
 
@@ -263,7 +275,6 @@ class PaperPlaneLocale {
       'Choisis un modèle, écris ta première lettre et regarde le papier prendre son envol.',
       'Wähle ein Design, schreibe deinen ersten Brief und sieh zu, wie das Papier Flügel bekommt.',
     ],
-    'Ajuda e suporte': ['Help and support', 'Ayuda y soporte', 'Aide et assistance', 'Hilfe und Support'],
     'Estamos aqui para ajudar': ['We are here to help', 'Estamos aquí para ayudarte', 'Nous sommes là pour t’aider', 'Wir helfen dir gerne'],
     'Novo pedido': ['New request', 'Nueva solicitud', 'Nouvelle demande', 'Neue Anfrage'],
     'Send a message to a stranger': ['Send a message to a stranger', 'Envía un mensaje a alguien', 'Envoie un message à quelqu’un', 'Sende eine Nachricht an eine fremde Person'],
@@ -447,7 +458,6 @@ class PaperPlaneLocale {
       'Les badges sont attribués pour des actions réelles dans l’application.',
       'Abzeichen werden für echte Aktionen in der App vergeben.',
     ],
-    'Estamos aqui para ajudar': ['We are here to help', 'Estamos aquí para ayudarte', 'Nous sommes là pour t’aider', 'Wir helfen dir gerne'],
     'Comunica falhas, dificuldades com a conta ou entrega, questões de segurança e sugestões. Não incluas palavras-passe nem documentos pessoais.': [
       'Report bugs, account or delivery issues, safety concerns and suggestions. Do not include passwords or personal documents.',
       'Comunica errores, problemas de cuenta o entrega, cuestiones de seguridad y sugerencias. No incluyas contraseñas ni documentos personales.',
@@ -512,6 +522,35 @@ class PaperPlaneLocale {
       'Nous utilisons la date pour calculer ta tranche d’âge. Le jour et le mois ne sont pas conservés ; le serveur ne garde que l’année et la tranche déclarée.',
       'Wir verwenden das Datum zur Berechnung deiner Altersgruppe. Tag und Monat werden nicht gespeichert; der Server speichert nur das Jahr und die angegebene Altersgruppe.',
     ],
+    'Escreve algo gentil...': ['Write something kind...', 'Escribe algo amable...', 'Écris quelque chose de gentil…', 'Schreibe etwas Freundliches…'],
+    'Escreve uma resposta gentil…': ['Write a kind reply…', 'Escribe una respuesta amable…', 'Écris une réponse gentille…', 'Schreibe eine freundliche Antwort…'],
+    'Escreve uma resposta…': ['Write a reply…', 'Escribe una respuesta…', 'Écris une réponse…', 'Schreibe eine Antwort…'],
+    'Link da foto ou perfil público': ['Photo or public profile link', 'Enlace de foto o perfil público', 'Lien vers une photo ou un profil public', 'Link zum Foto oder öffentlichen Profil'],
+    'Enviar mensagem em papel...': ['Send a paper message...', 'Enviar mensaje en papel...', 'Envoyer un message papier…', 'Papiernachricht senden…'],
+    'Palavra-passe atual': ['Current password', 'Contraseña actual', 'Mot de passe actuel', 'Aktuelles Passwort'],
+    'Pesquisar @nome_de_copiloto': ['Search @co-pilot-name', 'Buscar @nombre-de-copiloto', 'Rechercher @nom-de-copilote', '@Co-Pilot-Name suchen'],
+    'Chama encerrada': ['Chama ended', 'Chama finalizada', 'Chama terminée', 'Chama beendet'],
+    'Enviar próximo avião…': ['Send next plane…', 'Enviar el próximo avión…', 'Envoyer le prochain avion…', 'Nächsten Papierflieger senden…'],
+    'Mensagem instantânea…': ['Instant message…', 'Mensaje instantáneo…', 'Message instantané…', 'Sofortnachricht…'],
+    'Copiar link de convite': ['Copy invitation link', 'Copiar enlace de invitación', 'Copier le lien d’invitation', 'Einladungslink kopieren'],
+    'Atualizar voo': ['Refresh flight', 'Actualizar vuelo', 'Actualiser le vol', 'Flug aktualisieren'],
+    'Mais opções': ['More options', 'Más opciones', 'Plus d’options', 'Weitere Optionen'],
+    'Atualizar atlas': ['Refresh atlas', 'Actualizar atlas', 'Actualiser l’atlas', 'Atlas aktualisieren'],
+    'Atualizar coleção': ['Refresh collection', 'Actualizar colección', 'Actualiser la collection', 'Sammlung aktualisieren'],
+    'Copiar mensagem': ['Copy message', 'Copiar mensaje', 'Copier le message', 'Nachricht kopieren'],
+    'Aceitar': ['Accept', 'Aceptar', 'Accepter', 'Annehmen'],
+    'Recusar': ['Decline', 'Rechazar', 'Refuser', 'Ablehnen'],
+    'Adicionar emoji': ['Add emoji', 'Añadir emoji', 'Ajouter un emoji', 'Emoji hinzufügen'],
+    'Categoria': ['Category', 'Categoría', 'Catégorie', 'Kategorie'],
+    'Assunto': ['Subject', 'Asunto', 'Sujet', 'Betreff'],
+    'Descreve o problema': ['Describe the issue', 'Describe el problema', 'Décris le problème', 'Beschreibe das Problem'],
+    'O que aconteceu? Em que ecrã? O que esperavas que acontecesse?': [
+      'What happened? Which screen? What did you expect to happen?',
+      '¿Qué pasó? ¿En qué pantalla? ¿Qué esperabas que ocurriera?',
+      'Que s’est-il passé ? Sur quel écran ? Que pensais-tu voir se produire ?',
+      'Was ist passiert? Auf welchem Bildschirm? Was hast du erwartet?',
+    ],
+
   };
 }
 
