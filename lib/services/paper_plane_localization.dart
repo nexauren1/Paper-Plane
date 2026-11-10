@@ -1190,6 +1190,38 @@ class PaperPlaneLocale {
     'Quieve': ['Kyiv', 'Kiev', 'Kyiv', 'Kyjiw'],
     'Moscovo': ['Moscow', 'Moscú', 'Moscou', 'Moskau'],
 
+    'O mundo que as tuas cartas estão a ligar.': [
+      'The world your letters are connecting.',
+      'El mundo que conectan tus cartas.',
+      'Le monde que tes lettres relient.',
+      'Die Welt, die deine Briefe verbinden.',
+    ],
+    'PAÍSES LIGADOS ÀS TUAS CARTAS': ['COUNTRIES CONNECTED BY YOUR LETTERS', 'PAÍSES CONECTADOS POR TUS CARTAS', 'PAYS RELIÉS PAR TES LETTRES', 'LÄNDER, DIE DEINE BRIEFE VERBINDEN'],
+    'O teu atlas está à espera da primeira rota.': [
+      'Your atlas is waiting for its first route.', 'Tu atlas espera su primera ruta.',
+      'Ton atlas attend son premier itinéraire.', 'Dein Atlas wartet auf seine erste Route.',
+    ],
+    'Quando uma carta encontrar um destinatário e tiver uma rota registada, os países ligados aparecerão aqui.': [
+      'When a letter finds a recipient and has a recorded route, the connected countries will appear here.',
+      'Cuando una carta encuentre un destinatario y tenga una ruta registrada, los países conectados aparecerán aquí.',
+      'Lorsqu’une lettre trouvera un destinataire et qu’un itinéraire sera enregistré, les pays reliés apparaîtront ici.',
+      'Sobald ein Brief einen Empfänger findet und eine Route gespeichert ist, erscheinen die verbundenen Länder hier.',
+    ],
+    'Ainda não há países registados nos teus voos. Quando uma rota real for concluída, os países aparecem aqui.': [
+      'No countries are recorded for your flights yet. Countries will appear here when a real route is completed.',
+      'Todavía no hay países registrados en tus vuelos. Aparecerán aquí cuando se complete una ruta real.',
+      'Aucun pays n’est encore enregistré pour tes vols. Ils apparaîtront ici lorsqu’un itinéraire réel sera terminé.',
+      'Für deine Flüge sind noch keine Länder gespeichert. Sie erscheinen hier, sobald eine echte Route abgeschlossen ist.',
+    ],
+    'Os aviões recebidos, a aplicação e as traduções usam este idioma.': [
+      'Incoming planes, the app and translations use this language.',
+      'Los aviones recibidos, la aplicación y las traducciones usan este idioma.',
+      'Les avions reçus, l’application et les traductions utilisent cette langue.',
+      'Eingehende Papierflieger, die App und Übersetzungen verwenden diese Sprache.',
+    ],
+    'Olá,': ['Hello,', 'Hola,', 'Bonjour,', 'Hallo,'],
+    '🇯🇵': ['🇯🇵', '🇯🇵', '🇯🇵', '🇯🇵'],
+
   };
 }
 
