@@ -19,7 +19,7 @@ This branch prepares the production architecture without committing private cred
 - Firebase is initialized from build-time --dart-define values.
 - Firebase Authentication creates a stable UID for each account. The app bootstraps the matching D1 pilot row after sign-in; the Worker rejects API calls whose Firebase token cannot be verified.
 - The Firebase ID token is attached to Worker API requests.
-- A notification registration service requests permission only when explicitly called from Settings.
+- The app requests the native operating-system notification permission at startup; the authenticated app shell registers the FCM token only after the operating system grants permission.
 - The app composer calls the Worker when both Firebase and the API URL are configured; otherwise it clearly stays in preview/demo mode.
 
 ### Worker API and D1
@@ -65,7 +65,7 @@ Moderation, reporting, blocking, rate limits, human review, transparent communit
    - Permanent upload-key SHA-256: `6E:9B:24:0E:19:3B:53:E1:92:FB:3C:11:D4:06:EC:E4:77:EC:E8:CA:50:15:93:07:21:05:A6:39:74:79:10:6B`.
    - These fingerprints belong to the permanent `paper-plane-upload` keystore used by the release workflow. Do not replace the keystore after publishing this APK package.
 7. Analytics collection is enabled after Firebase initializes. The app records app_open, sign_up, login, and logout events; it does not send message text or passwords to Analytics.
-8. Notification registration remains an explicit opt-in in Settings. The Firebase service registers the FCM token with the Worker only after the user enables notifications.
+8. The app requests notification permission through the native Android system prompt at startup. It registers the FCM token with the Worker only when the operating system reports notifications as authorized; denying permission keeps the device unregistered.
 
 The client configuration contains identifiers and an API key intended for use by the mobile app; it is not a service-account credential. Never commit a Firebase service-account private key, Cloudflare API token, or FCM service-account JSON.
 ## Cloudflare setup
