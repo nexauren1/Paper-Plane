@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
 
@@ -30,7 +31,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
             children: [
               Icon(Icons.shield_outlined, color: Color(0xFFFFE7A8)),
               SizedBox(width: 10),
-              Expanded(child: Text('Denunciar avião')),
+              Expanded(child: PlaneText('Denunciar avião')),
             ],
           ),
           content: SizedBox(
@@ -40,7 +41,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  const PlaneText(
                     'Escolhe o motivo que melhor descreve o problema. A denúncia será enviada para análise.',
                     style: TextStyle(color: Colors.white70, height: 1.4),
                   ),
@@ -56,7 +57,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
                     items: _reportOptions.entries
                         .map((entry) => DropdownMenuItem(
                               value: entry.key,
-                              child: Text(entry.value, overflow: TextOverflow.ellipsis),
+                              child: PlaneText(entry.value, overflow: TextOverflow.ellipsis),
                             ))
                         .toList(),
                     onChanged: sending
@@ -86,7 +87,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
           actions: [
             TextButton(
               onPressed: sending ? null : () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancelar'),
+              child: const PlaneText('Cancelar'),
             ),
             FilledButton.icon(
               onPressed: sending
@@ -108,7 +109,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
                             : 'Não foi possível enviar a denúncia. Tenta novamente.';
                         if (dialogContext.mounted) {
                           ScaffoldMessenger.of(dialogContext).showSnackBar(
-                            SnackBar(content: Text(message)),
+                            SnackBar(content: PlaneText(message)),
                           );
                         }
                       }
@@ -120,7 +121,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.send_rounded),
-              label: Text(sending ? 'A enviar…' : 'Enviar denúncia'),
+              label: PlaneText(sending ? 'A enviar…' : 'Enviar denúncia'),
             ),
           ],
         ),
@@ -128,7 +129,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
     );
     if (result == true && submitted && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Denúncia enviada para análise. Obrigado por ajudares a manter o céu seguro.')),
+        const SnackBar(content: PlaneText('Denúncia enviada para análise. Obrigado por ajudares a manter o céu seguro.')),
       );
     }
     return result == true;
