@@ -53,7 +53,7 @@ class PaperPlaneNotifications {
           }
         },
       );
-      const channel = AndroidNotificationChannel(
+      final channel = AndroidNotificationChannel(
         'paper_plane_updates',
         'Paper Plane',
         description: PaperPlaneLocale.translate('Novos aviões, mensagens e avisos importantes'),
@@ -90,7 +90,7 @@ class PaperPlaneNotifications {
         id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
         title: title,
         body: body,
-        notificationDetails: const NotificationDetails(
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'paper_plane_updates',
             'Paper Plane',
