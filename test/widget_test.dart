@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:paper_plane/main.dart';
 
 void main() {
   testWidgets('settings expose the preferred translation language', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('pt'),
+      supportedLocales: const [Locale('pt')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      home: const SettingsScreen(),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text('Configurações'), findsOneWidget);
