@@ -681,8 +681,13 @@ async function sendAdminAnnouncement(
         else failedCount++;
         if (outcome.unregistered) {
           // Remove expired FCM tokens so they do not poison future sends.
-          await env.DB.prepare("DELETE FROM devices WHERE uid = ? AND id = ?")
-            .bind(outcome.device.uid, outcome.device.id).run().catch(() => undefined);
+          await env.DB.batch([
+            env.DB.prepare("DELETE FROM devices WHERE uid = ? AND id = ?")
+              .bind(outcome.device.uid, outcome.device.id),
+            env.DB.prepare(
+              "UPDATE users SET push_enabled = CASE WHEN EXISTS (SELECT 1 FROM devices WHERE uid = users.uid) THEN 1 ELSE 0 END, updated_at = ? WHERE uid = ?",
+            ).bind(isoNow(), outcome.device.uid),
+          ]).catch(() => undefined);
         }
       }
     }
@@ -703,7 +708,7 @@ async function sendAdminAnnouncement(
     let cursorUid: string | null = null;
     let cursorId: string | null = null;
     while (true) {
-      const page = cursorUid === null
+      const page: D1Result<{ id: string; uid: string; fcm_token: string }> = cursorUid === null
         ? await env.DB.prepare(
             `SELECT d.id, d.uid, d.fcm_token
              FROM devices d JOIN users u ON u.uid = d.uid
@@ -719,10 +724,10 @@ async function sendAdminAnnouncement(
                AND (d.uid > ? OR (d.uid = ? AND d.id > ?))
              ORDER BY d.uid, d.id LIMIT 100`,
           ).bind(cursorUid, cursorUid, cursorId).all<{ id: string; uid: string; fcm_token: string }>();
-      const devices = page.results ?? [];
+      const devices: Array<{ id: string; uid: string; fcm_token: string }> = page.results ?? [];
       if (devices.length === 0) break;
       await deliverPage(devices);
-      const last = devices[devices.length - 1];
+      const last: { id: string; uid: string; fcm_token: string } = devices[devices.length - 1];
       cursorUid = last.uid;
       cursorId = last.id;
       if (devices.length < 100) break;
