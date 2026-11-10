@@ -47,6 +47,44 @@ void main() {
     expect(PaperPlaneApi.isPublicVisibility('Aleatório 1-para-1'), isFalse);
   });
 
+
+  test('dynamic labels and API error messages follow the selected language', () {
+    expect(
+      PaperPlaneLocale.translate('Traduzir para Deutsch', 'en'),
+      'Translate into Deutsch',
+    );
+    expect(
+      PaperPlaneLocale.translate('Traduzir para Français', 'fr'),
+      'Traduire en Français',
+    );
+    expect(
+      PaperPlaneLocale.translate('Idioma: Português', 'de'),
+      'Sprache: Português',
+    );
+    expect(
+      PaperPlaneLocale.translate('12 XP acumulados', 'en'),
+      '12 XP earned',
+    );
+    expect(
+      PaperPlaneLocale.translate('Próximo nível: 80 XP', 'fr'),
+      'Niveau suivant : 80 XP',
+    );
+    expect(
+      PaperPlaneLocale.translate(
+        'Completa a tua data de nascimento no perfil antes de enviar.',
+        'es',
+      ),
+      'Completa tu fecha de nacimiento en el perfil antes de enviar.',
+    );
+    expect(
+      PaperPlaneLocale.translate(
+        'A mensagem ficou retida para revisão de segurança.',
+        'de',
+      ),
+      'Die Nachricht wurde zur Sicherheitsprüfung zurückgehalten.',
+    );
+  });
+
   testWidgets('welcome screen routes to the Firebase account gate', (tester) async {
     PaperPlaneLocale.setLanguage('pt');
     tester.view.physicalSize = const Size(1080, 2200);
