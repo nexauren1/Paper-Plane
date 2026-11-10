@@ -103,6 +103,18 @@ describe("Paper Plane Admin API integration", () => {
           headers: { "Content-Type": "application/json" },
         });
       }
+      if (url === "https://oauth2.googleapis.com/token") {
+        return new Response(JSON.stringify({ access_token: "test-fcm-access-token" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (url.startsWith("https://fcm.googleapis.com/v1/projects/")) {
+        return new Response(JSON.stringify({ name: "projects/paper-plane-test-project/messages/test-message" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
       return originalFetch(input, init);
     });
 
@@ -114,6 +126,9 @@ describe("Paper Plane Admin API integration", () => {
     await DB.prepare(
       "INSERT INTO devices(id, uid, fcm_token) VALUES (?, ?, ?)",
     ).bind("device-target", "target-test", "test-fcm-token-target").run();
+    await DB.prepare(
+      "INSERT INTO devices(id, uid, fcm_token) VALUES (?, ?, ?)",
+    ).bind("device-pilot", "pilot-test", "test-fcm-token-pilot").run();
     await DB.prepare(
       "INSERT INTO devices(id, uid, fcm_token) VALUES (?, ?, ?)",
     ).bind("device-reported", "reported-test", "test-fcm-token-reported").run();
@@ -242,16 +257,37 @@ describe("Paper Plane Admin API integration", () => {
     const notifications = await api(ADMIN_UID, "GET", "/v1/admin/notifications");
     expect(notifications.status).toBe(200);
     expect(notifications.data.items.some((item: any) => item.id === "notification-history-test")).toBe(true);
-    // FCM is intentionally absent in the isolated test environment. The route
-    // must fail clearly and safely instead of returning a generic 404/500.
-    const pushFailure = await api(ADMIN_UID, "POST", "/v1/admin/notifications", {
+    // OAuth and FCM endpoints are mocked. The test exercises the complete
+    // signed-service-account and announcement-dispatch logic without sending
+    // messages to real devices or requiring production credentials.
+    const targetedPush = await api(ADMIN_UID, "POST", "/v1/admin/notifications", {
       target: "USER",
-      targetUid: "target-test",
-      title: "Teste",
-      body: "Aviso de teste",
+      targetUid: "pilot-test",
+      title: "Aviso individual de teste",
+      body: "Aviso dirigido apenas ao copiloto de teste.",
     });
-    expect(pushFailure.status).toBe(503);
-    expect(pushFailure.data.error).toBe("PUSH_PROVIDER_UNAVAILABLE");
+    expect(targetedPush.status).toBe(201);
+    expect(targetedPush.data.deviceCount).toBe(1);
+    expect(targetedPush.data.sentCount).toBe(1);
+    expect(targetedPush.data.failedCount).toBe(0);
+
+    const globalPush = await api(ADMIN_UID, "POST", "/v1/admin/notifications", {
+      target: "ALL",
+      title: "Aviso global de teste",
+      body: "Aviso global apenas no ambiente isolado.",
+    });
+    expect(globalPush.status).toBe(201);
+    expect(globalPush.data.deviceCount).toBe(1);
+    expect(globalPush.data.sentCount).toBe(1);
+    expect(globalPush.data.failedCount).toBe(0);
+
+    const notificationHistory = await DB.prepare(
+      "SELECT target_type, recipient_uid, sent_count, failed_count FROM admin_notifications WHERE id IN (?, ?) ORDER BY target_type",
+    ).bind(targetedPush.data.id, globalPush.data.id).all<{
+      target_type: string; recipient_uid: string | null; sent_count: number; failed_count: number;
+    }>();
+    expect(notificationHistory.results?.length).toBe(2);
+    expect(notificationHistory.results?.every((item) => item.sent_count === 1 && item.failed_count === 0)).toBe(true);
 
     const auditCount = await DB.prepare(
       "SELECT COUNT(*) AS total FROM audit_events WHERE actor_uid = ?",
