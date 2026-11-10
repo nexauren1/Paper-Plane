@@ -47,6 +47,8 @@ class PaperPlaneLocale {
       'Idioma: ': ['Language: ', 'Idioma: ', 'Langue : ', 'Sprache: '],
       'Alguém em ': ['Someone in ', 'Alguien en ', 'Quelqu’un à ', 'Jemand aus '],
       'Responder · ': ['Reply · ', 'Responder · ', 'Répondre · ', 'Antworten · '],
+      'Lançado ': ['Launched ', 'Lanzado ', 'Lancé ', 'Gestartet '],
+      'Recebido · ': ['Received · ', 'Recibido · ', 'Reçu · ', 'Erhalten · '],
     };
     for (final entry in dynamicTranslations.entries) {
       if (source.startsWith(entry.key)) {
@@ -813,6 +815,12 @@ class PaperPlaneLocale {
     ],
     'Os teus pedidos': ['Your requests', 'Tus solicitudes', 'Tes demandes', 'Deine Anfragen'],
 
+    'Clube do Céu': ['Sky Club', 'Club del Cielo', 'Club du Ciel', 'Himmelsclub'],
+    'Tentar sincronizar': ['Try to sync', 'Intentar sincronizar', 'Réessayer la synchronisation', 'Synchronisierung versuchen'],
+    'Não foi possível abrir a página.': [
+      'Could not open the page.', 'No se pudo abrir la página.',
+      'Impossible d’ouvrir la page.', 'Die Seite konnte nicht geöffnet werden.',
+    ],
   };
 }
 
