@@ -3,9 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:paper_plane/main.dart';
 import 'package:paper_plane/services/paper_plane_localization.dart';
+import 'package:paper_plane/services/paper_plane_api.dart';
 
 void main() {
-  testWidgets('settings expose the preferred translation language', (tester) async {
+  testWidgets('settings expose the application language', (tester) async {
     await tester.pumpWidget(MaterialApp(
       locale: const Locale('pt'),
       supportedLocales: const [Locale('pt')],
@@ -15,7 +16,35 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Configurações'), findsOneWidget);
-    expect(find.text('Idioma preferido dos aviões'), findsOneWidget);
+    expect(find.text('Idioma da aplicação'), findsOneWidget);
+  });
+
+
+
+  test('the five UI languages and public visibility normalizer are complete', () {
+    expect(PaperPlaneLocale.supportedLanguages, {'pt', 'en', 'es', 'fr', 'de'});
+
+    const expectedWelcome = {
+      'pt': 'Um pensamento. Um avião. O mundo inteiro.',
+      'en': 'One thought. One plane. The whole world.',
+      'es': 'Una idea. Un avión. El mundo entero.',
+      'fr': 'Une pensée. Un avion. Le monde entier.',
+      'de': 'Ein Gedanke. Ein Flieger. Die ganze Welt.',
+    };
+    for (final entry in expectedWelcome.entries) {
+      PaperPlaneLocale.setLanguage(entry.key);
+      expect(PaperPlaneLocale.current.value.languageCode, entry.key);
+      expect(
+        PaperPlaneLocale.translate('Um pensamento. Um avião. O mundo inteiro.'),
+        entry.value,
+      );
+    }
+    PaperPlaneLocale.setLanguage('pt');
+
+    expect(PaperPlaneApi.isPublicVisibility('Público'), isTrue);
+    expect(PaperPlaneApi.isPublicVisibility('  PUBLIC  '), isTrue);
+    expect(PaperPlaneApi.isPublicVisibility('Open Sky'), isTrue);
+    expect(PaperPlaneApi.isPublicVisibility('Aleatório 1-para-1'), isFalse);
   });
 
   testWidgets('welcome screen routes to the Firebase account gate', (tester) async {
@@ -29,9 +58,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1000));
 
     expect(find.text('PAPER PLANE'), findsOneWidget);
-    expect(find.text('Start Flying'), findsOneWidget);
+    expect(find.text('Começar a voar'), findsOneWidget);
 
-    await tester.tap(find.text('Start Flying'));
+    await tester.tap(find.text('Começar a voar'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));
 
