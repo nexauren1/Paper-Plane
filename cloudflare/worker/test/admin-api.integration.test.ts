@@ -1,6 +1,7 @@
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { env, exports as workerExports } from "cloudflare:workers";
 import { applyD1Migrations } from "cloudflare:test";
+import { applyD1Migrations } from "cloudflare:test";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
 const PROJECT_ID = "paper-plane-test-project";
