@@ -87,6 +87,9 @@ void main() {
       PaperPlaneLocale.translate('Abrir carta', 'fr'),
       'Ouvrir la lettre',
     );
+    expect(PaperPlaneLocale.translate('História', 'de'), 'Geschichte');
+    expect(PaperPlaneLocale.translate('Língua', 'fr'), 'Langue');
+
     expect(
       PaperPlaneLocale.translate(
         'Tens uma atualização na tua caixa de entrada.',
