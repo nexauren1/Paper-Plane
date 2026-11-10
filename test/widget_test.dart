@@ -83,6 +83,24 @@ void main() {
       ),
       'Die Nachricht wurde zur Sicherheitsprüfung zurückgehalten.',
     );
+    expect(
+      PaperPlaneLocale.translate('Abrir carta', 'fr'),
+      'Ouvrir la lettre',
+    );
+    expect(
+      PaperPlaneLocale.translate(
+        'Tens uma atualização na tua caixa de entrada.',
+        'de',
+      ),
+      'Du hast eine Aktualisierung in deinem Posteingang.',
+    );
+    expect(
+      PaperPlaneLocale.translate(
+        'Novos aviões, mensagens e avisos importantes',
+        'es',
+      ),
+      'Nuevos aviones, mensajes y avisos importantes.',
+    );
   });
 
   testWidgets('welcome screen routes to the Firebase account gate', (tester) async {
