@@ -39,6 +39,9 @@ jobs:
       - name: Typecheck Worker
         run: npm run typecheck
 
+      - name: Test Admin API against isolated local D1
+        run: npm run test:integration
+
       - name: Apply D1 migrations
         if: github.event_name != 'pull_request'
         run: npm run db:remote
