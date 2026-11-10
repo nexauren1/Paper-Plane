@@ -23,6 +23,7 @@ class PaperPlaneNotifications {
   static String? _pendingAirplaneId;
   static bool _handlersInitialized = false;
   static bool _localNotificationsInitialized = false;
+  static Future<void>? _permissionRequest;
   static StreamSubscription<RemoteMessage>? _foregroundSubscription;
   static StreamSubscription<RemoteMessage>? _openedSubscription;
   static StreamSubscription<String>? _tokenSubscription;
@@ -208,7 +209,11 @@ class PaperPlaneNotifications {
 
   /// Requests the native operating-system permission when the app starts.
   /// Android decides whether a dialog can be shown again after a denial.
-  static Future<void> requestSystemPermissionAtLaunch() async {
+  static Future<void> requestSystemPermissionAtLaunch() {
+    return _permissionRequest ??= _requestSystemPermission();
+  }
+
+  static Future<void> _requestSystemPermission() async {
     if (!FirebaseRuntime.isInitialized) return;
     try {
       await FirebaseMessaging.instance.requestPermission(
@@ -225,14 +230,18 @@ class PaperPlaneNotifications {
   static void _watchTokenRefresh(FirebaseMessaging messaging) {
     if (_tokenSubscription != null) return;
     _tokenSubscription = messaging.onTokenRefresh.listen((newToken) {
-      unawaited(
-        PaperPlaneApi.instance.registerDevice(newToken).then<void>(
-          (_) {},
-          onError: (Object error, StackTrace stack) {
-            debugPrint('Paper Plane: could not refresh the registered FCM token: $error');
-          },
-        ),
-      );
+      unawaited(() async {
+        final settings = await messaging.getNotificationSettings();
+        final allowed = settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+        if (allowed) {
+          await PaperPlaneApi.instance.registerDevice(newToken);
+        } else {
+          await PaperPlaneApi.instance.unregisterDevice(newToken);
+        }
+      }().catchError((Object error, StackTrace stack) {
+        debugPrint('Paper Plane: could not synchronize the refreshed FCM token: $error');
+      }));
     });
   }
 
@@ -241,6 +250,7 @@ class PaperPlaneNotifications {
   static Future<void> registerDeviceIfAuthorized() async {
     if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
     try {
+      await requestSystemPermissionAtLaunch();
       final messaging = FirebaseMessaging.instance;
       final settings = await messaging.getNotificationSettings();
       final token = await messaging.getToken();
