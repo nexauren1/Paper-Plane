@@ -42,3 +42,29 @@ CREATE INDEX IF NOT EXISTS idx_social_group_messages_group_created
   ON social_group_messages(group_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_social_group_messages_uid_created
   ON social_group_messages(uid, created_at DESC);
+
+-- Enforce age cohort and membership even if a future handler forgets a check.
+CREATE TRIGGER IF NOT EXISTS social_group_member_age_band_guard
+BEFORE INSERT ON social_group_members
+BEGIN
+  SELECT CASE
+    WHEN (SELECT age_band FROM social_groups WHERE id = NEW.group_id)
+       <> (SELECT declared_age_band FROM users WHERE uid = NEW.uid)
+    THEN RAISE(ABORT, 'GROUP_AGE_BAND_MISMATCH')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS social_group_message_membership_guard
+BEFORE INSERT ON social_group_messages
+BEGIN
+  SELECT CASE
+    WHEN NOT EXISTS (
+      SELECT 1 FROM social_group_members m
+      JOIN social_groups g ON g.id = m.group_id
+      JOIN users u ON u.uid = m.uid
+      WHERE m.group_id = NEW.group_id AND m.uid = NEW.uid
+        AND g.age_band = u.declared_age_band
+    )
+    THEN RAISE(ABORT, 'GROUP_MEMBERSHIP_REQUIRED')
+  END;
+END;
