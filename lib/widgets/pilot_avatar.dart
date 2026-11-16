@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Paper Plane identity mark. Avatars are generated locally from the pilot name;
-/// this widget intentionally never downloads or displays profile photographs.
+/// Paper Plane pilot avatar. Uploaded photos are optional; the generated
+/// identity mark remains the fallback when no image exists or loading fails.
 class PilotAvatar extends StatelessWidget {
   const PilotAvatar({
     super.key,
@@ -9,12 +9,14 @@ class PilotAvatar extends StatelessWidget {
     this.borderColor,
     this.iconSize,
     this.fallbackLabel,
+    this.imageUrl,
   });
 
   final double size;
   final Color? borderColor;
   final double? iconSize;
   final String? fallbackLabel;
+  final String? imageUrl;
 
   String _initials() {
     final label = (fallbackLabel ?? '').trim();
@@ -42,9 +44,19 @@ class PilotAvatar extends StatelessWidget {
     for (final rune in label.toLowerCase().runes) {
       stableHash = (stableHash * 31 + rune) & 0x7fffffff;
     }
-    final paletteIndex = label.isEmpty ? 0 : stableHash % palettes.length;
-    final palette = palettes[paletteIndex];
+    final palette = palettes[label.isEmpty ? 0 : stableHash % palettes.length];
     final initials = _initials();
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: palette),
+      ),
+      child: Center(
+        child: initials.isEmpty
+            ? Icon(Icons.flight_takeoff_rounded, color: const Color(0xFFB8F1FF), size: iconSize ?? size * 0.52)
+            : Text(initials, style: TextStyle(color: Colors.white, fontSize: size * 0.30, fontWeight: FontWeight.w900, letterSpacing: 0.6)),
+      ),
+    );
+    final safeUrl = imageUrl?.trim();
 
     return Container(
       width: size,
@@ -52,47 +64,29 @@ class PilotAvatar extends StatelessWidget {
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [
-            borderColor ?? const Color(0xFF57D6FF),
-            const Color(0xFF377CEB),
-            const Color(0xFF7652D7),
-          ],
-        ),
+        gradient: LinearGradient(colors: [
+          borderColor ?? const Color(0xFF57D6FF),
+          const Color(0xFF377CEB),
+          const Color(0xFF7652D7),
+        ]),
         boxShadow: [
-          BoxShadow(
-            color: (borderColor ?? const Color(0xFF57D6FF)).withOpacity(0.22),
-            blurRadius: 14,
-            spreadRadius: 0.5,
-          ),
+          BoxShadow(color: (borderColor ?? const Color(0xFF57D6FF)).withOpacity(0.22), blurRadius: 14, spreadRadius: 0.5),
         ],
       ),
       child: ClipOval(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: palette,
-            ),
-          ),
-          child: Center(
-            child: initials.isEmpty
-                ? Icon(
-                    Icons.flight_takeoff_rounded,
-                    color: const Color(0xFFB8F1FF),
-                    size: iconSize ?? size * 0.52,
-                  )
-                : Text(
-                    initials,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: size * 0.30,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-          ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            fallback,
+            if (safeUrl != null && safeUrl.startsWith('https://'))
+              Image.network(
+                safeUrl,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => fallback,
+                loadingBuilder: (_, child, progress) => progress == null ? child : fallback,
+              ),
+          ],
         ),
       ),
     );
