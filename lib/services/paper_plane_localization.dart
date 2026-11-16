@@ -801,12 +801,7 @@ class PaperPlaneLocale {
       'Crée ton propre @nom. Tu n’as pas besoin d’ajouter des chiffres au hasard.',
       'Erstelle deinen eigenen @Namen. Du brauchst keine zufälligen Zahlen am Ende.',
     ],
-    'Cola um link HTTPS de uma imagem ou de um perfil público. Tentaremos encontrar a foto automaticamente. Não precisas de carregar ficheiros.': [
-      'Paste an HTTPS link to an image or public profile. We will try to find the photo automatically. No file upload is needed.',
-      'Pega un enlace HTTPS a una imagen o perfil público. Intentaremos encontrar la foto automáticamente. No necesitas subir archivos.',
-      'Colle un lien HTTPS vers une image ou un profil public. Nous essaierons de trouver la photo automatiquement. Aucun fichier à téléverser.',
-      'Füge einen HTTPS-Link zu einem Bild oder öffentlichen Profil ein. Wir versuchen, das Foto automatisch zu finden. Du musst keine Dateien hochladen.',
-    ],
+
     'Usamos a data para calcular a faixa etária. O dia e o mês não ficam guardados; o servidor conserva apenas o ano e a faixa declarada.': [
       'We use the date to calculate your age group. The day and month are not stored; the server keeps only the year and declared age group.',
       'Usamos la fecha para calcular el grupo de edad. No guardamos el día ni el mes; el servidor conserva solo el año y el grupo declarado.',
@@ -1119,12 +1114,7 @@ class PaperPlaneLocale {
     'Eliminar da minha Caixa': ['Remove from my inbox', 'Eliminar de mi bandeja', 'Retirer de ma boîte de réception', 'Aus meinem Posteingang entfernen'],
     'Remetente bloqueado.': ['Sender blocked.', 'Remitente bloqueado.', 'Expéditeur bloqué.', 'Absender blockiert.'],
     'Bloquear remetente': ['Block sender', 'Bloquear remitente', 'Bloquer l’expéditeur', 'Absender blockieren'],
-    'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.': [
-      'You can use an image link or a public page. Paper Plane will try to find the photo automatically.',
-      'Puedes usar un enlace a una imagen o a una página pública. Paper Plane intentará encontrar la foto automáticamente.',
-      'Tu peux utiliser un lien vers une image ou une page publique. Paper Plane essaiera de trouver la photo automatiquement.',
-      'Du kannst einen Bildlink oder eine öffentliche Seite verwenden. Paper Plane versucht, das Foto automatisch zu finden.',
-    ],
+
     'Partilha o teu link para que outros copilotos possam encontrar-te e começar a trocar aviões.': [
       'Share your link so other co-pilots can find you and start exchanging planes.',
       'Comparte tu enlace para que otros copilotos puedan encontrarte y empezar a intercambiar aviones.',
@@ -1306,7 +1296,6 @@ class PaperPlaneLocale {
 
     "Completa a tua data de nascimento no perfil antes de enviar.": ["Complete your date of birth in your profile before sending.","Completa tu fecha de nacimiento en el perfil antes de enviar.","Renseigne ta date de naissance dans ton profil avant d’envoyer.","Ergänze vor dem Senden dein Geburtsdatum in deinem Profil."],
     "Indica uma data de nascimento válida.": ["Enter a valid date of birth.","Introduce una fecha de nacimiento válida.","Saisis une date de naissance valide.","Gib ein gültiges Geburtsdatum ein."],
-    "Usa um link HTTPS público para a tua foto ou perfil.": ["Use a public HTTPS link for your photo or profile.","Usa un enlace HTTPS público para tu foto o perfil.","Utilise un lien HTTPS public pour ta photo ou ton profil.","Verwende einen öffentlichen HTTPS-Link für dein Foto oder Profil."],
     "Não foi possível carregar a pré-visualização deste link.": ["This link preview could not be loaded.","No se pudo cargar la vista previa de este enlace.","Impossible de charger l’aperçu de ce lien.","Die Linkvorschau konnte nicht geladen werden."],
     "A Chama funciona através de aviões de resposta.": ["Chama works through reply planes.","Chama funciona mediante aviones de respuesta.","Chama fonctionne grâce aux avions-réponses.","Chama funktioniert über Antwort-Papierflieger."],
     "Esta Chama foi encerrada.": ["This Chama has ended.","Esta Chama ha terminado.","Cette Chama est terminée.","Diese Chama wurde beendet."],
