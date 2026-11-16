@@ -38,7 +38,11 @@ class PilotAvatar extends StatelessWidget {
       [Color(0xFF2865D5), Color(0xFF6A3BC4), Color(0xFF171B48)],
     ];
     final label = (fallbackLabel ?? '').trim();
-    final paletteIndex = label.isEmpty ? 0 : label.toLowerCase().hashCode.abs() % palettes.length;
+    var stableHash = 0;
+    for (final rune in label.toLowerCase().runes) {
+      stableHash = (stableHash * 31 + rune) & 0x7fffffff;
+    }
+    final paletteIndex = label.isEmpty ? 0 : stableHash % palettes.length;
     final palette = palettes[paletteIndex];
     final initials = _initials();
 
