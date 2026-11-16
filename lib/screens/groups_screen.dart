@@ -189,7 +189,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
           ),
           child: Stack(children: [
             const Positioned(right: -5, top: -12, child: Icon(Icons.groups_rounded, size: 118, color: Color(0x225BE7FF))),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_gt('OS TEUS INTERESSES. O TEU MUNDO.'), style: TextStyle(color: _cyan, fontSize: 9, letterSpacing: 1.15, fontWeight: FontWeight.w900)),
               Spacer(),
               Text(_gt('Pessoas que pensam como tu.'), style: TextStyle(color: Colors.white, fontSize: 24, height: 1.04, fontWeight: FontWeight.w900)),
