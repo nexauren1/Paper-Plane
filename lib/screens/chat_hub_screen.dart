@@ -613,7 +613,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                PilotAvatar(url: chat['avatar_url']?.toString(), size: 52),
+                PilotAvatar(url: chat['avatar_url']?.toString(), fallbackLabel: chat['pilot_name']?.toString(), size: 52),
                 if (chama)
                   Positioned(
                     right: -2,
@@ -706,7 +706,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     final country = person['country_code']?.toString();
     return _panel(
       child: Row(children: [
-        PilotAvatar(url: person['avatar_url']?.toString(), size: 42),
+        PilotAvatar(url: person['avatar_url']?.toString(), fallbackLabel: person['pilot_name']?.toString(), size: 42),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -1272,7 +1272,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         foregroundColor: _chatGoldBright,
         title: Row(children: [
           if (_avatarUrl?.isNotEmpty == true)
-            PilotAvatar(url: _avatarUrl, size: 36)
+            PilotAvatar(url: _avatarUrl, fallbackLabel: _name, size: 36)
           else
             Icon(widget.isChama ? Icons.local_fire_department_rounded : Icons.chat_bubble_rounded,
                 color: widget.isChama ? const Color(0xFFFFB36F) : _chatGoldBright),
