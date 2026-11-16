@@ -2635,10 +2635,10 @@ class FleetGlobePainter extends CustomPainter {
 
       final rawProgress = item['progress'];
       final progress = rawProgress is num ? rawProgress.toDouble().clamp(0.0, 1.0) : 0.0;
-      final index = (progress * (projectedPoints.length - 1)).round().clamp(0, projectedPoints.length - 1);
+      final index = (progress * (projectedPoints.length - 1)).round().clamp(0, projectedPoints.length - 1).toInt();
       Offset? marker;
       for (var offset = 0; offset < projectedPoints.length; offset++) {
-        final candidate = projectedPoints[(index - offset).clamp(0, projectedPoints.length - 1)];
+        final candidate = projectedPoints[(index - offset).clamp(0, projectedPoints.length - 1).toInt()];
         if (candidate != null) {
           marker = candidate;
           break;
@@ -2654,8 +2654,8 @@ class FleetGlobePainter extends CustomPainter {
       );
       canvas.drawCircle(marker, 2.5, Paint()..color = Colors.white);
 
-      final before = projectedPoints[(index - 1).clamp(0, projectedPoints.length - 1)] ?? marker;
-      final after = projectedPoints[(index + 1).clamp(0, projectedPoints.length - 1)] ?? marker;
+      final before = projectedPoints[(index - 1).clamp(0, projectedPoints.length - 1).toInt()] ?? marker;
+      final after = projectedPoints[(index + 1).clamp(0, projectedPoints.length - 1).toInt()] ?? marker;
       final angle = math.atan2(after.dy - before.dy, after.dx - before.dx);
       canvas.save();
       canvas.translate(marker.dx, marker.dy);
