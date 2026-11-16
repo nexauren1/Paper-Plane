@@ -277,41 +277,6 @@ class PaperPlaneApi {
       'https://paper-plane.nexaurenstore.workers.dev/invite?handle=${Uri.encodeQueryComponent(pilotHandle.replaceFirst(RegExp(r'^@'), ''))}';
 
 
-  Future<Map<String, dynamic>> getGroups({String? query, String? category}) {
-    final params = <String, String>{
-      if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
-      if (category != null && category != 'ALL') 'category': category,
-    };
-    final suffix = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
-    return _request('/v1/groups$suffix');
-  }
-
-  Future<Map<String, dynamic>> createGroup({
-    required String name,
-    required String description,
-    required String category,
-  }) =>
-      _request('/v1/groups', method: 'POST', body: {
-        'name': name,
-        'description': description,
-        'category': category,
-      });
-
-  Future<Map<String, dynamic>> joinGroup(String groupId) =>
-      _request('/v1/groups/$groupId/join', method: 'POST');
-
-  Future<Map<String, dynamic>> leaveGroup(String groupId) =>
-      _request('/v1/groups/$groupId/leave', method: 'POST');
-
-  Future<Map<String, dynamic>> deleteGroup(String groupId) =>
-      _request('/v1/groups/$groupId', method: 'DELETE');
-
-  Future<Map<String, dynamic>> getGroup(String groupId) =>
-      _request('/v1/groups/$groupId');
-
-  Future<Map<String, dynamic>> sendGroupMessage(String groupId, String message) =>
-      _request('/v1/groups/$groupId/messages', method: 'POST', body: {'message': message});
-
   Future<Map<String, dynamic>> getOpenSky({
     String? country,
     String? language,
