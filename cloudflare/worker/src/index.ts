@@ -3081,7 +3081,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const language = url.searchParams.get("language") === "en" ? "en" : url.searchParams.get("language") === "pt" ? "pt" : null;
     const rows = await env.DB.prepare(
       `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at, p.likes_count,
-              u.pilot_name, u.pilot_handle, u.avatar_url,
+              u.pilot_name, u.pilot_handle,
               CASE WHEN a.sender_uid = ? THEN 1 ELSE 0 END AS is_own,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
        FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
@@ -3106,10 +3106,38 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   const publicRepliesMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/replies$/);
   if (publicRepliesMatch && method === "GET") {
+    const parent = await env.DB.prepare(
+      `SELECT a.id, a.sender_uid
+       FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       WHERE p.airplane_id = ? AND a.audience = 'PUBLIC'
+         AND a.status = 'DELIVERED' AND a.moderation_state = 'SAFE'
+       LIMIT 1`,
+    ).bind(publicRepliesMatch[1]).first<{ id: string; sender_uid: string }>();
+    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, parent.sender_uid, parent.sender_uid, uid).first();
+    if (blocked) return json({ error: "INTERACTION_BLOCKED" }, 403);
     const rows = await env.DB.prepare(
-      "SELECT id, message_text, created_at FROM public_replies WHERE airplane_id = ? AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 5",
-    ).bind(publicRepliesMatch[1]).all();
-    return json({ items: rows.results ?? [] });
+      `SELECT r.id, r.message_text, r.created_at, r.sender_uid,
+              u.pilot_name, u.pilot_handle,
+              CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+              CASE WHEN r.sender_uid = ? THEN 1 ELSE 0 END AS is_own
+       FROM (
+         SELECT id, message_text, created_at, sender_uid
+         FROM public_replies
+         WHERE airplane_id = ? AND moderation_state = 'SAFE'
+         ORDER BY created_at DESC LIMIT 50
+       ) r
+       JOIN users u ON u.uid = r.sender_uid
+       WHERE NOT EXISTS (
+         SELECT 1 FROM blocks b
+         WHERE (b.blocker_uid = ? AND b.blocked_uid = r.sender_uid)
+            OR (b.blocker_uid = r.sender_uid AND b.blocked_uid = ?)
+       )
+       ORDER BY r.created_at ASC`,
+    ).bind(uid, publicRepliesMatch[1], uid, uid).all();
+    return json({ items: rows.results ?? [], hasMore: (rows.results?.length ?? 0) === 50 });
   }
   if (publicRepliesMatch && method === "POST") {
     const { user, response } = await ensurePilotReady(uid, env);
@@ -3117,17 +3145,25 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const message = text(body?.message, 200);
-    if (!message) return json({ error: "MESSAGE_LENGTH" }, 400);
-    const parent = await env.DB.prepare("SELECT id FROM public_sky WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first();
-    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    if (!message || [...message].length > 200) return json({ error: "MESSAGE_LENGTH" }, 400);
+    const parent = await env.DB.prepare(
+      `SELECT a.id, a.sender_uid
+       FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       WHERE p.airplane_id = ? AND a.audience = 'PUBLIC'
+         AND a.status = 'DELIVERED' AND a.moderation_state = 'SAFE'
+       LIMIT 1`,
+    ).bind(publicRepliesMatch[1]).first<{ id: string; sender_uid: string }>();
+    if (!parent) return json({ error: "NOT_FOUND", message: "Esta publicação pública já não está disponível." }, 404);
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, parent.sender_uid, parent.sender_uid, uid).first();
+    if (blocked) return json({ error: "INTERACTION_BLOCKED" }, 403);
     const hourlyActivity = await env.DB.prepare(
       `SELECT
          (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) +
          (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS count`,
     ).bind(uid, uid).first<{ count: number }>();
     if (Number(hourlyActivity?.count ?? 0) >= 10) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM public_replies WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first<{ count: number }>();
-    if (Number(count?.count ?? 0) >= 5) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
     const moderation = await moderate(env, message);
     if (moderation.state === "UNSAFE") return json({ error: "MESSAGE_NOT_ALLOWED" }, 422);
     if (moderation.state === "TEMPORARY_UNAVAILABLE") {
@@ -3144,7 +3180,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     } catch (error) {
       const reason = String(error);
       if (reason.includes("PAPER_PLANE_RATE_LIMIT")) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
-      if (reason.includes("PUBLIC_REPLY_LIMIT_REACHED")) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
       throw error;
     }
     return moderationState === "SAFE"
