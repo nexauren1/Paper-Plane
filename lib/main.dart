@@ -21,7 +21,6 @@ import 'screens/chat_hub_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'widgets/report_dialog.dart';
 import 'widgets/pilot_avatar.dart';
-import 'widgets/chat_link_preview.dart';
 
 const Color ppNavy = Color(0xFF040A18);
 const Color ppNavyDeep = Color(0xFF020611);
@@ -4236,7 +4235,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                               SizedBox(height: 9),
                               PlaneText('Ainda não há respostas.', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
                               SizedBox(height: 4),
-                              PlaneText('Sê a primeira pessoa a responder a este avião.', style: TextStyle(color: Colors.white45, fontSize: 11)),
+                              PlaneText('Sê a primeira pessoa a responder a este avião.', style: TextStyle(color: Colors.white54, fontSize: 11)),
                             ]),
                           )
                         : ListView.builder(
@@ -4561,7 +4560,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
             )
           else if (_messages.isEmpty)
             GlassPanel(
-              child: Column(children: const [
+              child: Column(children: [
                 Icon(Icons.mark_email_unread_outlined, color: ppGoldBright, size: 34),
                 SizedBox(height: 9),
                 PlaneText(_feedMode == 'FOLLOWING' ? 'Ainda não há publicações de amigos.' : 'Ainda não há aviões neste céu.', style: const TextStyle(fontWeight: FontWeight.w900)),
