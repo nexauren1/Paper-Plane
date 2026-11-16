@@ -2563,12 +2563,15 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/atlas") {
     const rows = await env.DB.prepare(
-      "SELECT status, flight_distance_km, route_json, plane_model FROM airplanes WHERE (sender_uid = ? OR recipient_uid = ?) AND route_json IS NOT NULL ORDER BY created_at DESC LIMIT 500",
+      "SELECT id, status, flight_distance_km, route_json, plane_model, flight_started_at, flight_duration_seconds FROM airplanes WHERE (sender_uid = ? OR recipient_uid = ?) AND route_json IS NOT NULL ORDER BY CASE WHEN status = 'FLYING' THEN 0 WHEN status = 'QUEUED' THEN 1 ELSE 2 END, created_at DESC LIMIT 500",
     ).bind(uid, uid).all<{
+      id: string;
       status: string;
       flight_distance_km: number | null;
       route_json: string | null;
       plane_model: string | null;
+      flight_started_at: string | null;
+      flight_duration_seconds: number | null;
     }>();
     const countries = new Set<string>();
     const models: Record<string, number> = { DART: 0, GLIDER: 0, SWALLOW: 0 };
@@ -2596,8 +2599,31 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const items = [...countries]
       .map((code) => ({ code, name: COUNTRY_CENTROIDS[code].name }))
       .sort((a, b) => a.name.localeCompare(b.name));
+    const now = Date.now();
+    const routes = (rows.results ?? []).slice(0, 24).map((row) => {
+      let route: Record<string, unknown> | null = null;
+      try {
+        route = row.route_json ? JSON.parse(row.route_json) as Record<string, unknown> : null;
+      } catch {
+        route = null;
+      }
+      const completed = ["DELIVERED", "READ", "RESPONDED"].includes(row.status);
+      const started = row.flight_started_at ? Date.parse(row.flight_started_at) : NaN;
+      const durationMs = Math.max(1, Number(row.flight_duration_seconds ?? 0)) * 1000;
+      const progress = completed ? 1 : row.status === "FLYING" && Number.isFinite(started)
+        ? Math.max(0, Math.min(1, (now - started) / durationMs))
+        : 0;
+      return {
+        id: row.id,
+        status: row.status,
+        planeModel: row.plane_model ?? "DART",
+        progress: Number(progress.toFixed(4)),
+        route,
+      };
+    }).filter((item) => item.route !== null);
     return json({
       countries: items,
+      routes,
       stats: {
         totalFlights: rows.results?.length ?? 0,
         completedFlights,
