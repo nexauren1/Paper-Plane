@@ -816,7 +816,6 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   String _name = '';
   String _handle = '';
   String? _countryCode;
-  String? _avatarUrl;
   String? _otherUid;
   bool _chamaEnded = false;
   String? _error;
@@ -890,7 +889,6 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         _name = conversation['pilot_name']?.toString() ?? _name;
         _handle = conversation['pilot_handle']?.toString() ?? _handle;
         _countryCode = conversation['country_code']?.toString() ?? _countryCode;
-        _avatarUrl = conversation['avatar_url']?.toString() ?? _avatarUrl;
         _otherUid = conversation['other_uid']?.toString();
         _chamaEnded = conversation['ended_at'] != null;
         _messages = messages;
@@ -1271,11 +1269,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         backgroundColor: const Color(0xFF0B1B31),
         foregroundColor: _chatGoldBright,
         title: Row(children: [
-          if (_avatarUrl?.isNotEmpty == true)
-            PilotAvatar(url: _avatarUrl, fallbackLabel: _name, size: 36)
-          else
-            Icon(widget.isChama ? Icons.local_fire_department_rounded : Icons.chat_bubble_rounded,
-                color: widget.isChama ? const Color(0xFFFFB36F) : _chatGoldBright),
+          PilotAvatar(fallbackLabel: _name, size: 36),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             PlaneText(_name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
