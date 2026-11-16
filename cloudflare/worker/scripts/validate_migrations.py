@@ -54,27 +54,20 @@ try:
 except sqlite3.IntegrityError as error:
     assert "PAPER_PLANE_RATE_LIMIT" in str(error), str(error)
 
-# Five public replies are allowed, while the sixth is rejected atomically.
+# Public posts support long conversations; only the rolling hourly account safeguard remains.
 insert_plane("public-parent", "pilot-b", audience="PUBLIC")
 insert_plane("public-parent-2", "pilot-b", audience="PUBLIC")
 insert_plane("public-parent-3", "pilot-b", audience="PUBLIC")
-for index in range(5):
+for index in range(20):
     DB.execute(
         """INSERT INTO public_replies(
-            id, airplane_id, sender_uid, message_text, moderation_state
-        ) VALUES (?, 'public-parent', 'pilot-b', 'Kind words', 'SAFE')""",
+            id, airplane_id, sender_uid, message_text, moderation_state, created_at
+        ) VALUES (?, 'public-parent', 'pilot-b', 'Kind words', 'SAFE', '2000-01-01T00:00:00.000Z')""",
         (f"reply-{index}",),
     )
-
-try:
-    DB.execute(
-        """INSERT INTO public_replies(
-            id, airplane_id, sender_uid, message_text, moderation_state
-        ) VALUES ('reply-over-limit', 'public-parent', 'pilot-b', 'One more', 'SAFE')"""
-    )
-    raise AssertionError("Public reply trigger did not block the sixth reply")
-except sqlite3.IntegrityError as error:
-    assert "PUBLIC_REPLY_LIMIT_REACHED" in str(error), str(error)
+assert DB.execute(
+    "SELECT COUNT(*) FROM public_replies WHERE airplane_id = 'public-parent'"
+).fetchone()[0] == 20, "Public conversations must support more than five replies"
 
 # A pilot's combined hourly plane + reply allowance is shared.
 seed_user("pilot-c")
