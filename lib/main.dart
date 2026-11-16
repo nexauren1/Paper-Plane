@@ -18,20 +18,21 @@ import 'screens/pilot_profile_setup_screen.dart';
 import 'screens/first_flight_workshop_screen.dart';
 import 'screens/support_screen.dart';
 import 'screens/chat_hub_screen.dart';
+import 'screens/groups_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'widgets/report_dialog.dart';
 import 'widgets/pilot_avatar.dart';
 import 'widgets/chat_link_preview.dart';
 
-const Color ppNavy = Color(0xFF071225);
-const Color ppNavyDeep = Color(0xFF040A15);
-const Color ppBlue = Color(0xFF243F70);
-const Color ppBlueLight = Color(0xFF83B8FF);
-const Color ppGold = Color(0xFFF0CE7C);
-const Color ppGoldBright = Color(0xFFFFE7A8);
-const Color ppPaper = Color(0xFFF4F0E7);
-const Color ppInk = Color(0xFF242735);
-const Color ppPanel = Color(0xCC172844);
+const Color ppNavy = Color(0xFF040A18);
+const Color ppNavyDeep = Color(0xFF020611);
+const Color ppBlue = Color(0xFF155ECB);
+const Color ppBlueLight = Color(0xFF57D6FF);
+const Color ppGold = Color(0xFF258BFF);
+const Color ppGoldBright = Color(0xFFB8F1FF);
+const Color ppPaper = Color(0xFFF4FAFF);
+const Color ppInk = Color(0xFF0C1730);
+const Color ppPanel = Color(0xDD0E203B);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -775,7 +776,6 @@ class _MainShellState extends State<MainShell> {
     PaperPlaneNotifications.onOpenSentPlane = _openSentPlaneFromNotification;
     PaperPlaneNotifications.onOpenChat = _openChatFromNotification;
     PaperPlaneNotifications.onOpenOpenSky = _openOpenSkyAfterPublish;
-    // Existing opt-ins are reconciled with the current FCM token after login.
     unawaited(PaperPlaneNotifications.registerDeviceIfAuthorized());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -798,16 +798,20 @@ class _MainShellState extends State<MainShell> {
   }
 
   void _openInboxFromNotification() {
-    if (mounted) setState(() => _index = 1);
+    if (!mounted) return;
+    setState(() => _index = 0);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ppPush(context, const InboxPage());
+    });
   }
 
   void _openChatFromNotification() {
-    if (mounted) setState(() => _index = 3);
+    if (mounted) setState(() => _index = 2);
   }
 
   void _openOpenSkyAfterPublish() {
     if (!mounted) return;
-    setState(() => _index = 2);
+    setState(() => _index = 0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openSkyKey.currentState?._refresh();
     });
@@ -820,12 +824,11 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
     if (!mounted || airplaneId.isEmpty) return;
-    setState(() => _index = 1);
+    setState(() => _index = 0);
     String? senderCountry;
     try {
       final response = await PaperPlaneApi.instance.getInbox();
-      final items = (response['items'] as List<dynamic>? ?? const [])
-          .whereType<Map>();
+      final items = (response['items'] as List<dynamic>? ?? const []).whereType<Map>();
       for (final item in items) {
         if (item['id']?.toString() == airplaneId) {
           senderCountry = item['sender_country_code']?.toString();
@@ -833,16 +836,10 @@ class _MainShellState extends State<MainShell> {
         }
       }
     } catch (_) {
-      // The inbox tab remains available if the network is temporarily unavailable.
+      // The inbox remains accessible if the connection is temporarily unavailable.
     }
     if (!mounted) return;
-    ppPush(
-      context,
-      IncomingPlaneScreen(
-        airplaneId: airplaneId,
-        countryCode: senderCountry,
-      ),
-    );
+    ppPush(context, IncomingPlaneScreen(airplaneId: airplaneId, countryCode: senderCountry));
   }
 
   @override
@@ -858,38 +855,57 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomePage(onWrite: () => ppPush(context, const WritePlaneScreen()), onOpenInbox: () => setState(() => _index = 1)),
-      const InboxPage(),
       OpenSkyPage(key: _openSkyKey),
+      const GroupsScreen(),
       const ChatHubScreen(),
-      const QuizScreen(),
       const ProfilePage(),
     ];
 
     return Scaffold(
       backgroundColor: ppNavy,
       body: SpaceBackground(
-        child: SafeArea(
-          child: IndexedStack(index: _index, children: pages),
-        ),
+        child: SafeArea(child: IndexedStack(index: _index, children: pages)),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: const Color(0xEE101D33),
-          border: Border(top: BorderSide(color: ppGold.withOpacity(0.22))),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 16, offset: const Offset(0, -4))],
+          color: const Color(0xF2081428),
+          border: Border(top: BorderSide(color: ppBlueLight.withOpacity(0.24))),
+          boxShadow: [BoxShadow(color: ppBlue.withOpacity(0.16), blurRadius: 22, offset: const Offset(0, -5))],
         ),
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 66,
+            height: 72,
             child: Row(children: [
               _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
-              _navItem(1, Icons.inbox_outlined, Icons.inbox_rounded, 'Caixa'),
-              _navItem(2, Icons.public_outlined, Icons.public_rounded, 'Open Sky'),
-              _navItem(3, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chat'),
-              _navItem(4, Icons.quiz_outlined, Icons.quiz_rounded, 'Quiz'),
-              _navItem(5, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
+              _navItem(1, Icons.groups_outlined, Icons.groups_rounded, 'Grupos'),
+              Expanded(
+                child: Center(
+                  child: InkWell(
+                    onTap: () => ppPush(context, const WritePlaneScreen()),
+                    borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      height: 54,
+                      width: 58,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(19),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF42D9FF), Color(0xFF1677F8), Color(0xFF6044D8)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(color: ppBlueLight.withOpacity(0.38), blurRadius: 19, spreadRadius: 1),
+                          BoxShadow(color: ppBlue.withOpacity(0.30), blurRadius: 28, offset: const Offset(0, 6)),
+                        ],
+                      ),
+                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 25),
+                    ),
+                  ),
+                ),
+              ),
+              _navItem(2, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
+              _navItem(3, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
             ]),
           ),
         ),
@@ -904,17 +920,18 @@ class _MainShellState extends State<MainShell> {
         onTap: () => setState(() => _index = index),
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+          duration: const Duration(milliseconds: 220),
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
           padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 1),
           decoration: BoxDecoration(
-            color: selected ? ppGold.withOpacity(0.13) : Colors.transparent,
+            color: selected ? ppBlue.withOpacity(0.20) : Colors.transparent,
             borderRadius: BorderRadius.circular(13),
+            border: selected ? Border.all(color: ppBlueLight.withOpacity(0.20)) : null,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(selected ? selectedIcon : icon, color: selected ? ppGoldBright : Colors.white70, size: 21),
+              Icon(selected ? selectedIcon : icon, color: selected ? ppBlueLight : Colors.white70, size: 21),
               const SizedBox(height: 3),
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -922,7 +939,7 @@ class _MainShellState extends State<MainShell> {
                   label,
                   maxLines: 1,
                   style: TextStyle(
-                    color: selected ? ppGoldBright : Colors.white60,
+                    color: selected ? ppBlueLight : Colors.white60,
                     fontSize: 9.5,
                     fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
                   ),
@@ -935,7 +952,6 @@ class _MainShellState extends State<MainShell> {
     );
   }
 }
-
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onWrite, required this.onOpenInbox});
@@ -3977,16 +3993,89 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
         children: [
           Row(children: [
             const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              PlaneText('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+              PlaneText('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
               SizedBox(height: 3),
-              PlaneText('Mensagens do mundo inteiro', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              PlaneText('A comunidade global do Paper Plane', style: TextStyle(color: Colors.white60, fontSize: 12)),
             ])),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: ppBlue.withOpacity(0.26), shape: BoxShape.circle, border: Border.all(color: ppGold.withOpacity(0.24))),
-              child: const Icon(Icons.public_rounded, color: ppGoldBright, size: 23),
+            IconButton(
+              tooltip: 'Caixa de entrada',
+              onPressed: () => ppPush(context, const InboxPage()),
+              icon: const Icon(Icons.mark_email_unread_outlined, color: ppBlueLight),
+            ),
+            IconButton(
+              tooltip: 'Perfil',
+              onPressed: () => ppPush(context, const ProfilePage()),
+              icon: const Icon(Icons.account_circle_outlined, color: ppBlueLight),
             ),
           ]),
+          const SizedBox(height: 14),
+          Container(
+            height: 204,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0B2D62), Color(0xFF101F4A), Color(0xFF211343)],
+              ),
+              border: Border.all(color: ppBlueLight.withOpacity(0.30)),
+              boxShadow: [BoxShadow(color: ppBlue.withOpacity(0.20), blurRadius: 22, offset: const Offset(0, 8))],
+            ),
+            child: Stack(children: [
+              Positioned(
+                right: -18,
+                top: -6,
+                width: 230,
+                height: 210,
+                child: IgnorePointer(child: AnimatedGlobeFlight(route: null, progress: 0)),
+              ),
+              Positioned(
+                left: 17,
+                top: 17,
+                bottom: 15,
+                right: 125,
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const PlaneText('SEND  ·  CONNECT  ·  DISCOVER', style: TextStyle(color: ppBlueLight, fontSize: 8, letterSpacing: 1.2, fontWeight: FontWeight.w900)),
+                  const Spacer(),
+                  const PlaneText('O mundo\nà distância\nde um avião.', style: TextStyle(color: Colors.white, fontSize: 22, height: 1.0, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 7),
+                  const PlaneText('Partilha uma ideia e descobre pessoas em todo o mundo.', style: TextStyle(color: Colors.white70, fontSize: 9, height: 1.35)),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 34,
+                    child: FilledButton.icon(
+                      onPressed: () => ppPush(context, const WritePlaneScreen()),
+                      icon: const Icon(Icons.send_rounded, size: 13),
+                      label: const PlaneText('Enviar avião', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1677F8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 11),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+              Positioned(
+                right: 13,
+                bottom: 12,
+                child: InkWell(
+                  onTap: () => ppPush(context, const SkyAtlasScreen()),
+                  borderRadius: BorderRadius.circular(20),
+                  child: const Padding(
+                    padding: EdgeInsets.all(5),
+                    child: Row(children: [
+                      PlaneText('Ver rotas', style: TextStyle(color: ppBlueLight, fontSize: 9, fontWeight: FontWeight.w800)),
+                      SizedBox(width: 3),
+                      Icon(Icons.arrow_forward_rounded, size: 12, color: ppBlueLight),
+                    ]),
+                  ),
+                ),
+              ),
+            ]),
+          ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -4043,9 +4132,9 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               const SizedBox(height: 10),
               Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF101D33),
+                  color: const Color(0xFF0B1A32),
                   borderRadius: BorderRadius.circular(19),
-                  border: Border.all(color: const Color(0x223F74B6)),
+                  border: Border.all(color: const Color(0x4450BCFF)),
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 16, offset: const Offset(0, 7))],
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
