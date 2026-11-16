@@ -317,10 +317,15 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> sendGroupMessage(String groupId, String message) =>
       _request('/v1/groups/$groupId/messages', method: 'POST', body: {'message': message});
 
-  Future<Map<String, dynamic>> getOpenSky({String? country, String? language}) {
+  Future<Map<String, dynamic>> getOpenSky({
+    String? country,
+    String? language,
+    String feed = 'FOR_YOU',
+  }) {
     final query = <String, String>{
       if (country != null && country.isNotEmpty) 'country': country.toUpperCase(),
       if (language == 'pt' || language == 'en') 'language': language!,
+      if (feed == 'FRIENDS' || feed == 'POPULAR') 'feed': feed,
     };
     final suffix = query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
     return _request('/v1/open-sky$suffix');
