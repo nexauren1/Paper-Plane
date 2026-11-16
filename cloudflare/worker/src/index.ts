@@ -3142,26 +3142,27 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
     ).bind(uid, parent.sender_uid, parent.sender_uid, uid).first();
     if (blocked) return json({ error: "INTERACTION_BLOCKED" }, 403);
+    const requestedPage = Number.parseInt(url.searchParams.get("page") ?? "0", 10);
+    const page = Number.isFinite(requestedPage) ? Math.min(1000, Math.max(0, requestedPage)) : 0;
     const rows = await env.DB.prepare(
       `SELECT r.id, r.message_text, r.created_at, r.sender_uid,
               u.pilot_name, u.pilot_handle,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
               CASE WHEN r.sender_uid = ? THEN 1 ELSE 0 END AS is_own
-       FROM (
-         SELECT id, message_text, created_at, sender_uid
-         FROM public_replies
-         WHERE airplane_id = ? AND moderation_state = 'SAFE'
-         ORDER BY created_at DESC LIMIT 50
-       ) r
+       FROM public_replies r
        JOIN users u ON u.uid = r.sender_uid
-       WHERE NOT EXISTS (
-         SELECT 1 FROM blocks b
-         WHERE (b.blocker_uid = ? AND b.blocked_uid = r.sender_uid)
-            OR (b.blocker_uid = r.sender_uid AND b.blocked_uid = ?)
-       )
-       ORDER BY r.created_at ASC`,
-    ).bind(uid, publicRepliesMatch[1], uid, uid).all();
-    return json({ items: rows.results ?? [], hasMore: (rows.results?.length ?? 0) === 50 });
+       WHERE r.airplane_id = ? AND r.moderation_state = 'SAFE'
+         AND NOT EXISTS (
+           SELECT 1 FROM blocks b
+           WHERE (b.blocker_uid = ? AND b.blocked_uid = r.sender_uid)
+              OR (b.blocker_uid = r.sender_uid AND b.blocked_uid = ?)
+         )
+       ORDER BY r.created_at ASC, r.id ASC
+       LIMIT 51 OFFSET ?`,
+    ).bind(uid, publicRepliesMatch[1], uid, uid, page * 50).all();
+    const results = rows.results ?? [];
+    const hasMore = results.length > 50;
+    return json({ items: results.slice(0, 50), hasMore, page });
   }
   if (publicRepliesMatch && method === "POST") {
     const { user, response } = await ensurePilotReady(uid, env);
