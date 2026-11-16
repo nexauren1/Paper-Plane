@@ -4518,20 +4518,6 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   }
 }
 
-class _CountryChip extends StatelessWidget {
-  const _CountryChip({required this.label});
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Chip(
-        label: PlaneText(label),
-        backgroundColor: ppBlue.withOpacity(0.38),
-        side: BorderSide(color: Colors.white.withOpacity(0.12)),
-        labelStyle: const TextStyle(color: Colors.white),
-      );
-}
-
-
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -4777,6 +4763,12 @@ class _ProfilePageState extends State<ProfilePage> {
               title: 'Atlas do Céu',
               subtitle: 'Países ligados às tuas cartas e modelos utilizados',
               onTap: () => ppPush(context, const SkyAtlasScreen()),
+            ),
+            _ProfileLink(
+              icon: Icons.quiz_rounded,
+              title: 'Quiz offline',
+              subtitle: 'Geografia, natureza e cultura',
+              onTap: () => ppPush(context, const QuizScreen()),
             ),
             const SectionTitle('Conta e preferências'),
             _ProfileLink(icon: Icons.manage_accounts_outlined, title: 'A minha conta', subtitle: 'Google · Email e palavra-passe', onTap: () => ppPush(context, AccountScreen(onAuthenticated: (_) => Navigator.of(context).pop()))),
@@ -5424,22 +5416,6 @@ class _BadgeTile extends StatelessWidget {
       PlaneText(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: unlocked ? Colors.white : Colors.white38)),
       const SizedBox(height: 4),
       PlaneText(unlocked ? 'Conquistado' : 'Por conquistar', style: const TextStyle(fontSize: 9, color: Colors.white38)),
-    ]),
-  );
-}
-
-class _PlaneStamp extends StatelessWidget {
-  const _PlaneStamp({required this.flag, required this.country});
-  final String flag;
-  final String country;
-
-  @override
-  Widget build(BuildContext context) => GlassPanel(
-    padding: const EdgeInsets.all(9),
-    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      const PlaneMark(width: 40),
-      const SizedBox(height: 8),
-      PlaneText(flag + ' ' + country, textAlign: TextAlign.center, style: const TextStyle(fontSize: 11, color: Colors.white70)),
     ]),
   );
 }
