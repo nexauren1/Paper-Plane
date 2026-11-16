@@ -17,6 +17,12 @@ def seed_user(uid: str):
 seed_user("pilot-a")
 seed_user("pilot-b")
 
+# The photo column remains only as a nullable compatibility field; the application clears it.
+DB.execute("UPDATE users SET avatar_url = ? WHERE uid = 'pilot-a'", ("https://example.invalid/old-profile.png",))
+DB.executescript((ROOT / "migrations" / "0015_remove_profile_photos.sql").read_text(encoding="utf-8"))
+assert DB.execute("SELECT avatar_url FROM users WHERE uid = 'pilot-a'").fetchone()[0] is None, "Existing profile photo URLs must be cleared"
+
+
 # Daily sending is unlimited; anti-spam remains a rolling hourly safeguard.
 assert DB.execute(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'daily_limits'"
@@ -53,6 +59,10 @@ try:
     raise AssertionError("Hourly rate trigger did not block the eleventh message")
 except sqlite3.IntegrityError as error:
     assert "PAPER_PLANE_RATE_LIMIT" in str(error), str(error)
+
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_public_replies_max_five'"
+).fetchone() is None, "The five-reply public post limit must be removed"
 
 # Public posts support long conversations; only the rolling hourly account safeguard remains.
 insert_plane("public-parent", "pilot-b", audience="PUBLIC")
