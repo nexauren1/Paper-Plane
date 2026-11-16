@@ -53,6 +53,8 @@ interface Env {
   APP_ORIGINS: string;
   FCM_SERVICE_ACCOUNT_JSON?: string;
   ADMIN_UIDS?: string;
+  IMAGEKIT_PRIVATE_KEY?: string;
+  IMAGEKIT_URL_ENDPOINT?: string;
 }
 
 const FIREBASE_JWKS = createRemoteJWKSet(
@@ -112,7 +114,7 @@ function corsHeaders(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get("Origin") ?? "";
   const allowed = (env.APP_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const headers: Record<string, string> = {
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Authorization,Content-Type",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
@@ -1367,6 +1369,23 @@ async function buildLinkPreview(input: string): Promise<Record<string, string> |
   return null;
 }
 
+
+async function deleteImageKitFile(fileId: string, env: Env): Promise<void> {
+  if (!env.IMAGEKIT_PRIVATE_KEY || !fileId) return;
+  try {
+    await fetch(`https://api.imagekit.io/v1/files/${encodeURIComponent(fileId)}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Basic ${btoa(env.IMAGEKIT_PRIVATE_KEY + ":")}`,
+        "Accept": "application/json",
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    // Detaching the D1 reference is not blocked by provider downtime.
+  }
+}
+
 async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
@@ -1421,6 +1440,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
         ai: env.AI ? "binding_available" : "unavailable",
         integrations: {
           androidPush: env.FCM_SERVICE_ACCOUNT_JSON ? "configured" : "needs_configuration",
+          profilePhotos: env.IMAGEKIT_PRIVATE_KEY && env.IMAGEKIT_URL_ENDPOINT ? "configured" : "needs_configuration",
         },
         time: isoNow(),
       });
@@ -1485,6 +1505,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     ).bind(uidHash).first();
     if (existingDeletion) return json({ ok: true, alreadyDeleted: true });
     if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
+    const avatarForDeletion = await env.DB.prepare(
+      "SELECT avatar_file_id FROM users WHERE uid = ? LIMIT 1",
+    ).bind(uid).first<{ avatar_file_id: string | null }>();
+    if (avatarForDeletion?.avatar_file_id) {
+      ctx.waitUntil(deleteImageKitFile(avatarForDeletion.avatar_file_id, env));
+    }
     await env.DB.batch([
       env.DB.prepare("INSERT INTO deleted_accounts(uid_hash) VALUES (?)").bind(uidHash),
       env.DB.prepare(
@@ -2527,7 +2553,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
     try {
       await env.DB.prepare(
-        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = NULL, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
       ).bind(pilotName, handle, birthYear, declaredAgeBand, isoNow(), countryCode, language, preferredLanguage, isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
@@ -2555,10 +2581,119 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (method === "POST" && path === "/v1/profile/avatar") {
-    return json({
-      error: "PROFILE_PHOTOS_DISABLED",
-      message: "O Paper Plane utiliza avatares gráficos criados automaticamente no aplicativo.",
-    }, 410);
+    if (!env.IMAGEKIT_PRIVATE_KEY || !env.IMAGEKIT_URL_ENDPOINT) {
+      return json({ error: "IMAGEKIT_NOT_CONFIGURED", message: "O armazenamento de fotografias ainda não está configurado no servidor." }, 503);
+    }
+    const profile = await requireUser(uid, env);
+    if (!profile || profile.status !== "ACTIVE") return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+    if (profile.profile_completed !== 1) return json({ error: "PROFILE_SETUP_REQUIRED" }, 409);
+
+    const dailyUploads = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM audit_events WHERE actor_uid = ? AND event_type = 'PROFILE_AVATAR_UPLOADED' AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(dailyUploads?.count ?? 0) >= 5) {
+      return json({ error: "AVATAR_RATE_LIMIT", message: "Atingiste o limite de 5 alterações de fotografia por dia." }, 429);
+    }
+
+    const form = await request.formData().catch(() => null);
+    const uploadedFile = form?.get("file");
+    if (!(uploadedFile instanceof File) || uploadedFile.size < 1) {
+      return json({ error: "INVALID_AVATAR_FILE", message: "Escolhe uma imagem JPG, PNG ou WebP." }, 400);
+    }
+    if (uploadedFile.size > 5 * 1024 * 1024) {
+      return json({ error: "AVATAR_TOO_LARGE", message: "A fotografia deve ter no máximo 5 MB." }, 413);
+    }
+
+    const fileBytes = await uploadedFile.arrayBuffer();
+    const bytes = new Uint8Array(fileBytes);
+    let mimeType = "";
+    let extension = "";
+    const isJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const isPng = bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+      bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+    const isWebp = bytes.length >= 12 &&
+      String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" &&
+      String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+    if (isJpeg) { mimeType = "image/jpeg"; extension = "jpg"; }
+    else if (isPng) { mimeType = "image/png"; extension = "png"; }
+    else if (isWebp) { mimeType = "image/webp"; extension = "webp"; }
+    else return json({ error: "INVALID_AVATAR_FILE", message: "Escolhe uma imagem JPG, PNG ou WebP." }, 415);
+
+    const fileName = `pilot-${crypto.randomUUID()}.${extension}`;
+    const imageKitForm = new FormData();
+    imageKitForm.append("file", new Blob([fileBytes], { type: mimeType }), fileName);
+    imageKitForm.set("fileName", fileName);
+    imageKitForm.set("folder", "/paper-plane/avatars");
+    imageKitForm.set("useUniqueFileName", "true");
+
+    let imageKitResponse: Response;
+    try {
+      imageKitResponse = await fetch("https://upload.imagekit.io/api/v1/files/upload", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${btoa(env.IMAGEKIT_PRIVATE_KEY + ":")}`,
+          "Accept": "application/json",
+        },
+        body: imageKitForm,
+        signal: AbortSignal.timeout(25000),
+      });
+    } catch {
+      return json({ error: "IMAGE_UPLOAD_FAILED", message: "Não foi possível contactar o serviço de imagens. Tenta novamente." }, 502);
+    }
+
+    const imageKitPayload = await imageKitResponse.json().catch(() => null) as {
+      fileId?: unknown; url?: unknown;
+    } | null;
+    if (!imageKitResponse.ok || typeof imageKitPayload?.fileId !== "string" || typeof imageKitPayload.url !== "string") {
+      return json({ error: "IMAGE_UPLOAD_FAILED", message: "O ImageKit não aceitou a fotografia. Verifica a chave privada e os limites da conta." }, 502);
+    }
+
+    let configuredEndpoint: URL;
+    try {
+      configuredEndpoint = new URL(env.IMAGEKIT_URL_ENDPOINT);
+    } catch {
+      await deleteImageKitFile(imageKitPayload.fileId, env);
+      return json({ error: "IMAGEKIT_NOT_CONFIGURED" }, 503);
+    }
+    const endpointBase = configuredEndpoint.toString().replace(/\/+$/, "");
+    if (configuredEndpoint.protocol !== "https:" || !imageKitPayload.url.startsWith(endpointBase + "/")) {
+      await deleteImageKitFile(imageKitPayload.fileId, env);
+      return json({ error: "IMAGE_UPLOAD_FAILED", message: "O endereço devolvido pelo ImageKit não corresponde ao endpoint configurado." }, 502);
+    }
+
+    const previous = await env.DB.prepare(
+      "SELECT avatar_file_id FROM users WHERE uid = ? LIMIT 1",
+    ).bind(uid).first<{ avatar_file_id: string | null }>();
+    try {
+      await env.DB.batch([
+        env.DB.prepare(
+          "UPDATE users SET avatar_url = ?, avatar_file_id = ?, updated_at = ? WHERE uid = ?",
+        ).bind(imageKitPayload.url, imageKitPayload.fileId, isoNow(), uid),
+        env.DB.prepare(
+          "INSERT INTO audit_events(id, actor_uid, event_type, entity_id, metadata_json) VALUES (?, ?, 'PROFILE_AVATAR_UPLOADED', ?, ?)",
+        ).bind(uuid(), uid, imageKitPayload.fileId, JSON.stringify({ mimeType, size: uploadedFile.size })),
+      ]);
+    } catch (error) {
+      await deleteImageKitFile(imageKitPayload.fileId, env);
+      throw error;
+    }
+
+    if (previous?.avatar_file_id && previous.avatar_file_id !== imageKitPayload.fileId) {
+      ctx.waitUntil(deleteImageKitFile(previous.avatar_file_id, env));
+    }
+    return json({ ok: true, avatarUrl: imageKitPayload.url });
+  }
+
+  if (method === "DELETE" && path === "/v1/profile/avatar") {
+    const previous = await env.DB.prepare(
+      "SELECT avatar_file_id FROM users WHERE uid = ? LIMIT 1",
+    ).bind(uid).first<{ avatar_file_id: string | null }>();
+    await env.DB.prepare(
+      "UPDATE users SET avatar_url = NULL, avatar_file_id = NULL, updated_at = ? WHERE uid = ?",
+    ).bind(isoNow(), uid).run();
+    if (previous?.avatar_file_id) ctx.waitUntil(deleteImageKitFile(previous.avatar_file_id, env));
+    return json({ ok: true, avatarUrl: null });
   }
 
   if (method === "GET" && path === "/v1/link-preview") {
@@ -2887,7 +3022,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const rows = await env.DB.prepare(
       `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at,
               a.plane_model, p.likes_count,
-              u.pilot_name, u.pilot_handle,
+              u.pilot_name, u.pilot_handle, u.avatar_url,
               CASE WHEN a.sender_uid = ? THEN 1 ELSE 0 END AS is_own,
               CASE WHEN EXISTS (SELECT 1 FROM public_likes l WHERE l.airplane_id = a.id AND l.uid = ?) THEN 1 ELSE 0 END AS liked_by_me,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
@@ -2955,7 +3090,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const page = Number.isFinite(requestedPage) ? Math.min(1000, Math.max(0, requestedPage)) : 0;
     const rows = await env.DB.prepare(
       `SELECT r.id, r.message_text, r.created_at, r.sender_uid,
-              u.pilot_name, u.pilot_handle,
+              u.pilot_name, u.pilot_handle, u.avatar_url,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
               CASE WHEN r.sender_uid = ? THEN 1 ELSE 0 END AS is_own
        FROM public_replies r
