@@ -29,7 +29,7 @@ assert DB.execute(
 ).fetchone() is None, "The obsolete one-plane-per-day counter must be removed"
 
 user_columns = {row[1] for row in DB.execute("PRAGMA table_info(users)").fetchall()}
-assert {"declared_age_band", "age_declaration_at", "preferred_language"}.issubset(user_columns), "Missing self-declared age or language fields"
+assert {"declared_age_band", "age_declaration_at", "preferred_language", "avatar_url", "avatar_file_id"}.issubset(user_columns), "Missing profile, language, or avatar fields"
 DB.execute("UPDATE users SET language = 'en' WHERE uid = 'pilot-a'")
 DB.execute("UPDATE users SET preferred_language = language WHERE language IN ('pt', 'en')")
 assert DB.execute("SELECT preferred_language FROM users WHERE uid = 'pilot-a'").fetchone()[0] == "en", "Legacy profile language was not preserved"
