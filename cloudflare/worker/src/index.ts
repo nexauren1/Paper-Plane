@@ -1707,7 +1707,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const categories = ["ALL", "TECH", "TRAVEL", "LANGUAGE", "CULTURE", "GAMING", "GENERAL"];
     if (!categories.includes(category)) return json({ error: "INVALID_GROUP_CATEGORY" }, 400);
     const rows = await env.DB.prepare(
-      \`SELECT g.id, g.name, g.description, g.category, g.created_at, g.updated_at,
+      `SELECT g.id, g.name, g.description, g.category, g.created_at, g.updated_at,
               owner.pilot_name AS owner_name,
               (SELECT COUNT(*) FROM social_group_members m WHERE m.group_id = g.id) AS member_count,
               CASE WHEN EXISTS (
@@ -1720,7 +1720,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
          AND (? = '' OR lower(g.name) LIKE lower(?) OR lower(g.description) LIKE lower(?))
          AND (? = 'ALL' OR g.category = ?)
        ORDER BY is_member DESC, member_count DESC, g.created_at DESC
-       LIMIT 60\`,
+       LIMIT 60`,
     ).bind(uid, uid, user.declared_age_band, query, "%" + query + "%", "%" + query + "%", category, category).all();
     return json({ items: rows.results ?? [] });
   }
@@ -1859,19 +1859,19 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (response) return response;
     if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
     const group = await env.DB.prepare(
-      \`SELECT g.id, g.owner_uid, g.name, g.description, g.category, g.age_band, g.created_at,
+      `SELECT g.id, g.owner_uid, g.name, g.description, g.category, g.age_band, g.created_at,
               owner.pilot_name AS owner_name,
               (SELECT COUNT(*) FROM social_group_members m WHERE m.group_id = g.id) AS member_count,
               CASE WHEN EXISTS (SELECT 1 FROM social_group_members m WHERE m.group_id = g.id AND m.uid = ?) THEN 1 ELSE 0 END AS is_member,
               CASE WHEN g.owner_uid = ? THEN 1 ELSE 0 END AS is_owner
        FROM social_groups g JOIN users owner ON owner.uid = g.owner_uid
-       WHERE g.id = ? AND g.age_band = ? LIMIT 1\`,
+       WHERE g.id = ? AND g.age_band = ? LIMIT 1`,
     ).bind(uid, uid, groupDetailMatch[1], user.declared_age_band).first<Record<string, unknown>>();
     if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
     let items: Record<string, unknown>[] = [];
     if (group.is_member === 1) {
       const messages = await env.DB.prepare(
-        \`SELECT m.id, m.message_text, m.created_at, m.uid,
+        `SELECT m.id, m.message_text, m.created_at, m.uid,
                 u.pilot_name, u.pilot_handle, u.avatar_url,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
                 CASE WHEN m.uid = ? THEN 1 ELSE 0 END AS is_own
@@ -1882,7 +1882,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
              WHERE (b.blocker_uid = ? AND b.blocked_uid = m.uid)
                 OR (b.blocker_uid = m.uid AND b.blocked_uid = ?)
            )
-         ORDER BY m.created_at ASC LIMIT 80\`,
+         ORDER BY m.created_at ASC LIMIT 80`,
       ).bind(uid, groupDetailMatch[1], uid, uid).all<Record<string, unknown>>();
       items = messages.results ?? [];
     }
