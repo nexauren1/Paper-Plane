@@ -10,7 +10,7 @@ The first release concentrates on the full message journey instead of optional e
 
 - Firebase account creation and sign-in with email/password or Google.
 - Server-backed pilot profile with unique handle, country and self-declared date of birth (only birth year and derived age group are retained).
-- No profile photographs: pilot avatars are generated locally from the pilot name, and profile creation stays entirely inside the app.
+- Optional pilot profile photographs uploaded through the authenticated Cloudflare Worker to ImageKit; generated Paper Plane avatars remain the fallback when no photo is set.
 - First-flight workshop with a saved server-side draft and three paper-plane designs.
 - Short paper messages (up to 200 characters), random matching and public Open Sky posts.
 - Server-side matching, delivery status, flight route and progress.
@@ -32,7 +32,8 @@ The animated flight globe is included in the flight tracker and Open Sky home. I
 - **Flutter/Dart:** Android interface, animation, navigation and client logic.
 - **Firebase Authentication:** account identity and signed Firebase ID tokens.
 - **Cloudflare Worker:** authenticated API, moderation, matching, delivery and notification dispatch.
-- **Cloudflare D1:** pilot profiles and preferred languages, airplanes, inbox, cached airplane/chat translations, friendships, Chama conversations and messages, reports, support tickets and audit events.
+- **Cloudflare D1:** pilot profiles and preferred languages, ImageKit avatar URL/file ID, airplanes, inbox, cached airplane/chat translations, friendships, Chama conversations and messages, reports, support tickets and audit events.
+- **ImageKit:** profile photo storage and optimized delivery; the private API key remains a Cloudflare Worker secret.
 - **Cloudflare Queues and scheduled Worker tasks:** asynchronous matching and flight delivery. Matching is retried each minute while a recipient is not available; same-country symbolic flights have a 90-second minimum duration, while longer routes use an estimated duration based on distance. Daily sending is unlimited; account activity is still rate-limited to 10 airplanes and public replies combined per rolling hour, and repeated identical messages are throttled. Unmatched random airplanes expire after 24 hours, unresolved safety reviews after 72 hours, public Open Sky airplanes after 7 days, and received letters after 24 hours unopened or 48 hours after opening.
 - **Workers AI:** Meta M2M100 1.2B translates received airplanes and chat messages into the recipient's preferred language. Llama Guard 3 8B screens submitted airplane, public-reply and private Chat text before publication or storage. Original text is preserved and translations are cached in D1. Safety results are a first-pass screen, not a guarantee; flagged public content stays hidden for human review.
 - **Firebase Cloud Messaging:** Android delivery and Chama notifications. The app requests the Android system notification permission at startup and registers the FCM device token only when permission is granted. New airplanes, private messages and Admin announcements can appear in the Android notification tray while the app is in the background.
@@ -69,7 +70,7 @@ The Worker deployment workflow runs when files under `cloudflare/worker/` change
 4. Applies pending migrations to the configured remote D1 database.
 5. Deploys the Worker.
 
-Cloudflare credentials are supplied through GitHub Actions secrets. Runtime integrations may also require the Cloudflare Worker secrets `FCM_SERVICE_ACCOUNT_JSON` and `ADMIN_UIDS`. A successful Worker deployment proves that the code and migrations deployed; it does not prove that every optional provider secret is present or that a real device has received a push notification.
+Cloudflare credentials are supplied through GitHub Actions secrets. Runtime integrations may also require the Cloudflare Worker secrets `FCM_SERVICE_ACCOUNT_JSON`, `ADMIN_UIDS`, and `IMAGEKIT_PRIVATE_KEY`; `IMAGEKIT_URL_ENDPOINT` is a non-secret Worker variable. A successful Worker deployment proves that the code and migrations deployed; it does not prove that every optional provider secret is present or that a real device has received a push notification.
 
 ## Safety and release checks
 
