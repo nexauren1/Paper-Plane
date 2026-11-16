@@ -271,7 +271,7 @@ class PaperPlaneLocale {
     'Deixarás de receber e enviar mensagens nesta comunidade.': ['You will no longer receive or send messages in this community.', 'Ya no recibirás ni enviarás mensajes en esta comunidad.', 'Tu ne recevras ni n’enverras plus de messages dans cette communauté.', 'Du kannst in dieser Community keine Nachrichten mehr empfangen oder senden.'],
     'Cancelar': ['Cancel', 'Cancelar', 'Annuler', 'Abbrechen'],
     'Eliminar': ['Delete', 'Eliminar', 'Supprimer', 'Löschen'],
-    'Sair': ['Leave', 'Salir', 'Quitter', 'Verlassen'],
+    'Sair': ['Exit', 'Salir', 'Quitter', 'Beenden'],
     'Não foi possível criar a comunidade.': ['Could not create the community.', 'No se pudo crear la comunidad.', 'Impossible de créer la communauté.', 'Community konnte nicht erstellt werden.'],
     'Não foi possível entrar nesta comunidade.': ['Could not join this community.', 'No se pudo entrar en esta comunidad.', 'Impossible de rejoindre cette communauté.', 'Beitritt zu dieser Community fehlgeschlagen.'],
     'Não foi possível abrir esta comunidade.': ['Could not open this community.', 'No se pudo abrir esta comunidad.', 'Impossible d’ouvrir cette communauté.', 'Diese Community konnte nicht geöffnet werden.'],
