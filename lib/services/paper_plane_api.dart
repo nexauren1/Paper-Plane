@@ -94,7 +94,6 @@ class PaperPlaneApi {
       final message = switch (code) {
         'AGE_DECLARATION_REQUIRED' => 'Completa a tua data de nascimento no perfil antes de enviar.',
         'INVALID_BIRTH_DATE' => 'Indica uma data de nascimento válida.',
-        'INVALID_AVATAR_URL' => 'Usa um link HTTPS público para a tua foto ou perfil.',
         'PREVIEW_UNAVAILABLE' => 'Não foi possível carregar a pré-visualização deste link.',
         'CHAMA_USES_PLANES' => 'A Chama funciona através de aviões de resposta.',
         'CHAMA_ENDED' => 'Esta Chama foi encerrada.',
@@ -106,9 +105,9 @@ class PaperPlaneApi {
         'HELD_FOR_REVIEW' => 'A mensagem ficou retida para revisão de segurança.',
         'MODERATION_TEMPORARILY_UNAVAILABLE' => 'A verificação de segurança está temporariamente indisponível. A resposta não foi publicada; tenta novamente mais tarde.',
         'MESSAGE_REQUIRES_REVIEW' => 'Esta mensagem não passou na verificação de segurança. Reformula o texto e tenta novamente.',
-        'REPLY_LIMIT_REACHED' => 'Este avião já atingiu o limite de cinco respostas públicas.',
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
+        'INTERACTION_BLOCKED' => 'Não podes responder a esta publicação devido às definições de bloqueio entre as contas.',
         'PROFILE_SETUP_REQUIRED' => 'Completa primeiro o perfil do piloto.',
         'PILOT_HANDLE_TAKEN' => 'Esse nome de copiloto já existe. Escolhe outro.',
         'PILOT_NOT_FOUND' => 'Não encontrámos um copiloto ativo com esse @nome.',
@@ -173,19 +172,14 @@ class PaperPlaneApi {
     required DateTime birthDate,
     required String countryCode,
     required String language,
-    String? avatarUrl,
   }) =>
       _request('/v1/profile', method: 'POST', body: {
         'pilotName': pilotName,
         'pilotHandle': pilotHandle,
-        'avatarUrl': avatarUrl,
         'birthDate': '${birthDate.year.toString().padLeft(4, '0')}-${birthDate.month.toString().padLeft(2, '0')}-${birthDate.day.toString().padLeft(2, '0')}',
         'countryCode': countryCode,
         'language': language,
       });
-
-  Future<Map<String, dynamic>> updateAvatarUrl(String? avatarUrl) =>
-      _request('/v1/profile/avatar', method: 'POST', body: {'avatarUrl': avatarUrl});
 
   Future<Map<String, dynamic>> updateLanguagePreference(String language) =>
       _request('/v1/profile/language', method: 'POST', body: {'language': language});
@@ -283,45 +277,15 @@ class PaperPlaneApi {
       'https://paper-plane.nexaurenstore.workers.dev/invite?handle=${Uri.encodeQueryComponent(pilotHandle.replaceFirst(RegExp(r'^@'), ''))}';
 
 
-  Future<Map<String, dynamic>> getGroups({String? query, String? category}) {
-    final params = <String, String>{
-      if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
-      if (category != null && category != 'ALL') 'category': category,
-    };
-    final suffix = params.isEmpty ? '' : '?${Uri(queryParameters: params).query}';
-    return _request('/v1/groups$suffix');
-  }
-
-  Future<Map<String, dynamic>> createGroup({
-    required String name,
-    required String description,
-    required String category,
-  }) =>
-      _request('/v1/groups', method: 'POST', body: {
-        'name': name,
-        'description': description,
-        'category': category,
-      });
-
-  Future<Map<String, dynamic>> joinGroup(String groupId) =>
-      _request('/v1/groups/$groupId/join', method: 'POST');
-
-  Future<Map<String, dynamic>> leaveGroup(String groupId) =>
-      _request('/v1/groups/$groupId/leave', method: 'POST');
-
-  Future<Map<String, dynamic>> deleteGroup(String groupId) =>
-      _request('/v1/groups/$groupId', method: 'DELETE');
-
-  Future<Map<String, dynamic>> getGroup(String groupId) =>
-      _request('/v1/groups/$groupId');
-
-  Future<Map<String, dynamic>> sendGroupMessage(String groupId, String message) =>
-      _request('/v1/groups/$groupId/messages', method: 'POST', body: {'message': message});
-
-  Future<Map<String, dynamic>> getOpenSky({String? country, String? language}) {
+  Future<Map<String, dynamic>> getOpenSky({
+    String? country,
+    String? language,
+    String feed = 'FOR_YOU',
+  }) {
     final query = <String, String>{
       if (country != null && country.isNotEmpty) 'country': country.toUpperCase(),
       if (language == 'pt' || language == 'en') 'language': language!,
+      if (const {'FOR_YOU', 'FOLLOWING', 'POPULAR'}.contains(feed)) 'feed': feed,
     };
     final suffix = query.isEmpty ? '' : '?${Uri(queryParameters: query).query}';
     return _request('/v1/open-sky$suffix');
@@ -419,8 +383,8 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> likeOpenSkyMessage(String airplaneId) =>
       _request('/v1/open-sky/$airplaneId/like', method: 'POST');
 
-  Future<Map<String, dynamic>> getPublicReplies(String airplaneId) =>
-      _request('/v1/open-sky/$airplaneId/replies');
+  Future<Map<String, dynamic>> getPublicReplies(String airplaneId, {int page = 0}) =>
+      _request('/v1/open-sky/$airplaneId/replies?page=${page < 0 ? 0 : page}');
 
   Future<Map<String, dynamic>> addPublicReply(String airplaneId, String message) =>
       _request('/v1/open-sky/$airplaneId/replies', method: 'POST', body: {'message': message});

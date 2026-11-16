@@ -1698,197 +1698,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
 
-  if (method === "GET" && path === "/v1/groups") {
-    const { user, response } = await ensurePilotReady(uid, env);
-    if (response) return response;
-    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
-    const query = text(url.searchParams.get("q"), 50);
-    const category = text(url.searchParams.get("category"), 16).toUpperCase() || "ALL";
-    const categories = ["ALL", "TECH", "TRAVEL", "LANGUAGE", "CULTURE", "GAMING", "GENERAL"];
-    if (!categories.includes(category)) return json({ error: "INVALID_GROUP_CATEGORY" }, 400);
-    const rows = await env.DB.prepare(
-      `SELECT g.id, g.name, g.description, g.category, g.created_at, g.updated_at,
-              owner.pilot_name AS owner_name,
-              (SELECT COUNT(*) FROM social_group_members m WHERE m.group_id = g.id) AS member_count,
-              CASE WHEN EXISTS (
-                SELECT 1 FROM social_group_members mine WHERE mine.group_id = g.id AND mine.uid = ?
-              ) THEN 1 ELSE 0 END AS is_member,
-              CASE WHEN g.owner_uid = ? THEN 1 ELSE 0 END AS is_owner
-       FROM social_groups g
-       JOIN users owner ON owner.uid = g.owner_uid
-       WHERE g.age_band = ?
-         AND (? = '' OR lower(g.name) LIKE lower(?) OR lower(g.description) LIKE lower(?))
-         AND (? = 'ALL' OR g.category = ?)
-       ORDER BY is_member DESC, member_count DESC, g.created_at DESC
-       LIMIT 60`,
-    ).bind(uid, uid, user.declared_age_band, query, "%" + query + "%", "%" + query + "%", category, category).all();
-    return json({ items: rows.results ?? [] });
-  }
-
-  if (method === "POST" && path === "/v1/groups") {
-    const { user, response } = await ensurePilotReady(uid, env);
-    if (response) return response;
-    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body) return json({ error: "INVALID_JSON" }, 400);
-    const name = text(body.name, 40);
-    const description = text(body.description, 160);
-    const category = text(body.category, 16).toUpperCase() || "GENERAL";
-    if (name.length < 3 || [...(typeof body.name === "string" ? body.name.trim() : "")].length > 40 ||
-        [...(typeof body.description === "string" ? body.description.trim() : "")].length > 160) {
-      return json({ error: "INVALID_GROUP_DETAILS", message: "O nome deve ter 3–40 caracteres e a descrição até 160." }, 400);
-    }
-    if (!["TECH", "TRAVEL", "LANGUAGE", "CULTURE", "GAMING", "GENERAL"].includes(category)) {
-      return json({ error: "INVALID_GROUP_CATEGORY" }, 400);
-    }
-    const recent = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM social_groups WHERE owner_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')",
-    ).bind(uid).first<{ count: number }>();
-    if (Number(recent?.count ?? 0) >= 3) return json({ error: "GROUP_CREATE_RATE_LIMIT", message: "Podes criar até três comunidades por dia." }, 429);
-    const moderation = await moderate(env, name + "\n" + description);
-    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
-      return json({ error: "MODERATION_TEMPORARILY_UNAVAILABLE", message: "A verificação de segurança está indisponível. Tenta novamente." }, 503);
-    }
-    if (moderation.state !== "SAFE") {
-      return json({ error: "GROUP_DETAILS_REQUIRE_REVIEW", message: "Revê o nome e a descrição antes de criar a comunidade." }, 422);
-    }
-    const id = uuid();
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO social_groups(id, owner_uid, name, description, category, age_band) VALUES (?, ?, ?, ?, ?, ?)",
-      ).bind(id, uid, name, description, category, user.declared_age_band),
-      env.DB.prepare(
-        "INSERT INTO social_group_members(group_id, uid, role) VALUES (?, ?, 'OWNER')",
-      ).bind(id, uid),
-    ]);
-    return json({
-      group: {
-        id, name, description, category, owner_uid: uid, owner_name: user.pilot_name,
-        age_band: user.declared_age_band, member_count: 1, is_member: 1, is_owner: 1,
-      },
-    }, 201);
-  }
-
-  const groupJoinMatch = path.match(/^\/v1\/groups\/([^/]+)\/join$/);
-  if (method === "POST" && groupJoinMatch) {
-    const { user, response } = await ensurePilotReady(uid, env);
-    if (response) return response;
-    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
-    const group = await env.DB.prepare(
-      "SELECT id, age_band FROM social_groups WHERE id = ? LIMIT 1",
-    ).bind(groupJoinMatch[1]).first<{ id: string; age_band: string }>();
-    if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
-    if (group.age_band !== user.declared_age_band) return json({ error: "GROUP_NOT_AVAILABLE", message: "Esta comunidade não está disponível para a tua faixa etária." }, 403);
-    const membership = await env.DB.prepare(
-      "SELECT role FROM social_group_members WHERE group_id = ? AND uid = ? LIMIT 1",
-    ).bind(group.id, uid).first<{ role: string }>();
-    if (membership) return json({ ok: true, joined: true, alreadyMember: true });
-    const count = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM social_group_members WHERE uid = ?",
-    ).bind(uid).first<{ count: number }>();
-    if (Number(count?.count ?? 0) >= 25) return json({ error: "GROUP_MEMBERSHIP_LIMIT", message: "Já participas no máximo de 25 comunidades." }, 429);
-    await env.DB.prepare(
-      "INSERT INTO social_group_members(group_id, uid, role) VALUES (?, ?, 'MEMBER')",
-    ).bind(group.id, uid).run();
-    return json({ ok: true, joined: true }, 201);
-  }
-
-  const groupLeaveMatch = path.match(/^\/v1\/groups\/([^/]+)\/leave$/);
-  if (method === "POST" && groupLeaveMatch) {
-    const membership = await env.DB.prepare(
-      "SELECT role FROM social_group_members WHERE group_id = ? AND uid = ? LIMIT 1",
-    ).bind(groupLeaveMatch[1], uid).first<{ role: string }>();
-    if (!membership) return json({ error: "GROUP_MEMBERSHIP_NOT_FOUND" }, 404);
-    if (membership.role === "OWNER") {
-      return json({ error: "GROUP_OWNER_MUST_DELETE", message: "O criador deve eliminar a comunidade para a encerrar." }, 409);
-    }
-    await env.DB.prepare("DELETE FROM social_group_members WHERE group_id = ? AND uid = ?")
-      .bind(groupLeaveMatch[1], uid).run();
-    return json({ ok: true, left: true });
-  }
-
-  const groupDeleteMatch = path.match(/^\/v1\/groups\/([^/]+)$/);
-  if (method === "DELETE" && groupDeleteMatch) {
-    const result = await env.DB.prepare(
-      "DELETE FROM social_groups WHERE id = ? AND owner_uid = ?",
-    ).bind(groupDeleteMatch[1], uid).run();
-    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "GROUP_NOT_FOUND_OR_NOT_OWNER" }, 404);
-    return json({ ok: true, deleted: true });
-  }
-
-  const groupMessagesMatch = path.match(/^\/v1\/groups\/([^/]+)\/messages$/);
-  if (method === "POST" && groupMessagesMatch) {
-    const { user, response } = await ensurePilotReady(uid, env);
-    if (response) return response;
-    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body || typeof body.message !== "string") return json({ error: "INVALID_JSON" }, 400);
-    const message = text(body.message, 500);
-    if (!message || [...body.message.trim()].length > 500) return json({ error: "MESSAGE_LENGTH", message: "A mensagem deve ter entre 1 e 500 caracteres." }, 400);
-    const group = await env.DB.prepare(
-      "SELECT id, age_band FROM social_groups WHERE id = ? LIMIT 1",
-    ).bind(groupMessagesMatch[1]).first<{ id: string; age_band: string }>();
-    if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
-    if (group.age_band !== user.declared_age_band) return json({ error: "GROUP_NOT_AVAILABLE" }, 403);
-    const membership = await env.DB.prepare(
-      "SELECT 1 AS found FROM social_group_members WHERE group_id = ? AND uid = ? LIMIT 1",
-    ).bind(group.id, uid).first();
-    if (!membership) return json({ error: "GROUP_MEMBERSHIP_REQUIRED" }, 403);
-    const recent = await env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM social_group_messages WHERE uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')",
-    ).bind(uid).first<{ count: number }>();
-    if (Number(recent?.count ?? 0) >= 30) return json({ error: "GROUP_MESSAGE_RATE_LIMIT" }, 429);
-    const moderation = await moderate(env, message);
-    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
-      return json({ error: "MODERATION_TEMPORARILY_UNAVAILABLE", message: "A verificação de segurança está indisponível. A mensagem não foi enviada." }, 503);
-    }
-    if (moderation.state !== "SAFE") {
-      return json({ error: "MESSAGE_REQUIRES_REVIEW", message: "Revê o texto e tenta novamente." }, 422);
-    }
-    const id = uuid();
-    const createdAt = isoNow();
-    await env.DB.prepare(
-      "INSERT INTO social_group_messages(id, group_id, uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
-    ).bind(id, group.id, uid, message, createdAt).run();
-    return json({ message: { id, group_id: group.id, uid, message_text: message, created_at: createdAt } }, 201);
-  }
-
-  const groupDetailMatch = path.match(/^\/v1\/groups\/([^/]+)$/);
-  if (method === "GET" && groupDetailMatch) {
-    const { user, response } = await ensurePilotReady(uid, env);
-    if (response) return response;
-    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
-    const group = await env.DB.prepare(
-      `SELECT g.id, g.owner_uid, g.name, g.description, g.category, g.age_band, g.created_at,
-              owner.pilot_name AS owner_name,
-              (SELECT COUNT(*) FROM social_group_members m WHERE m.group_id = g.id) AS member_count,
-              CASE WHEN EXISTS (SELECT 1 FROM social_group_members m WHERE m.group_id = g.id AND m.uid = ?) THEN 1 ELSE 0 END AS is_member,
-              CASE WHEN g.owner_uid = ? THEN 1 ELSE 0 END AS is_owner
-       FROM social_groups g JOIN users owner ON owner.uid = g.owner_uid
-       WHERE g.id = ? AND g.age_band = ? LIMIT 1`,
-    ).bind(uid, uid, groupDetailMatch[1], user.declared_age_band).first<Record<string, unknown>>();
-    if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
-    let items: Record<string, unknown>[] = [];
-    if (group.is_member === 1) {
-      const messages = await env.DB.prepare(
-        `SELECT m.id, m.message_text, m.created_at, m.uid,
-                u.pilot_name, u.pilot_handle, u.avatar_url,
-                CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
-                CASE WHEN m.uid = ? THEN 1 ELSE 0 END AS is_own
-         FROM social_group_messages m JOIN users u ON u.uid = m.uid
-         WHERE m.group_id = ?
-           AND NOT EXISTS (
-             SELECT 1 FROM blocks b
-             WHERE (b.blocker_uid = ? AND b.blocked_uid = m.uid)
-                OR (b.blocker_uid = m.uid AND b.blocked_uid = ?)
-           )
-         ORDER BY m.created_at ASC LIMIT 80`,
-      ).bind(uid, groupDetailMatch[1], uid, uid).all<Record<string, unknown>>();
-      items = messages.results ?? [];
-    }
-    return json({ group, items });
-  }
-
   if (method === "GET" && path === "/v1/friends") {
     const [friends, requests] = await Promise.all([
       env.DB.prepare(
@@ -2692,9 +2501,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const countryCode = text(body.countryCode, 2).toUpperCase();
     const preferredLanguage = normalizeLanguage(body.language) ?? "pt";
     const language = preferredLanguage === "en" ? "en" : "pt";
-    const avatarInput = text(body.avatarUrl, 900);
-    const avatarUrl = avatarInput ? safePublicHttpsUrl(avatarInput)?.toString() : null;
-    if (avatarInput && !avatarUrl) return json({ error: "INVALID_AVATAR_URL", message: "Use um link HTTPS público para a tua foto ou perfil." }, 400);
     if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
     if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
     if (!birthDateMatch) return json({ error: "INVALID_BIRTH_DATE" }, 400);
@@ -2721,8 +2527,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
     try {
       await env.DB.prepare(
-        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
-      ).bind(pilotName, handle, avatarUrl, birthYear, declaredAgeBand, isoNow(), countryCode, language, preferredLanguage, isoNow(), uid).run();
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = NULL, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, birthYear, declaredAgeBand, isoNow(), countryCode, language, preferredLanguage, isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
         return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
@@ -2749,14 +2555,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (method === "POST" && path === "/v1/profile/avatar") {
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body) return json({ error: "INVALID_JSON" }, 400);
-    const input = text(body.avatarUrl, 900);
-    const avatarUrl = input ? safePublicHttpsUrl(input)?.toString() : null;
-    if (input && !avatarUrl) return json({ error: "INVALID_AVATAR_URL" }, 400);
-    await env.DB.prepare("UPDATE users SET avatar_url = ?, updated_at = ? WHERE uid = ?")
-      .bind(avatarUrl, isoNow(), uid).run();
-    return json({ ok: true, avatarUrl });
+    return json({
+      error: "PROFILE_PHOTOS_DISABLED",
+      message: "O Paper Plane utiliza avatares gráficos criados automaticamente no aplicativo.",
+    }, 410);
   }
 
   if (method === "GET" && path === "/v1/link-preview") {
@@ -3078,38 +2880,98 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/open-sky") {
     const country = text(url.searchParams.get("country"), 2).toUpperCase() || null;
-    const language = url.searchParams.get("language") === "en" ? "en" : url.searchParams.get("language") === "pt" ? "pt" : null;
+    const requestedLanguage = url.searchParams.get("language");
+    const language = requestedLanguage === "en" || requestedLanguage === "pt" ? requestedLanguage : null;
+    const requestedFeed = text(url.searchParams.get("feed"), 16).toUpperCase();
+    const feed = ["FOR_YOU", "FOLLOWING", "POPULAR"].includes(requestedFeed) ? requestedFeed : "FOR_YOU";
     const rows = await env.DB.prepare(
-      `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at, p.likes_count,
-              u.pilot_name, u.pilot_handle, u.avatar_url,
+      `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at,
+              a.plane_model, p.likes_count,
+              u.pilot_name, u.pilot_handle,
               CASE WHEN a.sender_uid = ? THEN 1 ELSE 0 END AS is_own,
+              CASE WHEN EXISTS (SELECT 1 FROM public_likes l WHERE l.airplane_id = a.id AND l.uid = ?) THEN 1 ELSE 0 END AS liked_by_me,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
        FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
        JOIN users u ON u.uid = a.sender_uid
        WHERE a.audience = 'PUBLIC' AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED'
          AND (? IS NULL OR a.sender_country_code = ?)
          AND (? IS NULL OR a.message_language = ?)
-       ORDER BY a.created_at DESC LIMIT 50`,
-    ).bind(uid, country, country, language, language).all();
-    return json({ items: rows.results ?? [] });
+         AND (? <> 'FOLLOWING' OR EXISTS (
+           SELECT 1 FROM friendships f
+           WHERE f.status = 'ACCEPTED'
+             AND ((f.requester_uid = ? AND f.addressee_uid = a.sender_uid)
+               OR (f.addressee_uid = ? AND f.requester_uid = a.sender_uid))
+         ))
+       ORDER BY CASE WHEN ? = 'POPULAR'
+         THEN p.likes_count * 10 + (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE')
+         ELSE 0 END DESC,
+         a.created_at DESC
+       LIMIT 50`,
+    ).bind(uid, uid, country, country, language, language, feed, uid, uid, feed).all();
+    return json({ items: rows.results ?? [], feed });
   }
 
   const likeMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/like$/);
   if (method === "POST" && likeMatch) {
     const id = likeMatch[1];
-    const inserted = await env.DB.prepare("INSERT OR IGNORE INTO public_likes(airplane_id, uid) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM public_sky WHERE airplane_id = ?)")
-      .bind(id, uid, id).run();
-    if ((inserted.meta?.changes ?? 0) === 0) return json({ error: "NOT_FOUND_OR_ALREADY_LIKED" }, 404);
-    await env.DB.prepare("UPDATE public_sky SET likes_count = likes_count + 1 WHERE airplane_id = ?").bind(id).run();
-    return json({ ok: true });
+    const parent = await env.DB.prepare(
+      `SELECT p.airplane_id FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       WHERE p.airplane_id = ? AND a.audience = 'PUBLIC'
+         AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED' LIMIT 1`,
+    ).bind(id).first();
+    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    const existing = await env.DB.prepare(
+      "SELECT 1 AS found FROM public_likes WHERE airplane_id = ? AND uid = ? LIMIT 1",
+    ).bind(id, uid).first();
+    if (existing) {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM public_likes WHERE airplane_id = ? AND uid = ?").bind(id, uid),
+        env.DB.prepare("UPDATE public_sky SET likes_count = MAX(0, likes_count - 1) WHERE airplane_id = ?").bind(id),
+      ]);
+      return json({ ok: true, liked: false });
+    }
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO public_likes(airplane_id, uid) VALUES (?, ?)").bind(id, uid),
+      env.DB.prepare("UPDATE public_sky SET likes_count = likes_count + 1 WHERE airplane_id = ?").bind(id),
+    ]);
+    return json({ ok: true, liked: true });
   }
 
   const publicRepliesMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/replies$/);
   if (publicRepliesMatch && method === "GET") {
+    const parent = await env.DB.prepare(
+      `SELECT a.id, a.sender_uid
+       FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       WHERE p.airplane_id = ? AND a.audience = 'PUBLIC'
+         AND a.status = 'DELIVERED' AND a.moderation_state = 'SAFE'
+       LIMIT 1`,
+    ).bind(publicRepliesMatch[1]).first<{ id: string; sender_uid: string }>();
+    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, parent.sender_uid, parent.sender_uid, uid).first();
+    if (blocked) return json({ error: "INTERACTION_BLOCKED" }, 403);
+    const requestedPage = Number.parseInt(url.searchParams.get("page") ?? "0", 10);
+    const page = Number.isFinite(requestedPage) ? Math.min(1000, Math.max(0, requestedPage)) : 0;
     const rows = await env.DB.prepare(
-      "SELECT id, message_text, created_at FROM public_replies WHERE airplane_id = ? AND moderation_state = 'SAFE' ORDER BY created_at ASC LIMIT 5",
-    ).bind(publicRepliesMatch[1]).all();
-    return json({ items: rows.results ?? [] });
+      `SELECT r.id, r.message_text, r.created_at, r.sender_uid,
+              u.pilot_name, u.pilot_handle,
+              CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+              CASE WHEN r.sender_uid = ? THEN 1 ELSE 0 END AS is_own
+       FROM public_replies r
+       JOIN users u ON u.uid = r.sender_uid
+       WHERE r.airplane_id = ? AND r.moderation_state = 'SAFE'
+         AND NOT EXISTS (
+           SELECT 1 FROM blocks b
+           WHERE (b.blocker_uid = ? AND b.blocked_uid = r.sender_uid)
+              OR (b.blocker_uid = r.sender_uid AND b.blocked_uid = ?)
+         )
+       ORDER BY r.created_at ASC, r.id ASC
+       LIMIT 51 OFFSET ?`,
+    ).bind(uid, publicRepliesMatch[1], uid, uid, page * 50).all();
+    const results = rows.results ?? [];
+    const hasMore = results.length > 50;
+    return json({ items: results.slice(0, 50), hasMore, page });
   }
   if (publicRepliesMatch && method === "POST") {
     const { user, response } = await ensurePilotReady(uid, env);
@@ -3117,17 +2979,25 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     const message = text(body?.message, 200);
-    if (!message) return json({ error: "MESSAGE_LENGTH" }, 400);
-    const parent = await env.DB.prepare("SELECT id FROM public_sky WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first();
-    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    if (!message || [...message].length > 200) return json({ error: "MESSAGE_LENGTH" }, 400);
+    const parent = await env.DB.prepare(
+      `SELECT a.id, a.sender_uid
+       FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       WHERE p.airplane_id = ? AND a.audience = 'PUBLIC'
+         AND a.status = 'DELIVERED' AND a.moderation_state = 'SAFE'
+       LIMIT 1`,
+    ).bind(publicRepliesMatch[1]).first<{ id: string; sender_uid: string }>();
+    if (!parent) return json({ error: "NOT_FOUND", message: "Esta publicação pública já não está disponível." }, 404);
+    const blocked = await env.DB.prepare(
+      "SELECT 1 AS found FROM blocks WHERE (blocker_uid = ? AND blocked_uid = ?) OR (blocker_uid = ? AND blocked_uid = ?) LIMIT 1",
+    ).bind(uid, parent.sender_uid, parent.sender_uid, uid).first();
+    if (blocked) return json({ error: "INTERACTION_BLOCKED" }, 403);
     const hourlyActivity = await env.DB.prepare(
       `SELECT
          (SELECT COUNT(*) FROM airplanes WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) +
          (SELECT COUNT(*) FROM public_replies WHERE sender_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')) AS count`,
     ).bind(uid, uid).first<{ count: number }>();
     if (Number(hourlyActivity?.count ?? 0) >= 10) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
-    const count = await env.DB.prepare("SELECT COUNT(*) AS count FROM public_replies WHERE airplane_id = ?").bind(publicRepliesMatch[1]).first<{ count: number }>();
-    if (Number(count?.count ?? 0) >= 5) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
     const moderation = await moderate(env, message);
     if (moderation.state === "UNSAFE") return json({ error: "MESSAGE_NOT_ALLOWED" }, 422);
     if (moderation.state === "TEMPORARY_UNAVAILABLE") {
@@ -3144,7 +3014,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     } catch (error) {
       const reason = String(error);
       if (reason.includes("PAPER_PLANE_RATE_LIMIT")) return json({ error: "RATE_LIMIT_EXCEEDED" }, 429);
-      if (reason.includes("PUBLIC_REPLY_LIMIT_REACHED")) return json({ error: "REPLY_LIMIT_REACHED" }, 429);
       throw error;
     }
     return moderationState === "SAFE"

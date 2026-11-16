@@ -11,6 +11,7 @@ const JWKS_URL =
 type TestBindings = {
   DB: D1Database;
   TEST_MIGRATIONS: unknown[];
+  AI?: { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 };
 
 const testEnv = env as unknown as TestBindings;
@@ -79,6 +80,10 @@ async function seedPlane(
 describe("Paper Plane Admin API integration", () => {
   beforeAll(async () => {
     await applyD1Migrations(DB, testEnv.TEST_MIGRATIONS as any);
+    Object.defineProperty(testEnv, "AI", {
+      configurable: true,
+      value: { run: vi.fn().mockResolvedValue({ response: "safe" }) },
+    });
 
     const keyPair = await generateKeyPair("RS256");
     privateKey = keyPair.privateKey;
@@ -168,10 +173,68 @@ describe("Paper Plane Admin API integration", () => {
     await DB.prepare(
       "INSERT INTO admin_notifications(id, actor_uid, target_type, recipient_uid, title, body, device_count, sent_count, failed_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind("notification-history-test", ADMIN_UID, "USER", "target-test", "Teste", "Histórico de teste", 1, 1, 0).run();
+
+    await seedUser("sky-author", "CODE-SKY-AUTHOR", "Sky Author");
+    await seedUser("sky-reader", "CODE-SKY-READER", "Sky Reader");
+    await DB.prepare(
+      "INSERT INTO friendships(id, requester_uid, addressee_uid, status) VALUES (?, ?, ?, 'ACCEPTED')",
+    ).bind("sky-friendship", "sky-reader", "sky-author").run();
+    await seedPlane("open-sky-public", "sky-author", "PUBLIC", "DELIVERED", "SAFE");
+    await DB.prepare("INSERT INTO public_sky(airplane_id) VALUES (?)")
+      .bind("open-sky-public").run();
+
+    // Backdate the test conversation so account-level hourly anti-spam limits
+    // remain independent from the per-publication reply count.
+    for (let index = 0; index < 55; index++) {
+      const replyId = "sky-reply-" + index.toString().padStart(2, "0");
+      await DB.prepare(
+        "INSERT INTO public_replies(id, airplane_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', '2000-01-01T00:00:00.000Z')",
+      ).bind(replyId, "open-sky-public", "sky-reader", "Resposta pública " + index).run();
+    }
   }, 30_000);
 
   afterAll(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("serves long Open Sky conversations, friend feeds and reversible reactions", async () => {
+    const following = await api("sky-reader", "GET", "/v1/open-sky?feed=FOLLOWING");
+    expect(following.status).toBe(200);
+    expect(following.data.items.some((item: any) => item.id === "open-sky-public")).toBe(true);
+
+    const postedReply = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/replies", {
+      message: "A resposta pública está a funcionar.",
+    });
+    expect(postedReply.status).toBe(201);
+    expect(postedReply.data.status).toBe("PUBLISHED");
+    const persistedReply = await DB.prepare(
+      "SELECT message_text, moderation_state FROM public_replies WHERE id = ?",
+    ).bind(postedReply.data.id).first<{ message_text: string; moderation_state: string }>();
+    expect(persistedReply?.message_text).toBe("A resposta pública está a funcionar.");
+    expect(persistedReply?.moderation_state).toBe("SAFE");
+
+    const firstPage = await api("sky-reader", "GET", "/v1/open-sky/open-sky-public/replies?page=0");
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.data.items).toHaveLength(50);
+    expect(firstPage.data.hasMore).toBe(true);
+    expect(firstPage.data.items[0].pilot_name).toBe("Sky Reader");
+    expect(firstPage.data.items[0].pilot_handle).toBeDefined();
+
+    const secondPage = await api("sky-reader", "GET", "/v1/open-sky/open-sky-public/replies?page=1");
+    expect(secondPage.status).toBe(200);
+    expect(secondPage.data.items).toHaveLength(6);
+    expect(secondPage.data.hasMore).toBe(false);
+
+    const liked = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/like");
+    expect(liked.status).toBe(200);
+    expect(liked.data.liked).toBe(true);
+    const unliked = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/like");
+    expect(unliked.status).toBe(200);
+    expect(unliked.data.liked).toBe(false);
+
+    const popular = await api("sky-reader", "GET", "/v1/open-sky?feed=POPULAR");
+    expect(popular.status).toBe(200);
+    expect(popular.data.items.some((item: any) => item.id === "open-sky-public")).toBe(true);
   });
 
   it("validates authentication and executes every Admin operation against local D1", async () => {

@@ -232,6 +232,20 @@ class PaperPlaneLocale {
     'Abrir Chat': ['Open Chat', 'Abrir Chat', 'Ouvrir le Chat', 'Chat öffnen'],
     'Ver voo': ['View flight', 'Ver vuelo', 'Voir le vol', 'Flug ansehen'],
     'Início': ['Home', 'Inicio', 'Accueil', 'Startseite'],
+    'Para ti': ["For you","Para ti","Pour toi","Für dich"],
+    'A seguir': ["Following","Siguiendo","Abonnements","Folge ich"],
+    'Popular': ["Popular","Popular","Populaire","Beliebt"],
+    'Conversas deste avião': ["Conversations on this plane","Conversaciones de este avión","Conversations autour de cet avion","Unterhaltungen zu diesem Papierflieger"],
+    'Sê a primeira pessoa a responder a este avião.': ["Be the first to reply to this plane.","Sé la primera persona en responder a este avión.","Sois la première personne à répondre à cet avion.","Sei die erste Person, die auf diesen Papierflieger antwortet."],
+    'Ainda não há publicações de amigos.': ["No posts from friends yet.","Aún no hay publicaciones de amigos.","Pas encore de publications de tes amis.","Noch keine Beiträge von Freunden."],
+    'Quando aceitares amizades, as publicações dessas pessoas aparecem aqui.': ["When you accept friend requests, their posts will appear here.","Cuando aceptes solicitudes de amistad, sus publicaciones aparecerán aquí.","Lorsque tu acceptes des demandes d’amitié, leurs publications apparaîtront ici.","Wenn du Freundschaftsanfragen annimmst, erscheinen ihre Beiträge hier."],
+    'Carregar mais respostas': ["Load more replies","Cargar más respuestas","Charger plus de réponses","Mehr Antworten laden"],
+    'A carregar…': ["Loading…","Cargando…","Chargement…","Wird geladen…"],
+    'A enviar resposta…': ["Sending reply…","Enviando respuesta…","Envoi de la réponse…","Antwort wird gesendet…"],
+    'A tua resposta já está publicada no Open Sky.': ["Your reply is now published on Open Sky.","Tu respuesta ya está publicada en Open Sky.","Ta réponse est publiée sur Open Sky.","Deine Antwort wurde auf Open Sky veröffentlicht."],
+    'A tua resposta foi recebida e aguarda revisão de segurança.': ["Your reply was received and is awaiting safety review.","Tu respuesta fue recibida y espera una revisión de seguridad.","Ta réponse a été reçue et attend une vérification de sécurité.","Deine Antwort wurde empfangen und wartet auf eine Sicherheitsprüfung."],
+    'Não foi possível carregar mais respostas.': ["Could not load more replies.","No se pudieron cargar más respuestas.","Impossible de charger plus de réponses.","Weitere Antworten konnten nicht geladen werden."],
+    'AVIÃO PÚBLICO': ["PUBLIC PLANE","AVIÓN PÚBLICO","AVION PUBLIC","ÖFFENTLICHER PAPIERFLIEGER"],
     'Comunidades': ['Communities', 'Comunidades', 'Communautés', 'Gemeinschaften'],
     'Membros': ['Members', 'Miembros', 'Membres', 'Mitglieder'],
     'A tua comunidade global do Paper Plane': ['The Paper Plane global community', 'La comunidad global de Paper Plane', 'La communauté mondiale Paper Plane', 'Die globale Paper-Plane-Community'],
@@ -524,7 +538,6 @@ class PaperPlaneLocale {
     'A autenticar a tua conta…': ['Signing in to your account…', 'Iniciando sesión en tu cuenta…', 'Connexion à ton compte…', 'Anmeldung bei deinem Konto…'],
     'Criar perfil de copiloto': ['Create co-pilot profile', 'Crear perfil de copiloto', 'Créer un profil de copilote', 'Co-Pilot-Profil erstellen'],
     'Escolhe a tua identidade': ['Choose your identity', 'Elige tu identidad', 'Choisis ton identité', 'Wähle deine Identität'],
-    'Foto de perfil': ['Profile photo', 'Foto de perfil', 'Photo de profil', 'Profilbild'],
     'Constrói o teu primeiro avião': ['Build your first plane', 'Construye tu primer avión', 'Construis ton premier avion', 'Baue deinen ersten Papierflieger'],
     'Toda a viagem começa com uma dobra.': [
       'Every journey starts with a fold.', 'Cada viaje empieza con un pliegue.',
@@ -731,7 +744,6 @@ class PaperPlaneLocale {
     'Escreve algo gentil...': ['Write something kind...', 'Escribe algo amable...', 'Écris quelque chose de gentil…', 'Schreibe etwas Freundliches…'],
     'Escreve uma resposta gentil…': ['Write a kind reply…', 'Escribe una respuesta amable…', 'Écris une réponse gentille…', 'Schreibe eine freundliche Antwort…'],
     'Escreve uma resposta…': ['Write a reply…', 'Escribe una respuesta…', 'Écris une réponse…', 'Schreibe eine Antwort…'],
-    'Link da foto ou perfil público': ['Photo or public profile link', 'Enlace de foto o perfil público', 'Lien vers une photo ou un profil public', 'Link zum Foto oder öffentlichen Profil'],
     'Enviar mensagem em papel...': ['Send a paper message...', 'Enviar mensaje en papel...', 'Envoyer un message papier…', 'Papiernachricht senden…'],
     'Palavra-passe atual': ['Current password', 'Contraseña actual', 'Mot de passe actuel', 'Aktuelles Passwort'],
     'Pesquisar @nome_de_copiloto': ['Search @co-pilot-name', 'Buscar @nombre-de-copiloto', 'Rechercher @nom-de-copilote', '@Co-Pilot-Name suchen'],
@@ -803,12 +815,7 @@ class PaperPlaneLocale {
       'Crée ton propre @nom. Tu n’as pas besoin d’ajouter des chiffres au hasard.',
       'Erstelle deinen eigenen @Namen. Du brauchst keine zufälligen Zahlen am Ende.',
     ],
-    'Cola um link HTTPS de uma imagem ou de um perfil público. Tentaremos encontrar a foto automaticamente. Não precisas de carregar ficheiros.': [
-      'Paste an HTTPS link to an image or public profile. We will try to find the photo automatically. No file upload is needed.',
-      'Pega un enlace HTTPS a una imagen o perfil público. Intentaremos encontrar la foto automáticamente. No necesitas subir archivos.',
-      'Colle un lien HTTPS vers une image ou un profil public. Nous essaierons de trouver la photo automatiquement. Aucun fichier à téléverser.',
-      'Füge einen HTTPS-Link zu einem Bild oder öffentlichen Profil ein. Wir versuchen, das Foto automatisch zu finden. Du musst keine Dateien hochladen.',
-    ],
+
     'Usamos a data para calcular a faixa etária. O dia e o mês não ficam guardados; o servidor conserva apenas o ano e a faixa declarada.': [
       'We use the date to calculate your age group. The day and month are not stored; the server keeps only the year and declared age group.',
       'Usamos la fecha para calcular el grupo de edad. No guardamos el día ni el mes; el servidor conserva solo el año y el grupo declarado.',
@@ -1121,13 +1128,7 @@ class PaperPlaneLocale {
     'Eliminar da minha Caixa': ['Remove from my inbox', 'Eliminar de mi bandeja', 'Retirer de ma boîte de réception', 'Aus meinem Posteingang entfernen'],
     'Remetente bloqueado.': ['Sender blocked.', 'Remitente bloqueado.', 'Expéditeur bloqué.', 'Absender blockiert.'],
     'Bloquear remetente': ['Block sender', 'Bloquear remitente', 'Bloquer l’expéditeur', 'Absender blockieren'],
-    'A tua foto de perfil': ['Your profile photo', 'Tu foto de perfil', 'Ta photo de profil', 'Dein Profilbild'],
-    'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.': [
-      'You can use an image link or a public page. Paper Plane will try to find the photo automatically.',
-      'Puedes usar un enlace a una imagen o a una página pública. Paper Plane intentará encontrar la foto automáticamente.',
-      'Tu peux utiliser un lien vers une image ou une page publique. Paper Plane essaiera de trouver la photo automatiquement.',
-      'Du kannst einen Bildlink oder eine öffentliche Seite verwenden. Paper Plane versucht, das Foto automatisch zu finden.',
-    ],
+
     'Partilha o teu link para que outros copilotos possam encontrar-te e começar a trocar aviões.': [
       'Share your link so other co-pilots can find you and start exchanging planes.',
       'Comparte tu enlace para que otros copilotos puedan encontrarte y empezar a intercambiar aviones.',
@@ -1309,7 +1310,6 @@ class PaperPlaneLocale {
 
     "Completa a tua data de nascimento no perfil antes de enviar.": ["Complete your date of birth in your profile before sending.","Completa tu fecha de nacimiento en el perfil antes de enviar.","Renseigne ta date de naissance dans ton profil avant d’envoyer.","Ergänze vor dem Senden dein Geburtsdatum in deinem Profil."],
     "Indica uma data de nascimento válida.": ["Enter a valid date of birth.","Introduce una fecha de nacimiento válida.","Saisis une date de naissance valide.","Gib ein gültiges Geburtsdatum ein."],
-    "Usa um link HTTPS público para a tua foto ou perfil.": ["Use a public HTTPS link for your photo or profile.","Usa un enlace HTTPS público para tu foto o perfil.","Utilise un lien HTTPS public pour ta photo ou ton profil.","Verwende einen öffentlichen HTTPS-Link für dein Foto oder Profil."],
     "Não foi possível carregar a pré-visualização deste link.": ["This link preview could not be loaded.","No se pudo cargar la vista previa de este enlace.","Impossible de charger l’aperçu de ce lien.","Die Linkvorschau konnte nicht geladen werden."],
     "A Chama funciona através de aviões de resposta.": ["Chama works through reply planes.","Chama funciona mediante aviones de respuesta.","Chama fonctionne grâce aux avions-réponses.","Chama funktioniert über Antwort-Papierflieger."],
     "Esta Chama foi encerrada.": ["This Chama has ended.","Esta Chama ha terminado.","Cette Chama est terminée.","Diese Chama wurde beendet."],

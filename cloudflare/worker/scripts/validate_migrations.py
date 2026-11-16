@@ -17,6 +17,12 @@ def seed_user(uid: str):
 seed_user("pilot-a")
 seed_user("pilot-b")
 
+# The photo column remains only as a nullable compatibility field; the application clears it.
+DB.execute("UPDATE users SET avatar_url = ? WHERE uid = 'pilot-a'", ("https://example.invalid/old-profile.png",))
+DB.executescript((ROOT / "migrations" / "0015_remove_profile_photos.sql").read_text(encoding="utf-8"))
+assert DB.execute("SELECT avatar_url FROM users WHERE uid = 'pilot-a'").fetchone()[0] is None, "Existing profile photo URLs must be cleared"
+
+
 # Daily sending is unlimited; anti-spam remains a rolling hourly safeguard.
 assert DB.execute(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'daily_limits'"
@@ -54,27 +60,24 @@ try:
 except sqlite3.IntegrityError as error:
     assert "PAPER_PLANE_RATE_LIMIT" in str(error), str(error)
 
-# Five public replies are allowed, while the sixth is rejected atomically.
+assert DB.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_public_replies_max_five'"
+).fetchone() is None, "The five-reply public post limit must be removed"
+
+# Public posts support long conversations; only the rolling hourly account safeguard remains.
 insert_plane("public-parent", "pilot-b", audience="PUBLIC")
 insert_plane("public-parent-2", "pilot-b", audience="PUBLIC")
 insert_plane("public-parent-3", "pilot-b", audience="PUBLIC")
-for index in range(5):
+for index in range(20):
     DB.execute(
         """INSERT INTO public_replies(
-            id, airplane_id, sender_uid, message_text, moderation_state
-        ) VALUES (?, 'public-parent', 'pilot-b', 'Kind words', 'SAFE')""",
+            id, airplane_id, sender_uid, message_text, moderation_state, created_at
+        ) VALUES (?, 'public-parent', 'pilot-b', 'Kind words', 'SAFE', '2000-01-01T00:00:00.000Z')""",
         (f"reply-{index}",),
     )
-
-try:
-    DB.execute(
-        """INSERT INTO public_replies(
-            id, airplane_id, sender_uid, message_text, moderation_state
-        ) VALUES ('reply-over-limit', 'public-parent', 'pilot-b', 'One more', 'SAFE')"""
-    )
-    raise AssertionError("Public reply trigger did not block the sixth reply")
-except sqlite3.IntegrityError as error:
-    assert "PUBLIC_REPLY_LIMIT_REACHED" in str(error), str(error)
+assert DB.execute(
+    "SELECT COUNT(*) FROM public_replies WHERE airplane_id = 'public-parent'"
+).fetchone()[0] == 20, "Public conversations must support more than five replies"
 
 # A pilot's combined hourly plane + reply allowance is shared.
 seed_user("pilot-c")

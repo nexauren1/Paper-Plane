@@ -1,136 +1,100 @@
 import 'package:flutter/material.dart';
 
-import '../services/paper_plane_api.dart';
-
-class PilotAvatar extends StatefulWidget {
+/// Paper Plane identity mark. Avatars are generated locally from the pilot name;
+/// this widget intentionally never downloads or displays profile photographs.
+class PilotAvatar extends StatelessWidget {
   const PilotAvatar({
     super.key,
-    required this.url,
     this.size = 48,
     this.borderColor,
     this.iconSize,
     this.fallbackLabel,
   });
 
-  final String? url;
   final double size;
   final Color? borderColor;
   final double? iconSize;
   final String? fallbackLabel;
 
-  @override
-  State<PilotAvatar> createState() => _PilotAvatarState();
-}
-
-class _PilotAvatarState extends State<PilotAvatar> {
-  static final Map<String, Future<String?>> _imageCache = {};
-  late Future<String?> _image;
-
-  @override
-  void initState() {
-    super.initState();
-    _image = _resolve(widget.url);
-  }
-
-  @override
-  void didUpdateWidget(covariant PilotAvatar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) _image = _resolve(widget.url);
-  }
-
-  Future<String?> _resolve(String? value) {
-    final url = value?.trim() ?? '';
-    if (url.isEmpty) return Future.value(null);
-    return _imageCache.putIfAbsent(url, () async {
-      try {
-        final result = await PaperPlaneApi.instance.getLinkPreview(url);
-        final preview = result['preview'] as Map<String, dynamic>? ?? const {};
-        final image = preview['imageUrl']?.toString() ?? '';
-        return image.startsWith('https://') ? image : null;
-      } catch (_) {
-        return null;
-      }
-    });
-  }
-
   String _initials() {
-    final label = (widget.fallbackLabel ?? '').trim();
-    if (label.isEmpty) return 'PP';
+    final label = (fallbackLabel ?? '').trim();
+    if (label.isEmpty) return '';
     final parts = label.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
     if (parts.length >= 2) {
-      return String.fromCharCode(parts.first.runes.first) +
-          String.fromCharCode(parts[1].runes.first);
+      return (String.fromCharCode(parts.first.runes.first) +
+              String.fromCharCode(parts[1].runes.first))
+          .toUpperCase();
     }
-    final runes = label.runes.take(2).toList();
-    return String.fromCharCodes(runes).toUpperCase();
-  }
-
-  Widget _fallback() {
-    final hasName = (widget.fallbackLabel ?? '').trim().isNotEmpty;
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF168BFF), Color(0xFF493FCA), Color(0xFF111F4A)],
-        ),
-      ),
-      child: Center(
-        child: hasName
-            ? Text(
-                _initials(),
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: widget.size * 0.30,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                ),
-              )
-            : Icon(
-                Icons.flight_takeoff_rounded,
-                color: const Color(0xFFB8F1FF),
-                size: widget.iconSize ?? widget.size * 0.54,
-              ),
-      ),
-    );
+    return String.fromCharCodes(label.runes.take(2)).toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
-    final border = widget.borderColor ?? const Color(0x9957D6FF);
-    return FutureBuilder<String?>(
-      future: _image,
-      builder: (context, snapshot) {
-        final imageUrl = snapshot.data;
-        return Container(
-          width: widget.size,
-          height: widget.size,
-          padding: const EdgeInsets.all(2),
+    const palettes = <List<Color>>[
+      [Color(0xFF168BFF), Color(0xFF493FCA), Color(0xFF111F4A)],
+      [Color(0xFF08A6C8), Color(0xFF1553A6), Color(0xFF10234A)],
+      [Color(0xFF6554E8), Color(0xFF294EAE), Color(0xFF111C45)],
+      [Color(0xFF087E8B), Color(0xFF2256B5), Color(0xFF101B3D)],
+      [Color(0xFF2865D5), Color(0xFF6A3BC4), Color(0xFF171B48)],
+    ];
+    final label = (fallbackLabel ?? '').trim();
+    var stableHash = 0;
+    for (final rune in label.toLowerCase().runes) {
+      stableHash = (stableHash * 31 + rune) & 0x7fffffff;
+    }
+    final paletteIndex = label.isEmpty ? 0 : stableHash % palettes.length;
+    final palette = palettes[paletteIndex];
+    final initials = _initials();
+
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [
+            borderColor ?? const Color(0xFF57D6FF),
+            const Color(0xFF377CEB),
+            const Color(0xFF7652D7),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: (borderColor ?? const Color(0xFF57D6FF)).withOpacity(0.22),
+            blurRadius: 14,
+            spreadRadius: 0.5,
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: DecoratedBox(
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
             gradient: LinearGradient(
-              colors: [border, const Color(0x664D90FF), const Color(0x22F0CE7C)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: palette,
             ),
-            boxShadow: [
-              BoxShadow(color: border.withOpacity(0.16), blurRadius: 13),
-            ],
           ),
-          child: ClipOval(
-            child: ColoredBox(
-              color: const Color(0xFF142541),
-              child: imageUrl == null
-                  ? Center(child: _fallback())
-                  : Image.network(
-                      imageUrl,
-                      width: widget.size,
-                      height: widget.size,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Center(child: _fallback()),
+          child: Center(
+            child: initials.isEmpty
+                ? Icon(
+                    Icons.flight_takeoff_rounded,
+                    color: const Color(0xFFB8F1FF),
+                    size: iconSize ?? size * 0.52,
+                  )
+                : Text(
+                    initials,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: size * 0.30,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.6,
                     ),
-            ),
+                  ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

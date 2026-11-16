@@ -21,7 +21,6 @@ import 'screens/chat_hub_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'widgets/report_dialog.dart';
 import 'widgets/pilot_avatar.dart';
-import 'widgets/chat_link_preview.dart';
 
 const Color ppNavy = Color(0xFF040A18);
 const Color ppNavyDeep = Color(0xFF020611);
@@ -4133,6 +4132,8 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   bool _loading = true;
   String? _error;
   String? _selectedCountry;
+  String _feedMode = 'FOR_YOU';
+  final Set<String> _likingIds = <String>{};
 
   @override
   void initState() {
@@ -4145,7 +4146,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
     try {
       await PaperPlaneAuth.requireSignedInPilot();
       final results = await Future.wait([
-        PaperPlaneApi.instance.getOpenSky(country: _selectedCountry),
+        PaperPlaneApi.instance.getOpenSky(country: _selectedCountry, feed: _feedMode),
         PaperPlaneApi.instance.getSkyAtlas(),
       ]);
       final result = results[0];
@@ -4166,13 +4167,18 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   }
 
   Future<void> _like(String id) async {
+    if (!_likingIds.add(id)) return;
+    setState(() {});
     try {
       await PaperPlaneApi.instance.likeOpenSkyMessage(id);
       await _refresh();
     } catch (error) {
       if (!mounted) return;
-      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o coração.';
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível actualizar a reação.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
+    } finally {
+      _likingIds.remove(id);
+      if (mounted) setState(() {});
     }
   }
 
@@ -4183,59 +4189,202 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       if (!mounted) return;
       final controller = TextEditingController();
+      var page = 0;
+      var hasMore = result['hasMore'] == true;
+      var loadingMore = false;
+      String? loadError;
+      var sending = false;
+      String? submitError;
       await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        backgroundColor: const Color(0xFF142541),
+        backgroundColor: const Color(0xFF071326),
         showDragHandle: true,
-        builder: (sheetContext) => Padding(
-          padding: EdgeInsets.fromLTRB(18, 8, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 18),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const PlaneText('Respostas públicas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 12),
-            if (items.isEmpty)
-              const PlaneText('Ainda não há respostas.', style: TextStyle(color: Colors.white70))
-            else
-              for (final item in items)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: PlaneText(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white70)),
-                ),
-            const Divider(color: Colors.white24),
-            TextField(
-              controller: controller,
-              maxLength: 200,
-              maxLines: 3,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(hintText: PaperPlaneLocale.translate('Escreve uma resposta…')),
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (sheetContext, setSheetState) => SizedBox(
+            height: MediaQuery.of(sheetContext).size.height * 0.82,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                17, 7, 17, MediaQuery.of(sheetContext).viewInsets.bottom + 15,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    const Icon(Icons.forum_rounded, color: ppBlueLight, size: 21),
+                    const SizedBox(width: 9),
+                    const Expanded(
+                      child: PlaneText('Conversas deste avião', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: ppBlue.withOpacity(0.20),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: ppBlueLight.withOpacity(0.2)),
+                      ),
+                      child: PlaneText('${items.length}', style: const TextStyle(color: ppBlueLight, fontSize: 11, fontWeight: FontWeight.w900)),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: items.isEmpty
+                        ? const Center(
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.flight_rounded, color: ppBlueLight, size: 36),
+                              SizedBox(height: 9),
+                              PlaneText('Ainda não há respostas.', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+                              SizedBox(height: 4),
+                              PlaneText('Sê a primeira pessoa a responder a este avião.', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                            ]),
+                          )
+                        : ListView.builder(
+                            itemCount: items.length + (hasMore ? 1 : 0),
+                            padding: const EdgeInsets.only(bottom: 12),
+                            itemBuilder: (context, index) {
+                              if (index == items.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  child: Column(children: [
+                                    if (loadError != null)
+                                      PlaneText(loadError!, style: const TextStyle(color: Color(0xFFFFA7A7), fontSize: 10)),
+                                    TextButton.icon(
+                                      onPressed: loadingMore ? null : () async {
+                                        setSheetState(() { loadingMore = true; loadError = null; });
+                                        try {
+                                          final nextPage = await PaperPlaneApi.instance.getPublicReplies(id, page: page + 1);
+                                          final older = (nextPage['items'] as List<dynamic>? ?? const [])
+                                              .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+                                          if (!sheetContext.mounted) return;
+                                          setSheetState(() {
+                                            items.addAll(older);
+                                            page += 1;
+                                            hasMore = nextPage['hasMore'] == true;
+                                            loadingMore = false;
+                                          });
+                                        } catch (error) {
+                                          if (!sheetContext.mounted) return;
+                                          setSheetState(() {
+                                            loadingMore = false;
+                                            loadError = error is PaperPlaneApiException
+                                                ? error.message
+                                                : 'Não foi possível carregar mais respostas.';
+                                          });
+                                        }
+                                      },
+                                      icon: loadingMore
+                                          ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: ppBlueLight))
+                                          : const Icon(Icons.expand_more_rounded, size: 17),
+                                      label: PlaneText(loadingMore ? 'A carregar…' : 'Carregar mais respostas'),
+                                    ),
+                                  ]),
+                                );
+                              }
+                              final item = items[index];
+                              final name = item['pilot_name']?.toString() ?? 'Copiloto';
+                              final handle = item['pilot_handle']?.toString();
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 9),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    PilotAvatar(fallbackLabel: name, size: 36),
+                                    const SizedBox(width: 9),
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(11),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10213A),
+                                          borderRadius: BorderRadius.circular(15),
+                                          border: Border.all(color: const Color(0x3348BDF5)),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(children: [
+                                              Expanded(
+                                                child: PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                                              ),
+                                              if (handle != null && handle.isNotEmpty)
+                                                PlaneText('@$handle', style: const TextStyle(color: ppBlueLight, fontSize: 9)),
+                                            ]),
+                                            const SizedBox(height: 5),
+                                            PlaneText(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                                            const SizedBox(height: 5),
+                                            PlaneText(_timeAgo(item['created_at']?.toString()), style: const TextStyle(color: Colors.white38, fontSize: 9)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                  if (submitError != null) ...[
+                    const SizedBox(height: 5),
+                    PlaneText(submitError!, style: const TextStyle(color: Color(0xFFFFA7A7), fontSize: 11)),
+                  ],
+                  TextField(
+                    controller: controller,
+                    maxLength: 200,
+                    maxLines: 2,
+                    minLines: 1,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: PaperPlaneLocale.translate('Escreve uma resposta…'),
+                      hintStyle: const TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: const Color(0xFF0B1A30),
+                      counterStyle: const TextStyle(color: Colors.white38, fontSize: 9),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: ppBlueLight.withOpacity(0.22))),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: ppBlueLight.withOpacity(0.22))),
+                    ),
+                  ),
+                  const SizedBox(height: 7),
+                  SizedBox(
+                    height: 48,
+                    child: FilledButton.icon(
+                      onPressed: sending ? null : () async {
+                        final text = controller.text.trim();
+                        if (text.isEmpty) return;
+                        setSheetState(() { sending = true; submitError = null; });
+                        try {
+                          final response = await PaperPlaneApi.instance.addPublicReply(id, text);
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                          if (mounted) {
+                            final status = response['status']?.toString();
+                            final notice = status == 'PUBLISHED'
+                                ? 'A tua resposta já está publicada no Open Sky.'
+                                : 'A tua resposta foi recebida e aguarda revisão de segurança.';
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(notice)));
+                            _refresh();
+                          }
+                        } catch (error) {
+                          setSheetState(() {
+                            sending = false;
+                            submitError = error is PaperPlaneApiException
+                                ? error.message
+                                : 'Não foi possível enviar a resposta. Tenta novamente.';
+                          });
+                        }
+                      },
+                      icon: sending
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.send_rounded, size: 17),
+                      label: PlaneText(sending ? 'A enviar resposta…' : 'Enviar resposta'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF1677F8),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-            FilledButton.icon(
-              onPressed: () async {
-                final text = controller.text.trim();
-                if (text.isEmpty) return;
-                try {
-                  final response = await PaperPlaneApi.instance.addPublicReply(id, text);
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                  if (mounted) {
-                    final status = response['status']?.toString();
-                    final notice = status == 'PUBLISHED'
-                        ? 'A tua resposta já está publicada no Open Sky.'
-                        : 'A tua resposta foi recebida e aguarda revisão de segurança.';
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(notice)));
-                    _refresh();
-                  }
-                } catch (error) {
-                  if (sheetContext.mounted) {
-                    final message = error is PaperPlaneApiException ? error.message : 'Não foi possível responder.';
-                    ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: PlaneText(message)));
-                  }
-                }
-              },
-              icon: const Icon(Icons.send_rounded),
-              label: const PlaneText('Enviar resposta'),
-            ),
-          ]),
+          ),
         ),
       );
       controller.dispose();
@@ -4359,7 +4508,16 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               ),
             ]),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 15),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              _feedChip('FOR_YOU', 'Para ti', Icons.auto_awesome_rounded),
+              _feedChip('FOLLOWING', 'A seguir', Icons.people_alt_rounded),
+              _feedChip('POPULAR', 'Popular', Icons.trending_up_rounded),
+            ]),
+          ),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -4402,12 +4560,12 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
             )
           else if (_messages.isEmpty)
             GlassPanel(
-              child: Column(children: const [
+              child: Column(children: [
                 Icon(Icons.mark_email_unread_outlined, color: ppGoldBright, size: 34),
                 SizedBox(height: 9),
-                PlaneText('Ainda não há aviões neste céu.', style: TextStyle(fontWeight: FontWeight.w900)),
+                PlaneText(_feedMode == 'FOLLOWING' ? 'Ainda não há publicações de amigos.' : 'Ainda não há aviões neste céu.', style: const TextStyle(fontWeight: FontWeight.w900)),
                 SizedBox(height: 5),
-                PlaneText('Sê o primeiro a lançar uma mensagem pública para o mundo.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.4)),
+                PlaneText(_feedMode == 'FOLLOWING' ? 'Quando aceitares amizades, as publicações dessas pessoas aparecem aqui.' : 'Sê o primeiro a lançar uma mensagem pública para o mundo.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4)),
               ]),
             )
           else
@@ -4424,7 +4582,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(13, 13, 10, 10),
                     child: Row(children: [
-                      PilotAvatar(url: message['avatar_url']?.toString(), fallbackLabel: message['pilot_name']?.toString(), size: 42),
+                      PilotAvatar(fallbackLabel: message['pilot_name']?.toString(), size: 42),
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         PlaneText(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
@@ -4460,14 +4618,53 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                     ]),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(15, 1, 15, 5),
-                    child: PlaneText(message['message_text']?.toString() ?? '', style: const TextStyle(fontSize: 14, height: 1.48, fontWeight: FontWeight.w500)),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 13),
-                    child: ChatLinkPreview(
-                      key: ValueKey('sky-${message['id']}'),
-                      message: message['message_text']?.toString() ?? '',
+                    padding: const EdgeInsets.fromLTRB(12, 1, 12, 5),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(14, 13, 14, 15),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(17),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF102D55), Color(0xFF0C1C38), Color(0xFF181640)],
+                        ),
+                        border: Border.all(color: ppBlueLight.withOpacity(0.22)),
+                      ),
+                      child: Stack(children: [
+                        const Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Icon(Icons.send_rounded, size: 42, color: Color(0x2257D6FF)),
+                        ),
+                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Row(children: [
+                            const Icon(Icons.flight_takeoff_rounded, color: ppBlueLight, size: 13),
+                            const SizedBox(width: 6),
+                            PlaneText(
+                              '${PaperPlaneLocale.translate('AVIÃO PÚBLICO')} · ${(message['plane_model'] ?? 'DART').toString()}',
+                              style: const TextStyle(color: ppBlueLight, fontSize: 8, letterSpacing: 0.9, fontWeight: FontWeight.w900),
+                            ),
+                          ]),
+                          const SizedBox(height: 11),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 34),
+                            child: PlaneText(
+                              message['message_text']?.toString() ?? '',
+                              style: const TextStyle(fontSize: 14, height: 1.5, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            width: 54,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              gradient: const LinearGradient(colors: [ppBlueLight, Colors.transparent]),
+                            ),
+                          ),
+                        ]),
+                      ]),
                     ),
                   ),
                   const Divider(color: Color(0x223F74B6), height: 18),
@@ -4475,8 +4672,10 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                     padding: const EdgeInsets.fromLTRB(7, 0, 9, 7),
                     child: Row(children: [
                       TextButton.icon(
-                        onPressed: () => _like(message['id'].toString()),
-                        icon: const Icon(Icons.favorite_border_rounded, color: ppGold, size: 18),
+                        onPressed: _likingIds.contains(message['id'].toString()) ? null : () => _like(message['id'].toString()),
+                        icon: _likingIds.contains(message['id'].toString())
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: ppBlueLight))
+                            : Icon(message['liked_by_me'] == 1 || message['liked_by_me'] == true ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: message['liked_by_me'] == 1 || message['liked_by_me'] == true ? const Color(0xFFFF5D91) : ppBlueLight, size: 18),
                         label: PlaneText((message['likes_count'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
                       ),
                       const Spacer(),
@@ -4491,6 +4690,28 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               ),
             ],
         ],
+      ),
+    );
+  }
+
+  Widget _feedChip(String value, String label, IconData icon) {
+    final selected = _feedMode == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        selected: selected,
+        onSelected: (_) {
+          if (_feedMode == value) return;
+          setState(() => _feedMode = value);
+          _refresh();
+        },
+        avatar: Icon(icon, size: 14, color: selected ? Colors.white : ppBlueLight),
+        label: PlaneText(label),
+        selectedColor: const Color(0xFF176BD5),
+        backgroundColor: const Color(0xFF10213A),
+        side: BorderSide(color: selected ? ppBlueLight.withOpacity(0.65) : Colors.white.withOpacity(0.12)),
+        labelStyle: TextStyle(color: selected ? Colors.white : Colors.white70, fontSize: 11, fontWeight: FontWeight.w800),
+        showCheckmark: false,
       ),
     );
   }
@@ -4552,68 +4773,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _editAvatar(String? currentUrl) async {
-    final controller = TextEditingController(text: currentUrl ?? '');
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, updateDialog) => AlertDialog(
-          backgroundColor: const Color(0xFF142541),
-          title: const PlaneText('A tua foto de perfil'),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                PilotAvatar(url: controller.text.trim(), fallbackLabel: _profile['pilot_name']?.toString(), size: 88),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  onChanged: (_) => updateDialog(() {}),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    prefixIcon: Icon(Icons.link_rounded, color: ppGoldBright),
-                    labelText: PaperPlaneLocale.translate('Link da foto ou perfil público'),
-                    hintText: PaperPlaneLocale.translate('https://…'),
-                    labelStyle: TextStyle(color: Colors.white70),
-                    hintStyle: TextStyle(color: Colors.white38),
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: ppGold)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const PlaneText(
-                  'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.',
-                  style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const PlaneText('Cancelar')),
-            TextButton(onPressed: () { controller.clear(); updateDialog(() {}); }, child: const PlaneText('Remover')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const PlaneText('Guardar')),
-          ],
-        ),
-      ),
-    );
-    if (saved == true) {
-      try {
-        await PaperPlaneApi.instance.updateAvatarUrl(
-          controller.text.trim().isEmpty ? null : controller.text.trim(),
-        );
-        await _refresh();
-      } catch (error) {
-        if (!mounted) return;
-        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível actualizar a foto.';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
-      }
-    }
-    controller.dispose();
-  }
-
   Future<void> _copyInvite(String handle) async {
     final link = PaperPlaneApi.instance.buildFriendInviteLink(handle);
     await Clipboard.setData(ClipboardData(text: link));
@@ -4631,7 +4790,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final name = pilot['pilot_name']?.toString() ?? 'Piloto';
     final handle = pilot['pilot_handle']?.toString();
     final country = pilot['country_code']?.toString();
-    final avatarUrl = pilot['avatar_url']?.toString();
     final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
     final received = int.tryParse(stats['received']?.toString() ?? '') ?? 0;
 
@@ -4662,25 +4820,7 @@ class _ProfilePageState extends State<ProfilePage> {
             GlassPanel(
               highlight: true,
               child: Row(children: [
-                InkWell(
-                  onTap: () => _editAvatar(avatarUrl),
-                  borderRadius: BorderRadius.circular(42),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      PilotAvatar(url: avatarUrl, fallbackLabel: name, size: 76),
-                      Positioned(
-                        right: -1,
-                        bottom: -1,
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(color: ppGold, shape: BoxShape.circle, border: Border.all(color: ppNavy, width: 2)),
-                          child: const Icon(Icons.edit_rounded, color: ppInk, size: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                PilotAvatar(fallbackLabel: name, size: 76),
                 const SizedBox(width: 15),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   PlaneText(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
