@@ -4134,6 +4134,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   String? _error;
   String? _selectedCountry;
   String _feedMode = 'FOR_YOU';
+  final Set<String> _likingIds = <String>{};
 
   @override
   void initState() {
@@ -4167,13 +4168,18 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
   }
 
   Future<void> _like(String id) async {
+    if (!_likingIds.add(id)) return;
+    setState(() {});
     try {
       await PaperPlaneApi.instance.likeOpenSkyMessage(id);
       await _refresh();
     } catch (error) {
       if (!mounted) return;
-      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o coração.';
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível actualizar a reação.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
+    } finally {
+      _likingIds.remove(id);
+      if (mounted) setState(() {});
     }
   }
 
@@ -4214,7 +4220,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: ppBlueLight.withOpacity(0.2)),
                       ),
-                      child: PlaneText('\${items.length}', style: const TextStyle(color: ppBlueLight, fontSize: 11, fontWeight: FontWeight.w900)),
+                      child: PlaneText('${items.length}', style: const TextStyle(color: ppBlueLight, fontSize: 11, fontWeight: FontWeight.w900)),
                     ),
                   ]),
                   const SizedBox(height: 12),
@@ -4623,8 +4629,10 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                     padding: const EdgeInsets.fromLTRB(7, 0, 9, 7),
                     child: Row(children: [
                       TextButton.icon(
-                        onPressed: () => _like(message['id'].toString()),
-                        icon: Icon(message['liked_by_me'] == 1 || message['liked_by_me'] == true ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: message['liked_by_me'] == 1 || message['liked_by_me'] == true ? const Color(0xFFFF5D91) : ppBlueLight, size: 18),
+                        onPressed: _likingIds.contains(message['id'].toString()) ? null : () => _like(message['id'].toString()),
+                        icon: _likingIds.contains(message['id'].toString())
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: ppBlueLight))
+                            : Icon(message['liked_by_me'] == 1 || message['liked_by_me'] == true ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: message['liked_by_me'] == 1 || message['liked_by_me'] == true ? const Color(0xFFFF5D91) : ppBlueLight, size: 18),
                         label: PlaneText((message['likes_count'] ?? 0).toString(), style: const TextStyle(color: Colors.white70)),
                       ),
                       const Spacer(),
