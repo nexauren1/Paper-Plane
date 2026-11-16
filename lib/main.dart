@@ -4583,7 +4583,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(13, 13, 10, 10),
                     child: Row(children: [
-                      PilotAvatar(url: message['avatar_url']?.toString(), fallbackLabel: message['pilot_name']?.toString(), size: 42),
+                      PilotAvatar(fallbackLabel: message['pilot_name']?.toString(), size: 42),
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         PlaneText(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
