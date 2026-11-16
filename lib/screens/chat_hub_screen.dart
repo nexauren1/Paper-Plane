@@ -10,10 +10,10 @@ import '../widgets/chat_link_preview.dart';
 import '../widgets/pilot_avatar.dart';
 import '../widgets/report_dialog.dart';
 
-const Color _chatNavy = Color(0xFF071225);
-const Color _chatGold = Color(0xFFF0CE7C);
-const Color _chatGoldBright = Color(0xFFFFE7A8);
-const Color _chatPanel = Color(0xCC172844);
+const Color _chatNavy = Color(0xFF050B19);
+const Color _chatGold = Color(0xFF258BFF);
+const Color _chatGoldBright = Color(0xFFB8F1FF);
+const Color _chatPanel = Color(0xDD0E203B);
 
 class ChatHubScreen extends StatefulWidget {
   const ChatHubScreen({super.key});
