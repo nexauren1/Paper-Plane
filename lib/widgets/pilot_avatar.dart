@@ -9,12 +9,14 @@ class PilotAvatar extends StatefulWidget {
     this.size = 48,
     this.borderColor,
     this.iconSize,
+    this.fallbackLabel,
   });
 
   final String? url;
   final double size;
   final Color? borderColor;
   final double? iconSize;
+  final String? fallbackLabel;
 
   @override
   State<PilotAvatar> createState() => _PilotAvatarState();
@@ -51,11 +53,47 @@ class _PilotAvatarState extends State<PilotAvatar> {
     });
   }
 
-  Widget _fallback() => Icon(
-        Icons.person_rounded,
-        color: const Color(0xFFFFE7A8),
-        size: widget.iconSize ?? widget.size * 0.54,
-      );
+  String _initials() {
+    final label = (widget.fallbackLabel ?? '').trim();
+    if (label.isEmpty) return 'PP';
+    final parts = label.split(RegExp(r'\\s+')).where((part) => part.isNotEmpty).toList();
+    if (parts.length >= 2) {
+      return String.fromCharCode(parts.first.runes.first) +
+          String.fromCharCode(parts[1].runes.first);
+    }
+    final runes = label.runes.take(2).toList();
+    return String.fromCharCodes(runes).toUpperCase();
+  }
+
+  Widget _fallback() {
+    final hasName = (widget.fallbackLabel ?? '').trim().isNotEmpty;
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF168BFF), Color(0xFF493FCA), Color(0xFF111F4A)],
+        ),
+      ),
+      child: Center(
+        child: hasName
+            ? Text(
+                _initials(),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: widget.size * 0.30,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.5,
+                ),
+              )
+            : Icon(
+                Icons.flight_takeoff_rounded,
+                color: const Color(0xFFB8F1FF),
+                size: widget.iconSize ?? widget.size * 0.54,
+              ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
