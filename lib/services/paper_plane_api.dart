@@ -152,6 +152,67 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> getProfile() => _request('/v1/profile');
 
+
+  Future<Map<String, dynamic>> uploadProfileAvatar(String filePath) async {
+    if (!FirebaseRuntime.isInitialized) {
+      throw const PaperPlaneApiException('FIREBASE_NOT_CONFIGURED', 'Firebase ainda não está configurado.');
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw const PaperPlaneApiException('AUTH_REQUIRED', 'É necessário entrar na tua conta.');
+    }
+
+    Future<http.Response> send(String token) async {
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/v1/profile/avatar'));
+      request.headers.addAll({'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      final streamed = await _client.send(request).timeout(const Duration(seconds: 35));
+      return http.Response.fromStream(streamed);
+    }
+
+    var token = await user.getIdToken();
+    if (token == null || token.isEmpty) {
+      throw const PaperPlaneApiException('AUTH_TOKEN_UNAVAILABLE', 'Não foi possível confirmar a tua sessão Firebase. Entra novamente na conta.');
+    }
+    late http.Response response;
+    try {
+      response = await send(token);
+      if (response.statusCode == 401) {
+        final refreshed = await user.getIdToken(true);
+        if (refreshed != null && refreshed.isNotEmpty && refreshed != token) {
+          token = refreshed;
+          response = await send(token);
+        }
+      }
+    } catch (_) {
+      throw const PaperPlaneApiException('NETWORK_ERROR', 'Não foi possível enviar a fotografia. Verifica a ligação à internet.');
+    }
+
+    Map<String, dynamic> payload;
+    try {
+      final decoded = jsonDecode(response.body);
+      payload = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    } catch (_) {
+      payload = <String, dynamic>{};
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final code = payload['error']?.toString() ?? 'IMAGE_UPLOAD_FAILED';
+      final message = payload['message']?.toString() ?? switch (code) {
+        'IMAGEKIT_NOT_CONFIGURED' => 'O armazenamento de fotografias ainda não está configurado no servidor.',
+        'AVATAR_TOO_LARGE' => 'A fotografia deve ter no máximo 5 MB.',
+        'AVATAR_RATE_LIMIT' => 'Atingiste o limite de alterações de fotografia por dia.',
+        'INVALID_AVATAR_FILE' => 'Escolhe uma imagem JPG, PNG ou WebP.',
+        'PROFILE_SETUP_REQUIRED' => 'Completa primeiro o teu perfil de copiloto.',
+        _ => 'Não foi possível guardar a fotografia. Tenta novamente.',
+      };
+      throw PaperPlaneApiException(code, message, statusCode: response.statusCode);
+    }
+    return payload;
+  }
+
+  Future<Map<String, dynamic>> deleteProfileAvatar() =>
+      _request('/v1/profile/avatar', method: 'DELETE');
+
   Future<Map<String, dynamic>> saveFirstFlight({
     required String message,
     required String planeModel,
