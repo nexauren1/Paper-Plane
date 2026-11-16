@@ -10,6 +10,7 @@ The first release concentrates on the full message journey instead of optional e
 
 - Firebase account creation and sign-in with email/password or Google.
 - Server-backed pilot profile with unique handle, country and self-declared date of birth (only birth year and derived age group are retained).
+- No profile photographs: pilot avatars are generated locally from the pilot name, and profile creation stays entirely inside the app.
 - First-flight workshop with a saved server-side draft and three paper-plane designs.
 - Short paper messages (up to 200 characters), random matching and public Open Sky posts.
 - Server-side matching, delivery status, flight route and progress.
