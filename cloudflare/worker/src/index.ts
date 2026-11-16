@@ -1442,7 +1442,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const pilotOnRoute = await requireUser(uid, env);
   if (method === "GET" && path === "/v1/account/export") {
     if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
-    const [profile, sent, received, replies, likes, blocks, friendships, chats, chatMessages, reports, tickets] = await Promise.all([
+    const [profile, sent, received, replies, likes, blocks, friendships, chats, chatMessages, groupsCreated, groupMemberships, groupMessages, reports, tickets] = await Promise.all([
       env.DB.prepare(
         "SELECT pilot_code, pilot_name, pilot_handle, avatar_url, birth_year, declared_age_band, age_declaration_at, country_code, country_visible, language, preferred_language, profile_completed, created_at, updated_at FROM users WHERE uid = ?",
       ).bind(uid).first(),
@@ -1454,6 +1454,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       env.DB.prepare("SELECT * FROM friendships WHERE requester_uid = ? OR addressee_uid = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT * FROM conversations WHERE user_a = ? OR user_b = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT m.* FROM chat_messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.user_a = ? OR c.user_b = ? ORDER BY m.created_at DESC LIMIT 2000").bind(uid, uid).all(),
+      env.DB.prepare("SELECT * FROM social_groups WHERE owner_uid = ? ORDER BY created_at DESC LIMIT 250").bind(uid).all(),
+      env.DB.prepare("SELECT * FROM social_group_members WHERE uid = ? ORDER BY joined_at DESC LIMIT 500").bind(uid).all(),
+      env.DB.prepare("SELECT * FROM social_group_messages WHERE uid = ? ORDER BY created_at DESC LIMIT 2000").bind(uid).all(),
       env.DB.prepare("SELECT id, airplane_id, reported_uid, reason, details, status, created_at FROM reports WHERE reporter_uid = ? ORDER BY created_at DESC LIMIT 500").bind(uid).all(),
       env.DB.prepare("SELECT id, category, subject, details, status, created_at, updated_at FROM support_tickets WHERE uid = ? ORDER BY created_at DESC LIMIT 200").bind(uid).all(),
     ]);
@@ -1467,6 +1470,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       friendships: friendships.results ?? [],
       conversations: chats.results ?? [],
       chatMessages: chatMessages.results ?? [],
+      groupsCreated: groupsCreated.results ?? [],
+      groupMemberships: groupMemberships.results ?? [],
+      groupMessages: groupMessages.results ?? [],
       reportsFiled: reports.results ?? [],
       supportTickets: tickets.results ?? [],
     });
@@ -1689,6 +1695,198 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
     if (!body) return json({ error: "INVALID_JSON" }, 400);
     return awardQuizAttempt(uid, body, env);
+  }
+
+
+  if (method === "GET" && path === "/v1/groups") {
+    const { user, response } = await ensurePilotReady(uid, env);
+    if (response) return response;
+    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
+    const query = text(url.searchParams.get("q"), 50);
+    const category = text(url.searchParams.get("category"), 16).toUpperCase() || "ALL";
+    const categories = ["ALL", "TECH", "TRAVEL", "LANGUAGE", "CULTURE", "GAMING", "GENERAL"];
+    if (!categories.includes(category)) return json({ error: "INVALID_GROUP_CATEGORY" }, 400);
+    const rows = await env.DB.prepare(
+      `SELECT g.id, g.name, g.description, g.category, g.created_at, g.updated_at,
+              owner.pilot_name AS owner_name,
+              (SELECT COUNT(*) FROM social_group_members m WHERE m.group_id = g.id) AS member_count,
+              CASE WHEN EXISTS (
+                SELECT 1 FROM social_group_members mine WHERE mine.group_id = g.id AND mine.uid = ?
+              ) THEN 1 ELSE 0 END AS is_member,
+              CASE WHEN g.owner_uid = ? THEN 1 ELSE 0 END AS is_owner
+       FROM social_groups g
+       JOIN users owner ON owner.uid = g.owner_uid
+       WHERE g.age_band = ?
+         AND (? = '' OR lower(g.name) LIKE lower(?) OR lower(g.description) LIKE lower(?))
+         AND (? = 'ALL' OR g.category = ?)
+       ORDER BY is_member DESC, member_count DESC, g.created_at DESC
+       LIMIT 60`,
+    ).bind(uid, uid, user.declared_age_band, query, "%" + query + "%", "%" + query + "%", category, category).all();
+    return json({ items: rows.results ?? [] });
+  }
+
+  if (method === "POST" && path === "/v1/groups") {
+    const { user, response } = await ensurePilotReady(uid, env);
+    if (response) return response;
+    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body) return json({ error: "INVALID_JSON" }, 400);
+    const name = text(body.name, 40);
+    const description = text(body.description, 160);
+    const category = text(body.category, 16).toUpperCase() || "GENERAL";
+    if (name.length < 3 || [...(typeof body.name === "string" ? body.name.trim() : "")].length > 40 ||
+        [...(typeof body.description === "string" ? body.description.trim() : "")].length > 160) {
+      return json({ error: "INVALID_GROUP_DETAILS", message: "O nome deve ter 3–40 caracteres e a descrição até 160." }, 400);
+    }
+    if (!["TECH", "TRAVEL", "LANGUAGE", "CULTURE", "GAMING", "GENERAL"].includes(category)) {
+      return json({ error: "INVALID_GROUP_CATEGORY" }, 400);
+    }
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM social_groups WHERE owner_uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day')",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(recent?.count ?? 0) >= 3) return json({ error: "GROUP_CREATE_RATE_LIMIT", message: "Podes criar até três comunidades por dia." }, 429);
+    const moderation = await moderate(env, name + "\n" + description);
+    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
+      return json({ error: "MODERATION_TEMPORARILY_UNAVAILABLE", message: "A verificação de segurança está indisponível. Tenta novamente." }, 503);
+    }
+    if (moderation.state !== "SAFE") {
+      return json({ error: "GROUP_DETAILS_REQUIRE_REVIEW", message: "Revê o nome e a descrição antes de criar a comunidade." }, 422);
+    }
+    const id = uuid();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO social_groups(id, owner_uid, name, description, category, age_band) VALUES (?, ?, ?, ?, ?, ?)",
+      ).bind(id, uid, name, description, category, user.declared_age_band),
+      env.DB.prepare(
+        "INSERT INTO social_group_members(group_id, uid, role) VALUES (?, ?, 'OWNER')",
+      ).bind(id, uid),
+    ]);
+    return json({
+      group: {
+        id, name, description, category, owner_uid: uid, owner_name: user.pilot_name,
+        age_band: user.declared_age_band, member_count: 1, is_member: 1, is_owner: 1,
+      },
+    }, 201);
+  }
+
+  const groupJoinMatch = path.match(/^\/v1\/groups\/([^/]+)\/join$/);
+  if (method === "POST" && groupJoinMatch) {
+    const { user, response } = await ensurePilotReady(uid, env);
+    if (response) return response;
+    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
+    const group = await env.DB.prepare(
+      "SELECT id, age_band FROM social_groups WHERE id = ? LIMIT 1",
+    ).bind(groupJoinMatch[1]).first<{ id: string; age_band: string }>();
+    if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
+    if (group.age_band !== user.declared_age_band) return json({ error: "GROUP_NOT_AVAILABLE", message: "Esta comunidade não está disponível para a tua faixa etária." }, 403);
+    const membership = await env.DB.prepare(
+      "SELECT role FROM social_group_members WHERE group_id = ? AND uid = ? LIMIT 1",
+    ).bind(group.id, uid).first<{ role: string }>();
+    if (membership) return json({ ok: true, joined: true, alreadyMember: true });
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM social_group_members WHERE uid = ?",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(count?.count ?? 0) >= 25) return json({ error: "GROUP_MEMBERSHIP_LIMIT", message: "Já participas no máximo de 25 comunidades." }, 429);
+    await env.DB.prepare(
+      "INSERT INTO social_group_members(group_id, uid, role) VALUES (?, ?, 'MEMBER')",
+    ).bind(group.id, uid).run();
+    return json({ ok: true, joined: true }, 201);
+  }
+
+  const groupLeaveMatch = path.match(/^\/v1\/groups\/([^/]+)\/leave$/);
+  if (method === "POST" && groupLeaveMatch) {
+    const membership = await env.DB.prepare(
+      "SELECT role FROM social_group_members WHERE group_id = ? AND uid = ? LIMIT 1",
+    ).bind(groupLeaveMatch[1], uid).first<{ role: string }>();
+    if (!membership) return json({ error: "GROUP_MEMBERSHIP_NOT_FOUND" }, 404);
+    if (membership.role === "OWNER") {
+      return json({ error: "GROUP_OWNER_MUST_DELETE", message: "O criador deve eliminar a comunidade para a encerrar." }, 409);
+    }
+    await env.DB.prepare("DELETE FROM social_group_members WHERE group_id = ? AND uid = ?")
+      .bind(groupLeaveMatch[1], uid).run();
+    return json({ ok: true, left: true });
+  }
+
+  const groupDeleteMatch = path.match(/^\/v1\/groups\/([^/]+)$/);
+  if (method === "DELETE" && groupDeleteMatch) {
+    const result = await env.DB.prepare(
+      "DELETE FROM social_groups WHERE id = ? AND owner_uid = ?",
+    ).bind(groupDeleteMatch[1], uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "GROUP_NOT_FOUND_OR_NOT_OWNER" }, 404);
+    return json({ ok: true, deleted: true });
+  }
+
+  const groupMessagesMatch = path.match(/^\/v1\/groups\/([^/]+)\/messages$/);
+  if (method === "POST" && groupMessagesMatch) {
+    const { user, response } = await ensurePilotReady(uid, env);
+    if (response) return response;
+    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (!body || typeof body.message !== "string") return json({ error: "INVALID_JSON" }, 400);
+    const message = text(body.message, 500);
+    if (!message || [...body.message.trim()].length > 500) return json({ error: "MESSAGE_LENGTH", message: "A mensagem deve ter entre 1 e 500 caracteres." }, 400);
+    const group = await env.DB.prepare(
+      "SELECT id, age_band FROM social_groups WHERE id = ? LIMIT 1",
+    ).bind(groupMessagesMatch[1]).first<{ id: string; age_band: string }>();
+    if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
+    if (group.age_band !== user.declared_age_band) return json({ error: "GROUP_NOT_AVAILABLE" }, 403);
+    const membership = await env.DB.prepare(
+      "SELECT 1 AS found FROM social_group_members WHERE group_id = ? AND uid = ? LIMIT 1",
+    ).bind(group.id, uid).first();
+    if (!membership) return json({ error: "GROUP_MEMBERSHIP_REQUIRED" }, 403);
+    const recent = await env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM social_group_messages WHERE uid = ? AND created_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 hour')",
+    ).bind(uid).first<{ count: number }>();
+    if (Number(recent?.count ?? 0) >= 30) return json({ error: "GROUP_MESSAGE_RATE_LIMIT" }, 429);
+    const moderation = await moderate(env, message);
+    if (moderation.state === "TEMPORARY_UNAVAILABLE") {
+      return json({ error: "MODERATION_TEMPORARILY_UNAVAILABLE", message: "A verificação de segurança está indisponível. A mensagem não foi enviada." }, 503);
+    }
+    if (moderation.state !== "SAFE") {
+      return json({ error: "MESSAGE_REQUIRES_REVIEW", message: "Revê o texto e tenta novamente." }, 422);
+    }
+    const id = uuid();
+    const createdAt = isoNow();
+    await env.DB.prepare(
+      "INSERT INTO social_group_messages(id, group_id, uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', ?)",
+    ).bind(id, group.id, uid, message, createdAt).run();
+    return json({ message: { id, group_id: group.id, uid, message_text: message, created_at: createdAt } }, 201);
+  }
+
+  const groupDetailMatch = path.match(/^\/v1\/groups\/([^/]+)$/);
+  if (method === "GET" && groupDetailMatch) {
+    const { user, response } = await ensurePilotReady(uid, env);
+    if (response) return response;
+    if (!user) return json({ error: "PILOT_NOT_INITIALIZED" }, 409);
+    const group = await env.DB.prepare(
+      `SELECT g.id, g.owner_uid, g.name, g.description, g.category, g.age_band, g.created_at,
+              owner.pilot_name AS owner_name,
+              (SELECT COUNT(*) FROM social_group_members m WHERE m.group_id = g.id) AS member_count,
+              CASE WHEN EXISTS (SELECT 1 FROM social_group_members m WHERE m.group_id = g.id AND m.uid = ?) THEN 1 ELSE 0 END AS is_member,
+              CASE WHEN g.owner_uid = ? THEN 1 ELSE 0 END AS is_owner
+       FROM social_groups g JOIN users owner ON owner.uid = g.owner_uid
+       WHERE g.id = ? AND g.age_band = ? LIMIT 1`,
+    ).bind(uid, uid, groupDetailMatch[1], user.declared_age_band).first<Record<string, unknown>>();
+    if (!group) return json({ error: "GROUP_NOT_FOUND" }, 404);
+    let items: Record<string, unknown>[] = [];
+    if (group.is_member === 1) {
+      const messages = await env.DB.prepare(
+        `SELECT m.id, m.message_text, m.created_at, m.uid,
+                u.pilot_name, u.pilot_handle, u.avatar_url,
+                CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+                CASE WHEN m.uid = ? THEN 1 ELSE 0 END AS is_own
+         FROM social_group_messages m JOIN users u ON u.uid = m.uid
+         WHERE m.group_id = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM blocks b
+             WHERE (b.blocker_uid = ? AND b.blocked_uid = m.uid)
+                OR (b.blocker_uid = m.uid AND b.blocked_uid = ?)
+           )
+         ORDER BY m.created_at ASC LIMIT 80`,
+      ).bind(uid, groupDetailMatch[1], uid, uid).all<Record<string, unknown>>();
+      items = messages.results ?? [];
+    }
+    return json({ group, items });
   }
 
   if (method === "GET" && path === "/v1/friends") {
@@ -2365,12 +2563,15 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/atlas") {
     const rows = await env.DB.prepare(
-      "SELECT status, flight_distance_km, route_json, plane_model FROM airplanes WHERE (sender_uid = ? OR recipient_uid = ?) AND route_json IS NOT NULL ORDER BY created_at DESC LIMIT 500",
+      "SELECT id, status, flight_distance_km, route_json, plane_model, flight_started_at, flight_duration_seconds FROM airplanes WHERE (sender_uid = ? OR recipient_uid = ?) AND route_json IS NOT NULL ORDER BY CASE WHEN status = 'FLYING' THEN 0 WHEN status = 'QUEUED' THEN 1 ELSE 2 END, created_at DESC LIMIT 500",
     ).bind(uid, uid).all<{
+      id: string;
       status: string;
       flight_distance_km: number | null;
       route_json: string | null;
       plane_model: string | null;
+      flight_started_at: string | null;
+      flight_duration_seconds: number | null;
     }>();
     const countries = new Set<string>();
     const models: Record<string, number> = { DART: 0, GLIDER: 0, SWALLOW: 0 };
@@ -2398,8 +2599,31 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const items = [...countries]
       .map((code) => ({ code, name: COUNTRY_CENTROIDS[code].name }))
       .sort((a, b) => a.name.localeCompare(b.name));
+    const now = Date.now();
+    const routes = (rows.results ?? []).slice(0, 24).map((row) => {
+      let route: Record<string, unknown> | null = null;
+      try {
+        route = row.route_json ? JSON.parse(row.route_json) as Record<string, unknown> : null;
+      } catch {
+        route = null;
+      }
+      const completed = ["DELIVERED", "READ", "RESPONDED"].includes(row.status);
+      const started = row.flight_started_at ? Date.parse(row.flight_started_at) : NaN;
+      const durationMs = Math.max(1, Number(row.flight_duration_seconds ?? 0)) * 1000;
+      const progress = completed ? 1 : row.status === "FLYING" && Number.isFinite(started)
+        ? Math.max(0, Math.min(1, (now - started) / durationMs))
+        : 0;
+      return {
+        id: row.id,
+        status: row.status,
+        planeModel: row.plane_model ?? "DART",
+        progress: Number(progress.toFixed(4)),
+        route,
+      };
+    }).filter((item) => item.route !== null);
     return json({
       countries: items,
+      routes,
       stats: {
         totalFlights: rows.results?.length ?? 0,
         completedFlights,

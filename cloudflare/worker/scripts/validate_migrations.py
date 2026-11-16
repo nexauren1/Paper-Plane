@@ -374,3 +374,63 @@ except sqlite3.IntegrityError:
     pass
 
 print("Release hardening checks passed: Admin notification history and unique account-deletion tombstones.")
+
+
+# Communities are age-cohort scoped, and group posts require membership.
+group_tables = {
+    row[0] for row in DB.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    ).fetchall()
+}
+assert {"social_groups", "social_group_members", "social_group_messages"}.issubset(group_tables), "Missing community tables"
+
+DB.execute(
+    "UPDATE users SET declared_age_band = 'UNDER_18', profile_completed = 1 WHERE uid IN ('pilot-a','pilot-b')"
+)
+seed_user("pilot-group-adult")
+seed_user("pilot-group-outsider")
+DB.execute("UPDATE users SET declared_age_band = 'ADULT', profile_completed = 1 WHERE uid = 'pilot-group-adult'")
+DB.execute("UPDATE users SET declared_age_band = 'UNDER_18', profile_completed = 1 WHERE uid = 'pilot-group-outsider'")
+DB.execute(
+    """INSERT INTO social_groups(id, owner_uid, name, description, category, age_band)
+       VALUES ('group-minors', 'pilot-a', 'Global Creators', 'A community for ideas', 'TECH', 'UNDER_18')"""
+)
+DB.execute(
+    "INSERT INTO social_group_members(group_id, uid, role) VALUES ('group-minors', 'pilot-a', 'OWNER')"
+)
+DB.execute(
+    "INSERT INTO social_group_members(group_id, uid, role) VALUES ('group-minors', 'pilot-b', 'MEMBER')"
+)
+DB.execute(
+    """INSERT INTO social_group_messages(id, group_id, uid, message_text)
+       VALUES ('group-message-1', 'group-minors', 'pilot-b', 'Hello community')"""
+)
+assert DB.execute(
+    "SELECT COUNT(*) FROM social_group_members WHERE group_id = 'group-minors'"
+).fetchone()[0] == 2, "Community members were not persisted"
+assert DB.execute(
+    "SELECT message_text FROM social_group_messages WHERE id = 'group-message-1'"
+).fetchone()[0] == "Hello community", "Community message was not persisted"
+
+try:
+    DB.execute(
+        "INSERT INTO social_group_members(group_id, uid, role) VALUES ('group-minors', 'pilot-group-adult', 'MEMBER')"
+    )
+    raise AssertionError("A user from a different age band joined a community")
+except sqlite3.IntegrityError as error:
+    assert "GROUP_AGE_BAND_MISMATCH" in str(error), str(error)
+
+try:
+    DB.execute(
+        """INSERT INTO social_group_messages(id, group_id, uid, message_text)
+           VALUES ('group-message-outsider', 'group-minors', 'pilot-group-outsider', 'Not a member')"""
+    )
+    raise AssertionError("A non-member posted in a community")
+except sqlite3.IntegrityError as error:
+    assert "GROUP_MEMBERSHIP_REQUIRED" in str(error), str(error)
+
+DB.execute("DELETE FROM social_groups WHERE id = 'group-minors'")
+assert DB.execute("SELECT COUNT(*) FROM social_group_members WHERE group_id = 'group-minors'").fetchone()[0] == 0, "Group deletion left memberships behind"
+assert DB.execute("SELECT COUNT(*) FROM social_group_messages WHERE group_id = 'group-minors'").fetchone()[0] == 0, "Group deletion left messages behind"
+
+print("Community checks passed: age-band isolation, member-only posts and cascading group deletion.")

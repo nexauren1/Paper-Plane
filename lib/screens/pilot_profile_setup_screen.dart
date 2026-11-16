@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
-import '../services/paper_plane_localization.dart';
 import '../widgets/pilot_avatar.dart';
 
 const Color _setupNavy = Color(0xFF071225);
