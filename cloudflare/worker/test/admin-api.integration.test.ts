@@ -332,6 +332,7 @@ describe("Paper Plane Admin API integration", () => {
   it("accepts public-plane replies, holds moderation outages for review and respects reply permissions", async () => {
     await seedUser("reply-author", "CODE-REPLY-AUTHOR", "Sky Author");
     await seedUser("reply-pilot", "CODE-REPLY-PILOT", "Sky Responder");
+    await DB.prepare("UPDATE users SET pilot_handle = ? WHERE uid = ?").bind("sky_responder", "reply-pilot").run();
     await seedPlane("replyable-plane", "reply-author", "PUBLIC", "DELIVERED", "SAFE");
     await DB.prepare("INSERT INTO public_sky(airplane_id) VALUES (?)").bind("replyable-plane").run();
 
