@@ -601,6 +601,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                     fallbackName: name,
                     fallbackHandle: handle,
                     fallbackCountry: country,
+                    fallbackAvatarUrl: chat['avatar_url']?.toString(),
                     isChama: chama,
                   ),
                 ),
@@ -613,7 +614,11 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                PilotAvatar(fallbackLabel: chat['pilot_name']?.toString(), size: 52),
+                PilotAvatar(
+                   fallbackLabel: chat['pilot_name']?.toString(),
+                   imageUrl: chat['avatar_url']?.toString(),
+                   size: 52,
+                 ),
                 if (chama)
                   Positioned(
                     right: -2,
@@ -706,7 +711,11 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     final country = person['country_code']?.toString();
     return _panel(
       child: Row(children: [
-        PilotAvatar(fallbackLabel: person['pilot_name']?.toString(), size: 42),
+        PilotAvatar(
+           fallbackLabel: person['pilot_name']?.toString(),
+           imageUrl: person['avatar_url']?.toString(),
+           size: 42,
+         ),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -794,6 +803,7 @@ class ChamaConversationScreen extends StatefulWidget {
     required this.fallbackName,
     required this.fallbackHandle,
     this.fallbackCountry,
+    this.fallbackAvatarUrl,
     this.isChama = true,
   });
 
@@ -801,6 +811,7 @@ class ChamaConversationScreen extends StatefulWidget {
   final String fallbackName;
   final String fallbackHandle;
   final String? fallbackCountry;
+  final String? fallbackAvatarUrl;
   final bool isChama;
 
   @override
@@ -1269,7 +1280,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         backgroundColor: const Color(0xFF0B1B31),
         foregroundColor: _chatGoldBright,
         title: Row(children: [
-          PilotAvatar(fallbackLabel: _name, size: 36),
+          PilotAvatar(fallbackLabel: _name, imageUrl: widget.fallbackAvatarUrl, size: 36),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             PlaneText(_name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),

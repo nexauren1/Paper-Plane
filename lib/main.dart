@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/firebase_runtime.dart';
 import 'services/paper_plane_api.dart';
@@ -4288,7 +4289,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    PilotAvatar(fallbackLabel: name, size: 36),
+                                    PilotAvatar(fallbackLabel: name, imageUrl: item['avatar_url']?.toString(), size: 36),
                                     const SizedBox(width: 9),
                                     Expanded(
                                       child: Container(
@@ -4582,7 +4583,11 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(13, 13, 10, 10),
                     child: Row(children: [
-                      PilotAvatar(fallbackLabel: message['pilot_name']?.toString(), size: 42),
+                      PilotAvatar(
+                         fallbackLabel: message['pilot_name']?.toString(),
+                         imageUrl: message['avatar_url']?.toString(),
+                         size: 42,
+                       ),
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         PlaneText(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
@@ -4746,12 +4751,85 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic> _profile = {};
   bool _loading = true;
+  bool _uploadingAvatar = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _refresh();
+  }
+
+
+  Future<void> _changeAvatar() async {
+    if (_uploadingAvatar) return;
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 86,
+    );
+    if (picked == null || !mounted) return;
+    final fileSize = await picked.length();
+    if (fileSize > 5 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: PlaneText('A fotografia deve ter no máximo 5 MB.')),
+      );
+      return;
+    }
+    setState(() => _uploadingAvatar = true);
+    try {
+      await PaperPlaneApi.instance.uploadProfileAvatar(picked.path);
+      final updated = await PaperPlaneApi.instance.getProfile();
+      if (!mounted) return;
+      setState(() => _profile = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: PlaneText('Fotografia de perfil atualizada.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível atualizar a fotografia.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    if (_uploadingAvatar) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF172844),
+        title: const PlaneText('Remover fotografia?'),
+        content: const PlaneText('O teu perfil voltará a mostrar o avatar gráfico do Paper Plane.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const PlaneText('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: ppBlue, foregroundColor: Colors.white),
+            child: const PlaneText('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      await PaperPlaneApi.instance.deleteProfileAvatar();
+      final updated = await PaperPlaneApi.instance.getProfile();
+      if (!mounted) return;
+      setState(() => _profile = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: PlaneText('Fotografia removida.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is PaperPlaneApiException ? error.message : 'Não foi possível remover a fotografia.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
   }
 
   Future<void> _refresh() async {
@@ -4789,6 +4867,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final complete = pilot['profile_completed'] == 1;
     final name = pilot['pilot_name']?.toString() ?? 'Piloto';
     final handle = pilot['pilot_handle']?.toString();
+    final avatarUrl = pilot['avatar_url']?.toString();
     final country = pilot['country_code']?.toString();
     final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
     final received = int.tryParse(stats['received']?.toString() ?? '') ?? 0;
@@ -4820,7 +4899,7 @@ class _ProfilePageState extends State<ProfilePage> {
             GlassPanel(
               highlight: true,
               child: Row(children: [
-                PilotAvatar(fallbackLabel: name, size: 76),
+                PilotAvatar(fallbackLabel: name, imageUrl: avatarUrl, size: 76),
                 const SizedBox(width: 15),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   PlaneText(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
@@ -4829,6 +4908,34 @@ class _ProfilePageState extends State<ProfilePage> {
                   PlaneText(country == null ? 'País não definido' : _countryFlag(country) + ' ' + _countryName(country), style: const TextStyle(color: Colors.white60, fontSize: 12)),
                   const SizedBox(height: 4),
                   PlaneText(complete ? 'Perfil sincronizado' : 'Perfil por completar', style: TextStyle(color: complete ? const Color(0xFF8DE0AF) : ppGold, fontSize: 11)),
+                  if (complete) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 6,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _uploadingAvatar ? null : _changeAvatar,
+                          icon: _uploadingAvatar
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.add_a_photo_outlined, size: 15),
+                          label: PlaneText(_uploadingAvatar ? 'A enviar…' : (avatarUrl == null || avatarUrl.isEmpty ? 'Adicionar foto' : 'Alterar foto')),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: ppGoldBright,
+                            side: BorderSide(color: ppGold.withOpacity(0.55)),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                          ),
+                        ),
+                        if (avatarUrl != null && avatarUrl.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: _uploadingAvatar ? null : _removeAvatar,
+                            icon: const Icon(Icons.delete_outline_rounded, size: 15),
+                            label: const PlaneText('Remover'),
+                            style: TextButton.styleFrom(foregroundColor: Colors.white60, padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7)),
+                          ),
+                      ],
+                    ),
+                  ],
                 ])),
               ]),
             ),
