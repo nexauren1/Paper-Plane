@@ -11,6 +11,7 @@ const JWKS_URL =
 type TestBindings = {
   DB: D1Database;
   TEST_MIGRATIONS: unknown[];
+  AI?: { run(model: string, input: Record<string, unknown>): Promise<unknown> };
 };
 
 const testEnv = env as unknown as TestBindings;
@@ -79,6 +80,10 @@ async function seedPlane(
 describe("Paper Plane Admin API integration", () => {
   beforeAll(async () => {
     await applyD1Migrations(DB, testEnv.TEST_MIGRATIONS as any);
+    Object.defineProperty(testEnv, "AI", {
+      configurable: true,
+      value: { run: vi.fn().mockResolvedValue({ response: "safe" }) },
+    });
 
     const keyPair = await generateKeyPair("RS256");
     privateKey = keyPair.privateKey;
@@ -197,6 +202,17 @@ describe("Paper Plane Admin API integration", () => {
     expect(following.status).toBe(200);
     expect(following.data.items.some((item: any) => item.id === "open-sky-public")).toBe(true);
 
+    const postedReply = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/replies", {
+      message: "A resposta pública está a funcionar.",
+    });
+    expect(postedReply.status).toBe(201);
+    expect(postedReply.data.status).toBe("PUBLISHED");
+    const persistedReply = await DB.prepare(
+      "SELECT message_text, moderation_state FROM public_replies WHERE id = ?",
+    ).bind(postedReply.data.id).first<{ message_text: string; moderation_state: string }>();
+    expect(persistedReply?.message_text).toBe("A resposta pública está a funcionar.");
+    expect(persistedReply?.moderation_state).toBe("SAFE");
+
     const firstPage = await api("sky-reader", "GET", "/v1/open-sky/open-sky-public/replies?page=0");
     expect(firstPage.status).toBe(200);
     expect(firstPage.data.items).toHaveLength(50);
@@ -206,7 +222,7 @@ describe("Paper Plane Admin API integration", () => {
 
     const secondPage = await api("sky-reader", "GET", "/v1/open-sky/open-sky-public/replies?page=1");
     expect(secondPage.status).toBe(200);
-    expect(secondPage.data.items).toHaveLength(5);
+    expect(secondPage.data.items).toHaveLength(6);
     expect(secondPage.data.hasMore).toBe(false);
 
     const liked = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/like");
