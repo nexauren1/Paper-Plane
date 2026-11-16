@@ -21,7 +21,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _pilotName = TextEditingController();
   final _pilotHandle = TextEditingController();
-  final _avatarUrl = TextEditingController();
   DateTime? _selectedBirthDate;
   final _birthDateDisplay = TextEditingController();
   Timer? _handleDebounce;
@@ -60,7 +59,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
     _pilotName.removeListener(_suggestHandleFromName);
     _pilotName.dispose();
     _pilotHandle.dispose();
-    _avatarUrl.dispose();
     _birthDateDisplay.dispose();
     super.dispose();
   }
@@ -229,7 +227,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
         birthDate: _selectedBirthDate!,
         countryCode: _countryCode!,
         language: _preferredLanguage,
-        avatarUrl: _avatarUrl.text.trim().isEmpty ? null : _avatarUrl.text.trim(),
       );
       PaperPlaneLocale.setLanguage(_preferredLanguage);
       if (!mounted) return;
@@ -364,31 +361,35 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const PlaneText('Foto de perfil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _setupGoldLight)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      PilotAvatar(url: _avatarUrl.text.trim(), size: 58),
-                      const SizedBox(width: 11),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _avatarUrl,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          onChanged: (_) => setState(() {}),
-                          decoration: _decoration('Link da foto ou perfil público', Icons.link_rounded, hint: 'https://…'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: PlaneText(
-                      'Cola um link HTTPS de uma imagem ou de um perfil público. Tentaremos encontrar a foto automaticamente. Não precisas de carregar ficheiros.',
-                      style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D2140),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(color: const Color(0x4457D6FF)),
                     ),
+                    child: Row(children: [
+                      PilotAvatar(
+                        url: null,
+                        fallbackLabel: _pilotName.text.trim().isEmpty ? 'Paper Plane' : _pilotName.text,
+                        size: 58,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          PlaneText('Identidade Paper Plane', style: TextStyle(color: _setupGoldLight, fontWeight: FontWeight.w900)),
+                          SizedBox(height: 4),
+                          PlaneText(
+                            'O teu símbolo é criado automaticamente a partir do teu nome. Não usamos fotografias.',
+                            style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.4),
+                          ),
+                        ],
+                      )),
+                    ]),
                   ),
+                  const SizedBox(height: 18),
                   const SizedBox(height: 18),
                   TextFormField(
                     readOnly: true,
