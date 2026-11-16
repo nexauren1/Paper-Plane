@@ -1442,7 +1442,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const pilotOnRoute = await requireUser(uid, env);
   if (method === "GET" && path === "/v1/account/export") {
     if (!pilotOnRoute) return json({ error: "ACCOUNT_NOT_FOUND" }, 404);
-    const [profile, sent, received, replies, likes, blocks, friendships, chats, chatMessages, reports, tickets] = await Promise.all([
+    const [profile, sent, received, replies, likes, blocks, friendships, chats, chatMessages, groupsCreated, groupMemberships, groupMessages, reports, tickets] = await Promise.all([
       env.DB.prepare(
         "SELECT pilot_code, pilot_name, pilot_handle, avatar_url, birth_year, declared_age_band, age_declaration_at, country_code, country_visible, language, preferred_language, profile_completed, created_at, updated_at FROM users WHERE uid = ?",
       ).bind(uid).first(),
@@ -1454,6 +1454,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       env.DB.prepare("SELECT * FROM friendships WHERE requester_uid = ? OR addressee_uid = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT * FROM conversations WHERE user_a = ? OR user_b = ? ORDER BY created_at DESC LIMIT 500").bind(uid, uid).all(),
       env.DB.prepare("SELECT m.* FROM chat_messages m JOIN conversations c ON c.id = m.conversation_id WHERE c.user_a = ? OR c.user_b = ? ORDER BY m.created_at DESC LIMIT 2000").bind(uid, uid).all(),
+      env.DB.prepare("SELECT * FROM social_groups WHERE owner_uid = ? ORDER BY created_at DESC LIMIT 250").bind(uid).all(),
+      env.DB.prepare("SELECT * FROM social_group_members WHERE uid = ? ORDER BY joined_at DESC LIMIT 500").bind(uid).all(),
+      env.DB.prepare("SELECT * FROM social_group_messages WHERE uid = ? ORDER BY created_at DESC LIMIT 2000").bind(uid).all(),
       env.DB.prepare("SELECT id, airplane_id, reported_uid, reason, details, status, created_at FROM reports WHERE reporter_uid = ? ORDER BY created_at DESC LIMIT 500").bind(uid).all(),
       env.DB.prepare("SELECT id, category, subject, details, status, created_at, updated_at FROM support_tickets WHERE uid = ? ORDER BY created_at DESC LIMIT 200").bind(uid).all(),
     ]);
@@ -1467,6 +1470,9 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       friendships: friendships.results ?? [],
       conversations: chats.results ?? [],
       chatMessages: chatMessages.results ?? [],
+      groupsCreated: groupsCreated.results ?? [],
+      groupMemberships: groupMemberships.results ?? [],
+      groupMessages: groupMessages.results ?? [],
       reportsFiled: reports.results ?? [],
       supportTickets: tickets.results ?? [],
     });
