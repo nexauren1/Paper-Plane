@@ -613,7 +613,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             Stack(
               clipBehavior: Clip.none,
               children: [
-                PilotAvatar(url: chat['avatar_url']?.toString(), fallbackLabel: chat['pilot_name']?.toString(), size: 52),
+                PilotAvatar(fallbackLabel: chat['pilot_name']?.toString(), size: 52),
                 if (chama)
                   Positioned(
                     right: -2,
@@ -706,7 +706,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     final country = person['country_code']?.toString();
     return _panel(
       child: Row(children: [
-        PilotAvatar(url: person['avatar_url']?.toString(), fallbackLabel: person['pilot_name']?.toString(), size: 42),
+        PilotAvatar(fallbackLabel: person['pilot_name']?.toString(), size: 42),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
