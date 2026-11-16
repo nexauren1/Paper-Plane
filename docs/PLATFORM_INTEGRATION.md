@@ -12,6 +12,7 @@ This branch prepares the production architecture without committing private cred
 - Cloudflare Queues: asynchronous matching and delivery notifications.
 - Workers AI: Meta M2M100 1.2B provides multilingual airplane translation on inbox open and per-message translation inside Chat/Chama. Sending and recipient matching never wait for translation. There is no AI chatbot or AI compose button.
 - Cloudflare Pages: public website / help / privacy pages. The Android app calls the Worker API, not Pages Functions.
+- ImageKit: stores and delivers optional pilot profile photos. The mobile app uploads only to the authenticated Worker; the Worker alone holds the ImageKit private API key.
 
 ## What is implemented in this branch
 
@@ -24,7 +25,7 @@ This branch prepares the production architecture without committing private cred
 
 ### Worker API and D1
 - Firebase RS256 ID-token signature, issuer, audience, expiry, and subject are verified on the Worker.
-- Pilot bootstrap and profile, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented. The core Flutter screens request live API data; they must still be integration-tested against production resources.
+- Pilot bootstrap and profile, authenticated ImageKit profile-photo upload/removal, inbox, sent-plane, Open Sky, reporting, blocking, public likes/replies, airplane translation, chat translation, and device registration endpoints are implemented. The core Flutter screens request live API data; they must still be integration-tested against production resources.
 - Original planes have unlimited daily sending, a rolling hourly anti-spam safeguard, and a 200-character limit.
 - Random planes are matched immediately when an eligible recipient exists, then retried by the queue and scheduled matcher when nobody is available; they are never falsely marked delivered.
 - Matching only considers active users in the same self-declared age group. Blocks apply in both directions; this is cohort separation, not proof of age.
@@ -100,6 +101,8 @@ npm run deploy
 For FCM_SERVICE_ACCOUNT_JSON, paste the JSON of a dedicated Google service account with the minimum permissions required to send Firebase Cloud Messaging messages. Do not commit that JSON, put it in Dart defines, or send it in chat. If this secret is absent, D1 delivery still works but push notifications are skipped.
 
 For ADMIN_UIDS, enter a comma-separated list of trusted Firebase UIDs that are allowed to review held messages. Keep this secret limited to the smallest possible group. The moderation review endpoints are not a substitute for a staffed safety process.
+
+For profile photos, configure the Worker variable `IMAGEKIT_URL_ENDPOINT` as `https://ik.imagekit.io/rvvqacl3z` and add `IMAGEKIT_PRIVATE_KEY` as a Cloudflare Worker secret. The Flutter app never contains the private key. The Worker accepts authenticated JPG, PNG, or WebP uploads up to 5 MB, checks the file signature, stores images in `/paper-plane/avatars`, and stores the delivery URL plus ImageKit file ID in D1. The public key is not needed for this server-side upload flow.
 
 The Worker AI binding is declared in wrangler.jsonc. Confirm Workers AI is enabled for the Cloudflare account. The Queue names must exist before deploy. The scheduled trigger revisits queued planes every five minutes and expires letters according to their stored expiry time.
 
