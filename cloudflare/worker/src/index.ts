@@ -3071,7 +3071,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/open-sky") {
     const country = text(url.searchParams.get("country"), 2).toUpperCase() || null;
-    const language = normalizeLanguage(url.searchParams.get("language"));
+    const requestedLanguage = url.searchParams.get("language");
+    const language = requestedLanguage === "en" || requestedLanguage === "pt" ? requestedLanguage : null;
     const requestedFeed = text(url.searchParams.get("feed"), 16).toUpperCase();
     const feed = ["FOR_YOU", "FOLLOWING", "POPULAR"].includes(requestedFeed) ? requestedFeed : "FOR_YOU";
     const rows = await env.DB.prepare(
