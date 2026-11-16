@@ -3,3 +3,6 @@ FIREBASE_PROJECT_ID=your-firebase-project-id
 APP_ORIGINS=http://localhost:3000,https://your-pages-domain
 # Optional only when testing Firebase Cloud Messaging:
 # FCM_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+# ImageKit profile-photo storage. Never commit real credentials.
+IMAGEKIT_URL_ENDPOINT=https://ik.imagekit.io/rvvqacl3z
+IMAGEKIT_PRIVATE_KEY=private_replace_with_your_imagekit_private_key
