@@ -3071,30 +3071,60 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
 
   if (method === "GET" && path === "/v1/open-sky") {
     const country = text(url.searchParams.get("country"), 2).toUpperCase() || null;
-    const language = url.searchParams.get("language") === "en" ? "en" : url.searchParams.get("language") === "pt" ? "pt" : null;
+    const language = normalizeLanguage(url.searchParams.get("language"));
+    const requestedFeed = text(url.searchParams.get("feed"), 16).toUpperCase();
+    const feed = ["FOR_YOU", "FOLLOWING", "POPULAR"].includes(requestedFeed) ? requestedFeed : "FOR_YOU";
     const rows = await env.DB.prepare(
-      `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at, p.likes_count,
+      `SELECT a.id, a.message_text, a.message_language, a.mood, a.sender_country_code, a.created_at,
+              a.plane_model, p.likes_count,
               u.pilot_name, u.pilot_handle,
               CASE WHEN a.sender_uid = ? THEN 1 ELSE 0 END AS is_own,
+              CASE WHEN EXISTS (SELECT 1 FROM public_likes l WHERE l.airplane_id = a.id AND l.uid = ?) THEN 1 ELSE 0 END AS liked_by_me,
               (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE') AS replies_count
        FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
        JOIN users u ON u.uid = a.sender_uid
        WHERE a.audience = 'PUBLIC' AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED'
          AND (? IS NULL OR a.sender_country_code = ?)
          AND (? IS NULL OR a.message_language = ?)
-       ORDER BY a.created_at DESC LIMIT 50`,
-    ).bind(uid, country, country, language, language).all();
-    return json({ items: rows.results ?? [] });
+         AND (? <> 'FOLLOWING' OR EXISTS (
+           SELECT 1 FROM friendships f
+           WHERE f.status = 'ACCEPTED'
+             AND ((f.requester_uid = ? AND f.addressee_uid = a.sender_uid)
+               OR (f.addressee_uid = ? AND f.requester_uid = a.sender_uid))
+         ))
+       ORDER BY CASE WHEN ? = 'POPULAR'
+         THEN p.likes_count * 10 + (SELECT COUNT(*) FROM public_replies r WHERE r.airplane_id = a.id AND r.moderation_state = 'SAFE')
+         ELSE 0 END DESC,
+         a.created_at DESC
+       LIMIT 50`,
+    ).bind(uid, uid, country, country, language, language, feed, uid, uid, feed).all();
+    return json({ items: rows.results ?? [], feed });
   }
 
   const likeMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/like$/);
   if (method === "POST" && likeMatch) {
     const id = likeMatch[1];
-    const inserted = await env.DB.prepare("INSERT OR IGNORE INTO public_likes(airplane_id, uid) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM public_sky WHERE airplane_id = ?)")
-      .bind(id, uid, id).run();
-    if ((inserted.meta?.changes ?? 0) === 0) return json({ error: "NOT_FOUND_OR_ALREADY_LIKED" }, 404);
-    await env.DB.prepare("UPDATE public_sky SET likes_count = likes_count + 1 WHERE airplane_id = ?").bind(id).run();
-    return json({ ok: true });
+    const parent = await env.DB.prepare(
+      `SELECT p.airplane_id FROM public_sky p JOIN airplanes a ON a.id = p.airplane_id
+       WHERE p.airplane_id = ? AND a.audience = 'PUBLIC'
+         AND a.moderation_state = 'SAFE' AND a.status = 'DELIVERED' LIMIT 1`,
+    ).bind(id).first();
+    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+    const existing = await env.DB.prepare(
+      "SELECT 1 AS found FROM public_likes WHERE airplane_id = ? AND uid = ? LIMIT 1",
+    ).bind(id, uid).first();
+    if (existing) {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM public_likes WHERE airplane_id = ? AND uid = ?").bind(id, uid),
+        env.DB.prepare("UPDATE public_sky SET likes_count = MAX(0, likes_count - 1) WHERE airplane_id = ?").bind(id),
+      ]);
+      return json({ ok: true, liked: false });
+    }
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO public_likes(airplane_id, uid) VALUES (?, ?)").bind(id, uid),
+      env.DB.prepare("UPDATE public_sky SET likes_count = likes_count + 1 WHERE airplane_id = ?").bind(id),
+    ]);
+    return json({ ok: true, liked: true });
   }
 
   const publicRepliesMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/replies$/);
