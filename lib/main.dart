@@ -18,7 +18,6 @@ import 'screens/pilot_profile_setup_screen.dart';
 import 'screens/first_flight_workshop_screen.dart';
 import 'screens/support_screen.dart';
 import 'screens/chat_hub_screen.dart';
-import 'screens/groups_screen.dart';
 import 'screens/quiz_screen.dart';
 import 'widgets/report_dialog.dart';
 import 'widgets/pilot_avatar.dart';
@@ -856,7 +855,6 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = [
       OpenSkyPage(key: _openSkyKey),
-      const GroupsScreen(),
       const ChatHubScreen(),
       const ProfilePage(),
     ];
@@ -878,7 +876,6 @@ class _MainShellState extends State<MainShell> {
             height: 72,
             child: Row(children: [
               _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
-              _navItem(1, Icons.groups_outlined, Icons.groups_rounded, 'Grupos'),
               Expanded(
                 child: Center(
                   child: InkWell(
@@ -904,8 +901,8 @@ class _MainShellState extends State<MainShell> {
                   ),
                 ),
               ),
-              _navItem(2, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
-              _navItem(3, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
+              _navItem(1, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
+              _navItem(2, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
             ]),
           ),
         ),
