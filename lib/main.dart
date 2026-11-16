@@ -4190,6 +4190,10 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       if (!mounted) return;
       final controller = TextEditingController();
+      var page = 0;
+      var hasMore = result['hasMore'] == true;
+      var loadingMore = false;
+      String? loadError;
       var sending = false;
       String? submitError;
       await showModalBottomSheet<void>(
@@ -4228,53 +4232,93 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                     child: items.isEmpty
                         ? const Center(
                             child: Column(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(Icons.air_rounded, color: ppBlueLight, size: 36),
+                              Icon(Icons.flight_rounded, color: ppBlueLight, size: 36),
                               SizedBox(height: 9),
                               PlaneText('Ainda não há respostas.', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
                               SizedBox(height: 4),
                               PlaneText('Sê a primeira pessoa a responder a este avião.', style: TextStyle(color: Colors.white45, fontSize: 11)),
                             ]),
                           )
-                        : ListView.separated(
-                            itemCount: items.length,
+                        : ListView.builder(
+                            itemCount: items.length + (hasMore ? 1 : 0),
                             padding: const EdgeInsets.only(bottom: 12),
-                            separatorBuilder: (_, __) => const SizedBox(height: 9),
                             itemBuilder: (context, index) {
+                              if (index == items.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  child: Column(children: [
+                                    if (loadError != null)
+                                      PlaneText(loadError!, style: const TextStyle(color: Color(0xFFFFA7A7), fontSize: 10)),
+                                    TextButton.icon(
+                                      onPressed: loadingMore ? null : () async {
+                                        setSheetState(() { loadingMore = true; loadError = null; });
+                                        try {
+                                          final nextPage = await PaperPlaneApi.instance.getPublicReplies(id, page: page + 1);
+                                          final older = (nextPage['items'] as List<dynamic>? ?? const [])
+                                              .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+                                          if (!sheetContext.mounted) return;
+                                          setSheetState(() {
+                                            items.addAll(older);
+                                            page += 1;
+                                            hasMore = nextPage['hasMore'] == true;
+                                            loadingMore = false;
+                                          });
+                                        } catch (error) {
+                                          if (!sheetContext.mounted) return;
+                                          setSheetState(() {
+                                            loadingMore = false;
+                                            loadError = error is PaperPlaneApiException
+                                                ? error.message
+                                                : 'Não foi possível carregar mais respostas.';
+                                          });
+                                        }
+                                      },
+                                      icon: loadingMore
+                                          ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: ppBlueLight))
+                                          : const Icon(Icons.expand_more_rounded, size: 17),
+                                      label: PlaneText(loadingMore ? 'A carregar…' : 'Carregar mais respostas'),
+                                    ),
+                                  ]),
+                                );
+                              }
                               final item = items[index];
                               final name = item['pilot_name']?.toString() ?? 'Copiloto';
                               final handle = item['pilot_handle']?.toString();
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  PilotAvatar(fallbackLabel: name, size: 36),
-                                  const SizedBox(width: 9),
-                                  Expanded(
-                                    child: Container(
-                                      padding: const EdgeInsets.all(11),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF10213A),
-                                        borderRadius: BorderRadius.circular(15),
-                                        border: Border.all(color: const Color(0x3348BDF5)),
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(children: [
-                                            Expanded(
-                                              child: PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                                            ),
-                                            if (handle != null && handle.isNotEmpty)
-                                              PlaneText('@$handle', style: const TextStyle(color: ppBlueLight, fontSize: 9)),
-                                          ]),
-                                          const SizedBox(height: 5),
-                                          PlaneText(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white85, fontSize: 12, height: 1.4)),
-                                          const SizedBox(height: 5),
-                                          PlaneText(_timeAgo(item['created_at']?.toString()), style: const TextStyle(color: Colors.white38, fontSize: 9)),
-                                        ],
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 9),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    PilotAvatar(fallbackLabel: name, size: 36),
+                                    const SizedBox(width: 9),
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.all(11),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10213A),
+                                          borderRadius: BorderRadius.circular(15),
+                                          border: Border.all(color: const Color(0x3348BDF5)),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(children: [
+                                              Expanded(
+                                                child: PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                                              ),
+                                              if (handle != null && handle.isNotEmpty)
+                                                PlaneText('@$handle', style: const TextStyle(color: ppBlueLight, fontSize: 9)),
+                                            ]),
+                                            const SizedBox(height: 5),
+                                            PlaneText(item['message_text']?.toString() ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                                            const SizedBox(height: 5),
+                                            PlaneText(_timeAgo(item['created_at']?.toString()), style: const TextStyle(color: Colors.white38, fontSize: 9)),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               );
                             },
                           ),
