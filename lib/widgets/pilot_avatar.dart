@@ -56,7 +56,7 @@ class _PilotAvatarState extends State<PilotAvatar> {
   String _initials() {
     final label = (widget.fallbackLabel ?? '').trim();
     if (label.isEmpty) return 'PP';
-    final parts = label.split(RegExp(r'\\s+')).where((part) => part.isNotEmpty).toList();
+    final parts = label.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
     if (parts.length >= 2) {
       return String.fromCharCode(parts.first.runes.first) +
           String.fromCharCode(parts[1].runes.first);
@@ -97,7 +97,7 @@ class _PilotAvatarState extends State<PilotAvatar> {
 
   @override
   Widget build(BuildContext context) {
-    final border = widget.borderColor ?? const Color(0x99F0CE7C);
+    final border = widget.borderColor ?? const Color(0x9957D6FF);
     return FutureBuilder<String?>(
       future: _image,
       builder: (context, snapshot) {
