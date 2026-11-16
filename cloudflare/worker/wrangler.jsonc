@@ -11,7 +11,8 @@
   },
   "vars": {
     "FIREBASE_PROJECT_ID": "studio-7819491277-fa972",
-    "APP_ORIGINS": "https://REPLACE_WITH_YOUR_PAGES_DOMAIN"
+    "APP_ORIGINS": "https://REPLACE_WITH_YOUR_PAGES_DOMAIN",
+    "IMAGEKIT_URL_ENDPOINT": "https://ik.imagekit.io/rvvqacl3z"
   },
   "ai": { "binding": "AI" },
   "d1_databases": [
