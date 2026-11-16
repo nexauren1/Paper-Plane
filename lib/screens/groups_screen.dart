@@ -169,7 +169,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
       children: [
         Row(children: [
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(_gt('Comunidades'), style: TextStyle(color: _white, fontSize: 29, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
             SizedBox(height: 3),
             Text(_gt('Encontra o teu lugar no mundo.'), style: TextStyle(color: Colors.white60, fontSize: 12)),
