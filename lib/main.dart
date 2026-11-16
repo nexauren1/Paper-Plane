@@ -4427,7 +4427,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(13, 13, 10, 10),
                     child: Row(children: [
-                      PilotAvatar(url: message['avatar_url']?.toString(), size: 42),
+                      PilotAvatar(url: message['avatar_url']?.toString(), fallbackLabel: message['pilot_name']?.toString(), size: 42),
                       const SizedBox(width: 10),
                       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         PlaneText(message['pilot_name']?.toString() ?? 'Copiloto', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
@@ -4568,7 +4568,7 @@ class _ProfilePageState extends State<ProfilePage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PilotAvatar(url: controller.text.trim(), size: 88),
+                PilotAvatar(url: controller.text.trim(), fallbackLabel: _profile['pilot_name']?.toString(), size: 88),
                 const SizedBox(height: 14),
                 TextField(
                   controller: controller,
@@ -4671,7 +4671,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      PilotAvatar(url: avatarUrl, size: 76),
+                      PilotAvatar(url: avatarUrl, fallbackLabel: name, size: 76),
                       Positioned(
                         right: -1,
                         bottom: -1,
