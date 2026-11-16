@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
-import '../widgets/pilot_avatar.dart';
 
 const Color _setupNavy = Color(0xFF071225);
 const Color _setupGold = Color(0xFFF0CE7C);
@@ -21,7 +20,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
   final _formKey = GlobalKey<FormState>();
   final _pilotName = TextEditingController();
   final _pilotHandle = TextEditingController();
-  final _avatarUrl = TextEditingController();
   DateTime? _selectedBirthDate;
   final _birthDateDisplay = TextEditingController();
   Timer? _handleDebounce;
@@ -60,7 +58,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
     _pilotName.removeListener(_suggestHandleFromName);
     _pilotName.dispose();
     _pilotHandle.dispose();
-    _avatarUrl.dispose();
     _birthDateDisplay.dispose();
     super.dispose();
   }
@@ -229,7 +226,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
         birthDate: _selectedBirthDate!,
         countryCode: _countryCode!,
         language: _preferredLanguage,
-        avatarUrl: _avatarUrl.text.trim().isEmpty ? null : _avatarUrl.text.trim(),
       );
       PaperPlaneLocale.setLanguage(_preferredLanguage);
       if (!mounted) return;
@@ -364,31 +360,6 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const PlaneText('Foto de perfil', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _setupGoldLight)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      PilotAvatar(url: _avatarUrl.text.trim(), size: 58),
-                      const SizedBox(width: 11),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _avatarUrl,
-                          keyboardType: TextInputType.url,
-                          autocorrect: false,
-                          onChanged: (_) => setState(() {}),
-                          decoration: _decoration('Link da foto ou perfil público', Icons.link_rounded, hint: 'https://…'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 5),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8),
-                    child: PlaneText(
-                      'Cola um link HTTPS de uma imagem ou de um perfil público. Tentaremos encontrar a foto automaticamente. Não precisas de carregar ficheiros.',
-                      style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
-                    ),
-                  ),
                   const SizedBox(height: 18),
                   TextFormField(
                     readOnly: true,
