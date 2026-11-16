@@ -106,19 +106,19 @@ class _GroupsScreenState extends State<GroupsScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(_gt('Criar comunidade'), style: TextStyle(color: _white, fontSize: 22, fontWeight: FontWeight.w900)),
+              Text(_gt('Criar comunidade'), style: TextStyle(color: _white, fontSize: 22, fontWeight: FontWeight.w900)),
               const SizedBox(height: 5),
-              const Text(_gt('Cria um espaço para pessoas com interesses em comum.'), style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text(_gt('Cria um espaço para pessoas com interesses em comum.'), style: TextStyle(color: Colors.white60, fontSize: 12)),
               const SizedBox(height: 17),
-              TextField(controller: name, maxLength: 40, style: const TextStyle(color: _white), decoration: _decoration('Nome da comunidade')),
+              TextField(controller: name, maxLength: 40, style: const TextStyle(color: _white), decoration: _decoration(_gt('Nome da comunidade'))),
               const SizedBox(height: 7),
-              TextField(controller: description, maxLength: 160, maxLines: 3, style: const TextStyle(color: _white), decoration: _decoration('Descrição')),
+              TextField(controller: description, maxLength: 160, maxLines: 3, style: const TextStyle(color: _white), decoration: _decoration(_gt('Descrição'))),
               const SizedBox(height: 7),
               DropdownButtonFormField<String>(
                 value: category,
                 dropdownColor: _panel,
                 style: const TextStyle(color: _white),
-                decoration: _decoration('Categoria'),
+                decoration: _decoration(_gt('Categoria')),
                 items: _categories.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(_gt(entry.value)))).toList(),
                 onChanged: saving ? null : (value) { if (value != null) update(() => category = value); },
               ),
@@ -215,13 +215,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
         ])),
         const SizedBox(height: 18),
         Row(children: [
-          const Expanded(child: Text(_gt('Explorar comunidades'), style: TextStyle(color: _white, fontSize: 17, fontWeight: FontWeight.w900))),
+          Expanded(child: Text(_gt('Explorar comunidades'), style: TextStyle(color: _white, fontSize: 17, fontWeight: FontWeight.w900))),
           Text(_groups.length.toString() + ' ' + _gt('encontradas'), style: const TextStyle(color: Colors.white38, fontSize: 10)),
         ]),
         const SizedBox(height: 10),
         if (_loading) const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator(color: _cyan)))
-        else if (_error != null) _EmptyState(icon: Icons.cloud_off_rounded, title: 'Sem ligação ao céu', detail: _error!, action: _refresh)
-        else if (_groups.isEmpty) _EmptyState(icon: Icons.travel_explore_rounded, title: 'Ainda não há comunidades', detail: 'Cria a primeira comunidade e convida outros copilotos a participar.', action: _create)
+        else if (_error != null) _EmptyState(icon: Icons.cloud_off_rounded, title: _gt('Sem ligação ao céu'), detail: _error!, action: _refresh)
+        else if (_groups.isEmpty) _EmptyState(icon: Icons.travel_explore_rounded, title: _gt('Ainda não há comunidades'), detail: _gt('Cria a primeira comunidade e convida outros copilotos a participar.'), action: _create)
         else for (final group in _groups) _GroupCard(
           group: group,
           onOpen: () => _open(group),
@@ -434,7 +434,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               const SizedBox(height: 4),
               Text(_group['description']?.toString() ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.35)),
               const SizedBox(height: 5),
-              Text((_group['member_count'] ?? 0).toString() + ' membros · ' + (_categories[category] ?? 'Geral'),
+              Text((_group['member_count'] ?? 0).toString() + ' ' + _gt('membros') + ' · ' + _gt(_categories[category] ?? 'Geral'),
                 style: const TextStyle(color: _cyan, fontSize: 10, fontWeight: FontWeight.w700)),
             ])),
           ]),
@@ -522,7 +522,7 @@ String _ago(String? value) {
 }
 
 InputDecoration _decoration(String hint) => InputDecoration(
-  hintText: hint,
+  hintText: PaperPlaneLocale.translate(hint),
   hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
   filled: true,
   fillColor: const Color(0xFF071326),
@@ -567,9 +567,9 @@ class _EmptyState extends StatelessWidget {
     child: Column(children: [
       Icon(icon, color: _cyan, size: 36),
       const SizedBox(height: 10),
-      Text(title, style: const TextStyle(color: _white, fontWeight: FontWeight.w900, fontSize: 16)),
+      Text(PaperPlaneLocale.translate(title), style: const TextStyle(color: _white, fontWeight: FontWeight.w900, fontSize: 16)),
       const SizedBox(height: 6),
-      Text(detail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+      Text(PaperPlaneLocale.translate(detail), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
       const SizedBox(height: 12),
       TextButton.icon(onPressed: action, icon: const Icon(Icons.refresh_rounded), label: Text(_gt('Tentar novamente'))),
     ]),
