@@ -4642,7 +4642,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                             const Icon(Icons.flight_takeoff_rounded, color: ppBlueLight, size: 13),
                             const SizedBox(width: 6),
                             PlaneText(
-                              'AVIÃO PÚBLICO · ${(message['plane_model'] ?? 'DART').toString()}',
+                              '${PaperPlaneLocale.translate('AVIÃO PÚBLICO')} · ${(message['plane_model'] ?? 'DART').toString()}',
                               style: const TextStyle(color: ppBlueLight, fontSize: 8, letterSpacing: 0.9, fontWeight: FontWeight.w900),
                             ),
                           ]),
