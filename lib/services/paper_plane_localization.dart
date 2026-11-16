@@ -524,7 +524,6 @@ class PaperPlaneLocale {
     'A autenticar a tua conta…': ['Signing in to your account…', 'Iniciando sesión en tu cuenta…', 'Connexion à ton compte…', 'Anmeldung bei deinem Konto…'],
     'Criar perfil de copiloto': ['Create co-pilot profile', 'Crear perfil de copiloto', 'Créer un profil de copilote', 'Co-Pilot-Profil erstellen'],
     'Escolhe a tua identidade': ['Choose your identity', 'Elige tu identidad', 'Choisis ton identité', 'Wähle deine Identität'],
-    'Foto de perfil': ['Profile photo', 'Foto de perfil', 'Photo de profil', 'Profilbild'],
     'Constrói o teu primeiro avião': ['Build your first plane', 'Construye tu primer avión', 'Construis ton premier avion', 'Baue deinen ersten Papierflieger'],
     'Toda a viagem começa com uma dobra.': [
       'Every journey starts with a fold.', 'Cada viaje empieza con un pliegue.',
@@ -731,7 +730,6 @@ class PaperPlaneLocale {
     'Escreve algo gentil...': ['Write something kind...', 'Escribe algo amable...', 'Écris quelque chose de gentil…', 'Schreibe etwas Freundliches…'],
     'Escreve uma resposta gentil…': ['Write a kind reply…', 'Escribe una respuesta amable…', 'Écris une réponse gentille…', 'Schreibe eine freundliche Antwort…'],
     'Escreve uma resposta…': ['Write a reply…', 'Escribe una respuesta…', 'Écris une réponse…', 'Schreibe eine Antwort…'],
-    'Link da foto ou perfil público': ['Photo or public profile link', 'Enlace de foto o perfil público', 'Lien vers une photo ou un profil public', 'Link zum Foto oder öffentlichen Profil'],
     'Enviar mensagem em papel...': ['Send a paper message...', 'Enviar mensaje en papel...', 'Envoyer un message papier…', 'Papiernachricht senden…'],
     'Palavra-passe atual': ['Current password', 'Contraseña actual', 'Mot de passe actuel', 'Aktuelles Passwort'],
     'Pesquisar @nome_de_copiloto': ['Search @co-pilot-name', 'Buscar @nombre-de-copiloto', 'Rechercher @nom-de-copilote', '@Co-Pilot-Name suchen'],
@@ -1121,7 +1119,6 @@ class PaperPlaneLocale {
     'Eliminar da minha Caixa': ['Remove from my inbox', 'Eliminar de mi bandeja', 'Retirer de ma boîte de réception', 'Aus meinem Posteingang entfernen'],
     'Remetente bloqueado.': ['Sender blocked.', 'Remitente bloqueado.', 'Expéditeur bloqué.', 'Absender blockiert.'],
     'Bloquear remetente': ['Block sender', 'Bloquear remitente', 'Bloquer l’expéditeur', 'Absender blockieren'],
-    'A tua foto de perfil': ['Your profile photo', 'Tu foto de perfil', 'Ta photo de profil', 'Dein Profilbild'],
     'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.': [
       'You can use an image link or a public page. Paper Plane will try to find the photo automatically.',
       'Puedes usar un enlace a una imagen o a una página pública. Paper Plane intentará encontrar la foto automáticamente.',
