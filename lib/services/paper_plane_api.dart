@@ -107,6 +107,9 @@ class PaperPlaneApi {
         'MODERATION_TEMPORARILY_UNAVAILABLE' => 'A verificação de segurança está temporariamente indisponível. A resposta não foi publicada; tenta novamente mais tarde.',
         'MESSAGE_REQUIRES_REVIEW' => 'Esta mensagem não passou na verificação de segurança. Reformula o texto e tenta novamente.',
         'REPLY_LIMIT_REACHED' => 'Este avião já atingiu o limite de cinco respostas públicas.',
+        'REPLIES_DISABLED' => 'O autor desativou as respostas neste avião.',
+        'REPLY_UNAVAILABLE' => 'Não é possível responder a este avião.',
+
         'DUPLICATE_MESSAGE' => 'Esta mensagem já foi enviada recentemente.',
         'RATE_LIMIT_EXCEEDED' => 'Atingiste o limite de mensagens por hora. Tenta novamente mais tarde.',
         'PROFILE_SETUP_REQUIRED' => 'Completa primeiro o perfil do piloto.',
@@ -173,12 +176,10 @@ class PaperPlaneApi {
     required DateTime birthDate,
     required String countryCode,
     required String language,
-    String? avatarUrl,
   }) =>
       _request('/v1/profile', method: 'POST', body: {
         'pilotName': pilotName,
         'pilotHandle': pilotHandle,
-        'avatarUrl': avatarUrl,
         'birthDate': '${birthDate.year.toString().padLeft(4, '0')}-${birthDate.month.toString().padLeft(2, '0')}-${birthDate.day.toString().padLeft(2, '0')}',
         'countryCode': countryCode,
         'language': language,
