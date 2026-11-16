@@ -2692,9 +2692,6 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const countryCode = text(body.countryCode, 2).toUpperCase();
     const preferredLanguage = normalizeLanguage(body.language) ?? "pt";
     const language = preferredLanguage === "en" ? "en" : "pt";
-    const avatarInput = text(body.avatarUrl, 900);
-    const avatarUrl = avatarInput ? safePublicHttpsUrl(avatarInput)?.toString() : null;
-    if (avatarInput && !avatarUrl) return json({ error: "INVALID_AVATAR_URL", message: "Use um link HTTPS público para a tua foto ou perfil." }, 400);
     if (pilotName.length < 2) return json({ error: "INVALID_PILOT_NAME" }, 400);
     if (!isValidPilotHandle(handle)) return json({ error: "INVALID_PILOT_HANDLE" }, 400);
     if (!birthDateMatch) return json({ error: "INVALID_BIRTH_DATE" }, 400);
@@ -2721,8 +2718,8 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (!COUNTRY_CENTROIDS[countryCode]) return json({ error: "INVALID_COUNTRY" }, 400);
     try {
       await env.DB.prepare(
-        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = ?, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
-      ).bind(pilotName, handle, avatarUrl, birthYear, declaredAgeBand, isoNow(), countryCode, language, preferredLanguage, isoNow(), uid).run();
+        "UPDATE users SET pilot_name = ?, pilot_handle = ?, avatar_url = NULL, birth_year = ?, declared_age_band = ?, age_declaration_at = ?, country_code = ?, language = ?, preferred_language = ?, profile_completed = 1, updated_at = ? WHERE uid = ?",
+      ).bind(pilotName, handle, birthYear, declaredAgeBand, isoNow(), countryCode, language, preferredLanguage, isoNow(), uid).run();
     } catch (error) {
       if (String(error).toLowerCase().includes("unique")) {
         return json({ error: "PILOT_HANDLE_TAKEN", message: "This pilot name is already in use." }, 409);
@@ -2749,14 +2746,10 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
   if (method === "POST" && path === "/v1/profile/avatar") {
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body) return json({ error: "INVALID_JSON" }, 400);
-    const input = text(body.avatarUrl, 900);
-    const avatarUrl = input ? safePublicHttpsUrl(input)?.toString() : null;
-    if (input && !avatarUrl) return json({ error: "INVALID_AVATAR_URL" }, 400);
-    await env.DB.prepare("UPDATE users SET avatar_url = ?, updated_at = ? WHERE uid = ?")
-      .bind(avatarUrl, isoNow(), uid).run();
-    return json({ ok: true, avatarUrl });
+    return json({
+      error: "PROFILE_PHOTOS_DISABLED",
+      message: "O Paper Plane utiliza avatares gráficos criados automaticamente no aplicativo.",
+    }, 410);
   }
 
   if (method === "GET" && path === "/v1/link-preview") {
