@@ -418,8 +418,8 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> likeOpenSkyMessage(String airplaneId) =>
       _request('/v1/open-sky/$airplaneId/like', method: 'POST');
 
-  Future<Map<String, dynamic>> getPublicReplies(String airplaneId) =>
-      _request('/v1/open-sky/$airplaneId/replies');
+  Future<Map<String, dynamic>> getPublicReplies(String airplaneId, {int page = 0}) =>
+      _request('/v1/open-sky/$airplaneId/replies?page=${page < 0 ? 0 : page}');
 
   Future<Map<String, dynamic>> addPublicReply(String airplaneId, String message) =>
       _request('/v1/open-sky/$airplaneId/replies', method: 'POST', body: {'message': message});
