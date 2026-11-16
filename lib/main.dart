@@ -2449,6 +2449,284 @@ class GlobeFlightPainter extends CustomPainter {
       oldDelegate.pulse != pulse;
 }
 
+
+class AnimatedFleetGlobe extends StatefulWidget {
+  const AnimatedFleetGlobe({super.key, required this.routes});
+  final List<Map<String, dynamic>> routes;
+
+  @override
+  State<AnimatedFleetGlobe> createState() => _AnimatedFleetGlobeState();
+}
+
+class _AnimatedFleetGlobeState extends State<AnimatedFleetGlobe>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _motion = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 22),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _motion.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _motion,
+    builder: (context, _) => CustomPaint(
+      painter: FleetGlobePainter(
+        routes: widget.routes,
+        rotation: math.sin(_motion.value * math.pi * 2) * 7,
+        pulse: (math.sin(_motion.value * math.pi * 2 * 1.3) + 1) / 2,
+      ),
+      child: const SizedBox.expand(),
+    ),
+  );
+}
+
+class FleetGlobePainter extends CustomPainter {
+  const FleetGlobePainter({required this.routes, required this.rotation, required this.pulse});
+  final List<Map<String, dynamic>> routes;
+  final double rotation;
+  final double pulse;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final side = math.min(size.width, size.height);
+    final center = Offset(size.width * 0.52, size.height * 0.50);
+    final radius = side * 0.39;
+    if (radius <= 0) return;
+
+    final globeRect = Rect.fromCircle(center: center, radius: radius);
+    final clip = Path()..addOval(globeRect);
+    canvas.drawCircle(
+      center,
+      radius + 7,
+      Paint()
+        ..color = const Color(0xFF2DABFF).withOpacity(0.12 + pulse * 0.08)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 17),
+    );
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(-0.35, -0.38),
+          radius: 1.08,
+          colors: [Color(0xFF287FC1), Color(0xFF0D376C), Color(0xFF06152F)],
+          stops: [0, 0.55, 1],
+        ).createShader(globeRect),
+    );
+
+    canvas.save();
+    canvas.clipPath(clip);
+    final helper = const GlobeFlightPainter();
+    const centerLat = 12.0;
+    final centerLng = rotation;
+
+    // Curved latitude and longitude lines give the sphere depth.
+    for (var latitude = -60; latitude <= 60; latitude += 30) {
+      final y = center.dy - math.sin(latitude * math.pi / 180) * radius * 0.82;
+      final width = radius * 2 * math.cos(latitude * math.pi / 180);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(center.dx, y), width: width, height: radius * 0.18),
+        Paint()
+          ..color = const Color(0xFF65CFFF).withOpacity(0.10)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.7,
+      );
+    }
+    for (var longitude = -60; longitude <= 60; longitude += 30) {
+      canvas.save();
+      canvas.translate(center.dx, center.dy);
+      canvas.rotate(longitude * math.pi / 180);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: radius * 0.58, height: radius * 2),
+        Paint()
+          ..color = const Color(0xFF65CFFF).withOpacity(0.08)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.7,
+      );
+      canvas.restore();
+    }
+
+    // Reuse the existing world silhouette data from the flight tracker.
+    for (final continent in GlobeFlightPainter._continents) {
+      final path = Path();
+      var drawing = false;
+      for (final coordinate in continent) {
+        final projected = helper._project(
+          coordinate.dy, coordinate.dx, centerLat, centerLng, center, radius * 0.94,
+        );
+        if (projected == null) {
+          drawing = false;
+          continue;
+        }
+        if (!drawing) {
+          path.moveTo(projected.dx, projected.dy);
+          drawing = true;
+        } else {
+          path.lineTo(projected.dx, projected.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(path, Paint()..color = const Color(0xFF55B9EF).withOpacity(0.30));
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = const Color(0xFF7DDCFF).withOpacity(0.14)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.65,
+      );
+    }
+
+    for (final item in routes.take(24)) {
+      final route = item['route'] is Map ? Map<String, dynamic>.from(item['route'] as Map) : null;
+      final rawPoints = route?['points'];
+      if (rawPoints is! List || rawPoints.length < 2) continue;
+      final projectedPoints = <Offset?>[];
+      for (final raw in rawPoints) {
+        if (raw is! Map || raw['lat'] is! num || raw['lng'] is! num) {
+          projectedPoints.add(null);
+          continue;
+        }
+        projectedPoints.add(helper._project(
+          (raw['lat'] as num).toDouble(),
+          (raw['lng'] as num).toDouble(),
+          centerLat, centerLng, center, radius * 0.98,
+        ));
+      }
+
+      final path = Path();
+      var drawing = false;
+      for (final point in projectedPoints) {
+        if (point == null) {
+          drawing = false;
+          continue;
+        }
+        if (!drawing) {
+          path.moveTo(point.dx, point.dy);
+          drawing = true;
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      final status = item['status']?.toString() ?? '';
+      final routeColor = status == 'FLYING'
+          ? const Color(0xFF65E9FF)
+          : const Color(0xFF8CAEFF);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = routeColor.withOpacity(0.28)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      );
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = routeColor.withOpacity(status == 'FLYING' ? 0.88 : 0.50)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..strokeCap = StrokeCap.round,
+      );
+
+      final rawProgress = item['progress'];
+      final progress = rawProgress is num ? rawProgress.toDouble().clamp(0.0, 1.0) : 0.0;
+      final index = (progress * (projectedPoints.length - 1)).round().clamp(0, projectedPoints.length - 1);
+      Offset? marker;
+      for (var offset = 0; offset < projectedPoints.length; offset++) {
+        final candidate = projectedPoints[(index - offset).clamp(0, projectedPoints.length - 1)];
+        if (candidate != null) {
+          marker = candidate;
+          break;
+        }
+      }
+      if (marker == null) continue;
+      canvas.drawCircle(
+        marker,
+        status == 'FLYING' ? 13 + pulse * 2 : 8,
+        Paint()
+          ..color = routeColor.withOpacity(status == 'FLYING' ? 0.28 : 0.16)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+      canvas.drawCircle(marker, 2.5, Paint()..color = Colors.white);
+
+      final before = projectedPoints[(index - 1).clamp(0, projectedPoints.length - 1)] ?? marker;
+      final after = projectedPoints[(index + 1).clamp(0, projectedPoints.length - 1)] ?? marker;
+      final angle = math.atan2(after.dy - before.dy, after.dx - before.dx);
+      canvas.save();
+      canvas.translate(marker.dx, marker.dy);
+      canvas.rotate(angle + math.pi / 2);
+      final plane = Path()
+        ..moveTo(0, -8)
+        ..lineTo(5.2, 6)
+        ..lineTo(0, 3.8)
+        ..lineTo(-5.2, 6)
+        ..close();
+      canvas.drawPath(plane, Paint()..color = routeColor);
+      canvas.drawPath(
+        plane,
+        Paint()
+          ..color = Colors.white.withOpacity(0.85)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.7,
+      );
+      canvas.restore();
+    }
+    canvas.restore();
+
+    // The moving orbital beacon keeps the globe alive when the account has no routes yet.
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(-0.28 + rotation * math.pi / 180);
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset.zero, width: radius * 2.18, height: radius * 0.56),
+      Paint()
+        ..color = const Color(0xFF36D8FF).withOpacity(0.48)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    final phase = pulse * math.pi * 2;
+    final beacon = Offset(math.cos(phase) * radius * 1.09, math.sin(phase) * radius * 0.28);
+    canvas.drawCircle(
+      beacon, 8,
+      Paint()
+        ..color = const Color(0xFF42DCFF).withOpacity(0.3)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+    );
+    canvas.drawCircle(beacon, 2.5, Paint()..color = const Color(0xFFB8F7FF));
+    canvas.restore();
+
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = const Color(0xFF85E9FF).withOpacity(0.70)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius + 4),
+      -math.pi * 0.82,
+      math.pi * 0.42,
+      false,
+      Paint()
+        ..color = const Color(0xFF53DFFF).withOpacity(0.72)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant FleetGlobePainter oldDelegate) =>
+      oldDelegate.routes != routes ||
+      oldDelegate.rotation != rotation ||
+      oldDelegate.pulse != pulse;
+}
+
 class FlightScreen extends StatefulWidget {
   const FlightScreen({super.key, required this.airplaneId});
   final String airplaneId;
@@ -3854,6 +4132,7 @@ class OpenSkyPage extends StatefulWidget {
 
 class _OpenSkyPageState extends State<OpenSkyPage> {
   List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _atlasRoutes = [];
   bool _loading = true;
   String? _error;
   String? _selectedCountry;
@@ -3868,11 +4147,18 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
       await PaperPlaneAuth.requireSignedInPilot();
-      final result = await PaperPlaneApi.instance.getOpenSky(country: _selectedCountry);
+      final results = await Future.wait([
+        PaperPlaneApi.instance.getOpenSky(country: _selectedCountry),
+        PaperPlaneApi.instance.getSkyAtlas(),
+      ]);
+      final result = results[0];
+      final atlas = results[1];
       final messages = (result['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      final routes = (atlas['routes'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       if (!mounted) return;
-      setState(() { _messages = messages; _loading = false; });
+      setState(() { _messages = messages; _atlasRoutes = routes; _loading = false; });
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -4028,7 +4314,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
                 top: -6,
                 width: 230,
                 height: 210,
-                child: IgnorePointer(child: AnimatedGlobeFlight(route: null, progress: 0)),
+                child: IgnorePointer(child: AnimatedFleetGlobe(routes: _atlasRoutes)),
               ),
               Positioned(
                 left: 17,
@@ -4517,6 +4803,7 @@ class SkyAtlasScreen extends StatefulWidget {
 class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _countries = [];
+  List<Map<String, dynamic>> _routes = [];
   Map<String, dynamic> _models = {};
   bool _loading = true;
   String? _error;
@@ -4541,6 +4828,8 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
         _stats = result['stats'] as Map<String, dynamic>? ?? {};
         _models = (_stats['models'] as Map?)?.cast<String, dynamic>() ?? {};
         _countries = countries;
+        _routes = (result['routes'] as List<dynamic>? ?? const [])
+            .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
         _loading = false;
       });
     } catch (error) {
@@ -4601,6 +4890,24 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 ]),
               )
             else ...[
+              Container(
+                height: 245,
+                margin: const EdgeInsets.only(bottom: 15),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF07172F),
+                  borderRadius: BorderRadius.circular(23),
+                  border: Border.all(color: ppBlueLight.withOpacity(0.25)),
+                  boxShadow: [BoxShadow(color: ppBlue.withOpacity(0.16), blurRadius: 18)],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(children: [
+                  Positioned.fill(child: AnimatedFleetGlobe(routes: _routes)),
+                  const Positioned(left: 16, bottom: 14, child: PlaneText(
+                    'ROTAS DOS TEUS AVIÕES',
+                    style: TextStyle(color: ppBlueLight, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w900),
+                  )),
+                ]),
+              ),
               GlassPanel(
                 highlight: true,
                 child: Column(children: [
