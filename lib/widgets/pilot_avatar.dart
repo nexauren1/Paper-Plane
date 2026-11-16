@@ -36,7 +36,7 @@ class PilotAvatar extends StatelessWidget {
   }
 
   String _initials(String value) {
-    final parts = value.trim().split(RegExp(r'\\s+')).where((part) => part.isNotEmpty).toList();
+    final parts = value.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
     if (parts.isEmpty) return '';
     if (parts.length >= 2) {
       return String.fromCharCode(parts.first.runes.first) +
