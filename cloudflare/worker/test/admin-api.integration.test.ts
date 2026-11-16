@@ -335,6 +335,22 @@ describe("Paper Plane Admin API integration", () => {
     await DB.prepare("UPDATE users SET pilot_handle = ? WHERE uid = ?").bind("sky_responder", "reply-pilot").run();
     await seedPlane("replyable-plane", "reply-author", "PUBLIC", "DELIVERED", "SAFE");
     await DB.prepare("INSERT INTO public_sky(airplane_id) VALUES (?)").bind("replyable-plane").run();
+    await DB.prepare(
+      "INSERT INTO friendships(id, requester_uid, addressee_uid, status) VALUES (?, ?, ?, 'ACCEPTED')",
+    ).bind("reply-friendship", "reply-pilot", "reply-author").run();
+
+    const friendsFeed = await api("reply-pilot", "GET", "/v1/open-sky?feed=FRIENDS");
+    expect(friendsFeed.status).toBe(200);
+    expect(friendsFeed.data.items.some((item: any) => item.id === "replyable-plane")).toBe(true);
+
+    const liked = await api("reply-pilot", "POST", "/v1/open-sky/replyable-plane/like");
+    expect(liked.status).toBe(200);
+    expect(liked.data.liked).toBe(true);
+    const likedFeed = await api("reply-pilot", "GET", "/v1/open-sky?feed=POPULAR");
+    expect(likedFeed.data.items.find((item: any) => item.id === "replyable-plane")?.is_liked).toBe(1);
+    const unliked = await api("reply-pilot", "POST", "/v1/open-sky/replyable-plane/like");
+    expect(unliked.status).toBe(200);
+    expect(unliked.data.liked).toBe(false);
 
     await seedPlane("closed-replies-plane", "reply-author", "PUBLIC", "DELIVERED", "SAFE");
     await DB.prepare("UPDATE airplanes SET allow_reply = 0 WHERE id = ?").bind("closed-replies-plane").run();
