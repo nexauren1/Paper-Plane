@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
+import '../widgets/pilot_avatar.dart';
 
 const Color _setupNavy = Color(0xFF071225);
 const Color _setupGold = Color(0xFFF0CE7C);
@@ -300,16 +301,23 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                       borderRadius: BorderRadius.circular(22),
                       border: Border.all(color: _setupGold.withOpacity(0.35)),
                     ),
-                    child: const Column(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.flight_takeoff_rounded, color: _setupGoldLight, size: 34),
-                        SizedBox(height: 10),
-                        PlaneText('Escolhe a tua identidade', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
-                        SizedBox(height: 6),
-                        PlaneText(
-                          'O teu nome de copiloto será único e aparecerá com @. A tua data de nascimento é declarada por ti. O servidor calcula a faixa etária, mas não verifica a tua identidade.',
-                          style: TextStyle(color: Colors.white70, height: 1.45),
+                        PilotAvatar(fallbackLabel: _pilotName.text, size: 62),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: const [
+                              PlaneText('Escolhe a tua identidade', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                              SizedBox(height: 7),
+                              PlaneText(
+                                'O teu nome e o teu @nome criam a tua identidade no Paper Plane. O avatar é gerado no aplicativo; não precisas de fotografia.',
+                                style: TextStyle(color: Colors.white70, height: 1.4, fontSize: 12),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -318,6 +326,7 @@ class _PilotProfileSetupScreenState extends State<PilotProfileSetupScreen> {
                   TextFormField(
                     controller: _pilotName,
                     textCapitalization: TextCapitalization.words,
+                    onChanged: (_) => setState(() {}),
                     maxLength: 40,
                     validator: (value) => (value?.trim().length ?? 0) < 2 ? 'Introduz um nome com pelo menos 2 caracteres.' : null,
                     decoration: _decoration('Nome de copiloto', Icons.person_outline_rounded, hint: 'Como queres ser chamado?'),
