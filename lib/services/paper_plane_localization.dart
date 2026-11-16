@@ -278,7 +278,6 @@ class PaperPlaneLocale {
     'Não foi possível concluir esta ação.': ['Could not complete this action.', 'No se pudo completar esta acción.', 'Impossible de terminer cette action.', 'Diese Aktion konnte nicht abgeschlossen werden.'],
     'A mensagem não foi enviada.': ['The message was not sent.', 'No se envió el mensaje.', 'Le message n’a pas été envoyé.', 'Die Nachricht wurde nicht gesendet.'],
     'Não foi possível entrar.': ['Could not join.', 'No se pudo entrar.', 'Impossible de rejoindre.', 'Beitritt fehlgeschlagen.'],
-    'A comunidade e as suas mensagens serão removidas.': ['The community and its messages will be deleted.', 'La comunidad y sus mensajes serán eliminados.', 'La communauté et ses messages seront supprimés.', 'Die Community und ihre Nachrichten werden gelöscht.'],
     'Uma comunidade para conversar, partilhar e descobrir.': ['A community to talk, share and discover.', 'Una comunidad para conversar, compartir y descubrir.', 'Une communauté pour discuter, partager et découvrir.', 'Eine Community zum Reden, Teilen und Entdecken.'],
     'Começar a voar': [
       'Start Flying',
@@ -407,7 +406,6 @@ class PaperPlaneLocale {
     'O avião foi cancelado.': ['The plane was cancelled.', 'El avión se canceló.', 'L’avion a été annulé.', 'Der Papierflieger wurde abgebrochen.'],
     'Eliminar do histórico?': ['Remove from history?', '¿Eliminar del historial?', 'Retirer de l’historique ?', 'Aus dem Verlauf entfernen?'],
     'Manter': ['Keep', 'Mantener', 'Garder', 'Behalten'],
-    'Eliminar': ['Delete', 'Eliminar', 'Supprimer', 'Löschen'],
     'A tua carta está guardada em segurança.': [
       'Your letter is safely stored.', 'Tu carta está guardada de forma segura.',
       'Ta lettre est conservée en sécurité.', 'Dein Brief ist sicher gespeichert.',
@@ -467,7 +465,6 @@ class PaperPlaneLocale {
       'Sois le premier à envoyer un message public au monde.',
       'Sei die erste Person, die eine öffentliche Nachricht in die Welt schickt.',
     ],
-    'Cancelar': ['Cancel', 'Cancelar', 'Annuler', 'Abbrechen'],
     'Remover': ['Remove', 'Quitar', 'Retirer', 'Entfernen'],
     'Guardar': ['Save', 'Guardar', 'Enregistrer', 'Speichern'],
     'Link de convite copiado.': [
@@ -750,7 +747,6 @@ class PaperPlaneLocale {
     'Aceitar': ['Accept', 'Aceptar', 'Accepter', 'Annehmen'],
     'Recusar': ['Decline', 'Rechazar', 'Refuser', 'Ablehnen'],
     'Adicionar emoji': ['Add emoji', 'Añadir emoji', 'Ajouter un emoji', 'Emoji hinzufügen'],
-    'Categoria': ['Category', 'Categoría', 'Catégorie', 'Kategorie'],
     'Assunto': ['Subject', 'Asunto', 'Sujet', 'Betreff'],
     'Descreve o problema': ['Describe the issue', 'Describe el problema', 'Décris le problème', 'Beschreibe das Problem'],
     'O que aconteceu? Em que ecrã? O que esperavas que acontecesse?': [
@@ -984,7 +980,6 @@ class PaperPlaneLocale {
     'Pedidos enviados': ['Sent requests', 'Solicitudes enviadas', 'Demandes envoyées', 'Gesendete Anfragen'],
     'Adicionar': ['Add', 'Añadir', 'Ajouter', 'Hinzufügen'],
     'Pendente': ['Pending', 'Pendiente', 'En attente', 'Ausstehend'],
-    'Todas': ['All', 'Todas', 'Toutes', 'Alle'],
     'Jogar': ['Play', 'Jugar', 'Jouer', 'Spielen'],
     'Missões': ['Missions', 'Misiones', 'Missions', 'Missionen'],
     'Crachás': ['Badges', 'Insignias', 'Badges', 'Abzeichen'],
@@ -1167,7 +1162,6 @@ class PaperPlaneLocale {
       'Vorschau — private Nachrichten sind noch nicht aktiviert.',
     ],
     'Comunicar problema': ['Report a problem', 'Comunicar un problema', 'Signaler un problème', 'Problem melden'],
-    'Sair': ['Exit', 'Salir', 'Quitter', 'Beenden'],
     'Convida amigos para voar': ['Invite friends to fly', 'Invita a tus amigos a volar', 'Invite tes amis à voler', 'Lade Freunde zum Fliegen ein'],
     'Partilha o teu convite e espalha palavras gentis.': [
       'Share your invitation and spread kind words.',
@@ -1241,8 +1235,6 @@ class PaperPlaneLocale {
     'Geografia': ['Geography', 'Geografía', 'Géographie', 'Geografie'],
     'Natureza': ['Nature', 'Naturaleza', 'Nature', 'Natur'],
     'Ciência': ['Science', 'Ciencia', 'Sciences', 'Wissenschaft'],
-    'Tecnologia': ['Technology', 'Tecnología', 'Technologie', 'Technologie'],
-    'Cultura': ['Culture', 'Cultura', 'Culture', 'Kultur'],
     'Desporto': ['Sports', 'Deportes', 'Sport', 'Sport'],
     'Entretenimento': ['Entertainment', 'Entretenimiento', 'Divertissement', 'Unterhaltung'],
     'África do Sul (capital administrativa)': ['South Africa (administrative capital)', 'Sudáfrica (capital administrativa)', 'Afrique du Sud (capitale administrative)', 'Südafrika (Verwaltungshauptstadt)'],
