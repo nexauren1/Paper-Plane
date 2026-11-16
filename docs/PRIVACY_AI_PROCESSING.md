@@ -54,3 +54,6 @@ The account screen provides a JSON export of the profile data, sent and received
 
 The account deletion flow requires recent reauthentication. The Worker removes the account's Paper Plane profile and associated content, relationships, conversations, tickets, reports and device registrations. It retains a one-way SHA-256 hash of the Firebase UID and deletion timestamp to prevent that same identity from silently creating a new Paper Plane account. The mobile app then requests deletion of the Firebase Authentication identity. Users should be told that deletion can take more than one step if the Firebase identity deletion fails after the service data is erased.
 
+
+
+Profile identity uses a pilot name and unique @handle. The application generates the avatar locally from that name; profile photo uploads, external avatar links and photo storage are not part of the product.
