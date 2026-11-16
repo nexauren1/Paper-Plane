@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../services/paper_plane_api.dart';
+import '../services/paper_plane_localization.dart';
 
 const Color _bg = Color(0xFF050B19);
 const Color _panel = Color(0xFF0D1A32);
 const Color _blue = Color(0xFF1677F8);
 const Color _cyan = Color(0xFF56DFFF);
 const Color _white = Color(0xFFF4FAFF);
+
+String _gt(String source) => PaperPlaneLocale.translate(source);
 
 const Map<String, String> _categories = {
   'TECH': 'Tecnologia',
@@ -103,9 +106,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Criar comunidade', style: TextStyle(color: _white, fontSize: 22, fontWeight: FontWeight.w900)),
+              const Text(_gt('Criar comunidade'), style: TextStyle(color: _white, fontSize: 22, fontWeight: FontWeight.w900)),
               const SizedBox(height: 5),
-              const Text('Cria um espaço para pessoas com interesses em comum.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              const Text(_gt('Cria um espaço para pessoas com interesses em comum.'), style: TextStyle(color: Colors.white60, fontSize: 12)),
               const SizedBox(height: 17),
               TextField(controller: name, maxLength: 40, style: const TextStyle(color: _white), decoration: _decoration('Nome da comunidade')),
               const SizedBox(height: 7),
@@ -116,7 +119,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 dropdownColor: _panel,
                 style: const TextStyle(color: _white),
                 decoration: _decoration('Categoria'),
-                items: _categories.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value))).toList(),
+                items: _categories.entries.map((entry) => DropdownMenuItem(value: entry.key, child: Text(_gt(entry.value)))).toList(),
                 onChanged: saving ? null : (value) { if (value != null) update(() => category = value); },
               ),
               if (errorText != null) Padding(
@@ -145,7 +148,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                   }
                 },
                 icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add_rounded),
-                label: Text(saving ? 'A criar…' : 'Criar comunidade'),
+                label: Text(saving ? _gt('A criar…') : _gt('Criar comunidade')),
                 style: FilledButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white),
               )),
             ],
@@ -167,9 +170,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
       children: [
         Row(children: [
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Comunidades', style: TextStyle(color: _white, fontSize: 29, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+            Text(_gt('Comunidades'), style: TextStyle(color: _white, fontSize: 29, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
             SizedBox(height: 3),
-            Text('Encontra o teu lugar no mundo.', style: TextStyle(color: Colors.white60, fontSize: 12)),
+            Text(_gt('Encontra o teu lugar no mundo.'), style: TextStyle(color: Colors.white60, fontSize: 12)),
           ])),
           _ActionButton(icon: Icons.add_rounded, onTap: _create),
         ]),
@@ -187,11 +190,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
           child: Stack(children: [
             const Positioned(right: -5, top: -12, child: Icon(Icons.groups_rounded, size: 118, color: Color(0x225BE7FF))),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-              Text('OS TEUS INTERESSES. O TEU MUNDO.', style: TextStyle(color: _cyan, fontSize: 9, letterSpacing: 1.15, fontWeight: FontWeight.w900)),
+              Text(_gt('OS TEUS INTERESSES. O TEU MUNDO.'), style: TextStyle(color: _cyan, fontSize: 9, letterSpacing: 1.15, fontWeight: FontWeight.w900)),
               Spacer(),
-              Text('Pessoas que\\npensam como tu.', style: TextStyle(color: Colors.white, fontSize: 24, height: 1.04, fontWeight: FontWeight.w900)),
+              Text(_gt('Pessoas que pensam como tu.'), style: TextStyle(color: Colors.white, fontSize: 24, height: 1.04, fontWeight: FontWeight.w900)),
               SizedBox(height: 7),
-              Text('Descobre comunidades e começa uma conversa.', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              Text(_gt('Descobre comunidades e começa uma conversa.'), style: TextStyle(color: Colors.white70, fontSize: 11)),
             ]),
           ]),
         ),
@@ -200,20 +203,20 @@ class _GroupsScreenState extends State<GroupsScreen> {
           controller: _search,
           onSubmitted: (_) => _refresh(),
           style: const TextStyle(color: _white),
-          decoration: _decoration('Pesquisar comunidades').copyWith(
+          decoration: _decoration(_gt('Pesquisar comunidades')).copyWith(
             prefixIcon: const Icon(Icons.search_rounded, color: _cyan),
             suffixIcon: IconButton(icon: const Icon(Icons.arrow_forward_rounded), onPressed: _refresh),
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(height: 38, child: ListView(scrollDirection: Axis.horizontal, children: [
-          _chip('ALL', 'Todas'),
-          for (final item in _categories.entries) _chip(item.key, item.value),
+          _chip('ALL', _gt('Todas')),
+          for (final item in _categories.entries) _chip(item.key, _gt(item.value)),
         ])),
         const SizedBox(height: 18),
         Row(children: [
-          const Expanded(child: Text('Explorar comunidades', style: TextStyle(color: _white, fontSize: 17, fontWeight: FontWeight.w900))),
-          Text(_groups.length.toString() + ' encontradas', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+          const Expanded(child: Text(_gt('Explorar comunidades'), style: TextStyle(color: _white, fontSize: 17, fontWeight: FontWeight.w900))),
+          Text(_groups.length.toString() + ' ' + _gt('encontradas'), style: const TextStyle(color: Colors.white38, fontSize: 10)),
         ]),
         const SizedBox(height: 10),
         if (_loading) const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator(color: _cyan)))
@@ -278,21 +281,21 @@ class _GroupCard extends StatelessWidget {
             Text(group['name']?.toString() ?? 'Comunidade', maxLines: 1, overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: _white, fontWeight: FontWeight.w900, fontSize: 15)),
             const SizedBox(height: 4),
-            Text(_categories[category] ?? 'Geral', style: const TextStyle(color: _cyan, fontSize: 10, fontWeight: FontWeight.w700)),
+            Text(_gt(_categories[category] ?? 'Geral'), style: const TextStyle(color: _cyan, fontSize: 10, fontWeight: FontWeight.w700)),
           ])),
           if (joined) const Icon(Icons.verified_rounded, color: _cyan, size: 18),
         ]),
         const SizedBox(height: 11),
         Text((group['description']?.toString().isNotEmpty == true)
           ? group['description'].toString()
-          : 'Uma comunidade para conversar, partilhar e descobrir.',
+          : _gt('Uma comunidade para conversar, partilhar e descobrir.'),
           maxLines: 2, overflow: TextOverflow.ellipsis,
           style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
         const SizedBox(height: 13),
         Row(children: [
           const Icon(Icons.people_alt_outlined, color: Colors.white54, size: 16),
           const SizedBox(width: 5),
-          Text((group['member_count'] ?? 0).toString() + ' membros', style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          Text((group['member_count'] ?? 0).toString() + ' ' + _gt('membros'), style: const TextStyle(color: Colors.white54, fontSize: 10)),
           const Spacer(),
           SizedBox(height: 36, child: FilledButton(
             onPressed: joined ? onOpen : onJoin,
@@ -302,7 +305,7 @@ class _GroupCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 17),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(joined ? 'Abrir' : 'Participar', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+            child: Text(joined ? _gt('Abrir') : _gt('Participar'), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
           )),
         ]),
       ]),
@@ -383,12 +386,12 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     final deleting = _owner;
     final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       backgroundColor: _panel,
-      title: Text(deleting ? 'Eliminar comunidade?' : 'Sair da comunidade?', style: const TextStyle(color: _white)),
-      content: Text(deleting ? 'A comunidade e as suas mensagens serão removidas.' : 'Deixarás de receber e enviar mensagens nesta comunidade.',
+      title: Text(_gt(deleting ? 'Eliminar comunidade?' : 'Sair da comunidade?'), style: const TextStyle(color: _white)),
+      content: Text(_gt(deleting ? 'A comunidade e as suas mensagens serão removidas.' : 'Deixarás de receber e enviar mensagens nesta comunidade.'),
         style: const TextStyle(color: Colors.white70)),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(deleting ? 'Eliminar' : 'Sair')),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(_gt('Cancelar'))),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(_gt(deleting ? 'Eliminar' : 'Sair'))),
       ],
     ));
     if (confirmed != true) return;
@@ -442,11 +445,11 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.public_rounded, color: _cyan, size: 52),
               const SizedBox(height: 12),
-              const Text('Faz parte desta comunidade', style: TextStyle(color: _white, fontWeight: FontWeight.w900, fontSize: 18)),
+              Text(_gt('Faz parte desta comunidade'), style: TextStyle(color: _white, fontWeight: FontWeight.w900, fontSize: 18)),
               const SizedBox(height: 7),
-              const Text('Entra para ver as conversas e participar.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
+              Text(_gt('Entra para ver as conversas e participar.'), textAlign: TextAlign.center, style: TextStyle(color: Colors.white60)),
               const SizedBox(height: 18),
-              FilledButton.icon(onPressed: _join, icon: const Icon(Icons.group_add_rounded), label: const Text('Participar')),
+              FilledButton.icon(onPressed: _join, icon: const Icon(Icons.group_add_rounded), label: Text(_gt('Participar'))),
             ]),
           )))
         else if (_loading)
@@ -455,7 +458,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
           Expanded(child: Center(child: Text(_error!, style: const TextStyle(color: Colors.white70))))
         else
           Expanded(child: _messages.isEmpty
-            ? const Center(child: Text('A primeira conversa começa contigo.', style: TextStyle(color: Colors.white54)))
+            ? Center(child: Text(_gt('A primeira conversa começa contigo.'), style: TextStyle(color: Colors.white54)))
             : ListView.builder(
                 controller: _scroll, padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 itemCount: _messages.length,
@@ -491,7 +494,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
               Expanded(child: TextField(
                 controller: _message, maxLength: 500, minLines: 1, maxLines: 4,
                 style: const TextStyle(color: _white),
-                decoration: _decoration('Escreve na comunidade').copyWith(counterText: ''),
+                decoration: _decoration(_gt('Escreve na comunidade')).copyWith(counterText: ''),
               )),
               const SizedBox(width: 8),
               IconButton.filled(
@@ -568,7 +571,7 @@ class _EmptyState extends StatelessWidget {
       const SizedBox(height: 6),
       Text(detail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
       const SizedBox(height: 12),
-      TextButton.icon(onPressed: action, icon: const Icon(Icons.refresh_rounded), label: const Text('Tentar novamente')),
+      TextButton.icon(onPressed: action, icon: const Icon(Icons.refresh_rounded), label: Text(_gt('Tentar novamente'))),
     ]),
   );
 }
