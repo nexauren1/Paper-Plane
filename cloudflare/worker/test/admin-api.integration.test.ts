@@ -10,6 +10,7 @@ const JWKS_URL =
 
 type TestBindings = {
   DB: D1Database;
+  AI: { run(model: string, input: Record<string, unknown>): Promise<unknown> };
   TEST_MIGRATIONS: unknown[];
 };
 
@@ -326,5 +327,65 @@ describe("Paper Plane Admin API integration", () => {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('admin_notifications', 'deleted_accounts') ORDER BY name",
     ).all<{ name: string }>();
     expect((tables.results ?? []).map((table) => table.name)).toEqual(["admin_notifications", "deleted_accounts"]);
+  });
+
+  it("accepts public-plane replies, holds moderation outages for review and respects reply permissions", async () => {
+    await seedUser("reply-author", "CODE-REPLY-AUTHOR", "Sky Author");
+    await seedUser("reply-pilot", "CODE-REPLY-PILOT", "Sky Responder");
+    await seedPlane("replyable-plane", "reply-author", "PUBLIC", "DELIVERED", "SAFE");
+    await DB.prepare("INSERT INTO public_sky(airplane_id) VALUES (?)").bind("replyable-plane").run();
+
+    await seedPlane("closed-replies-plane", "reply-author", "PUBLIC", "DELIVERED", "SAFE");
+    await DB.prepare("UPDATE airplanes SET allow_reply = 0 WHERE id = ?").bind("closed-replies-plane").run();
+    await DB.prepare("INSERT INTO public_sky(airplane_id) VALUES (?)").bind("closed-replies-plane").run();
+
+    const aiRun = vi.spyOn(testEnv.AI, "run");
+    try {
+      aiRun.mockResolvedValue({ response: "safe" });
+      const published = await api("reply-pilot", "POST", "/v1/open-sky/replyable-plane/replies", {
+        message: "Olá! Gostei da tua mensagem.",
+      });
+      expect(published.status).toBe(201);
+      expect(published.data.status).toBe("PUBLISHED");
+
+      const visible = await api("reply-author", "GET", "/v1/open-sky/replyable-plane/replies");
+      expect(visible.status).toBe(200);
+      expect(visible.data.items).toHaveLength(1);
+      expect(visible.data.items[0].pilot_name).toBe("Sky Responder");
+      expect(visible.data.items[0].pilot_handle).toBeTruthy();
+      expect(visible.data.items[0].message_text).toBe("Olá! Gostei da tua mensagem.");
+
+      // A transient model outage accepts the reply into the human-review queue.
+      // It is not visible in the public thread until an administrator approves it.
+      aiRun.mockResolvedValue({ response: "temporary provider response could not be parsed" });
+      const held = await api("reply-pilot", "POST", "/v1/open-sky/replyable-plane/replies", {
+        message: "Tenho outra ideia para partilhar.",
+      });
+      expect(held.status).toBe(202);
+      expect(held.data.status).toBe("HELD_REVIEW");
+
+      const heldRow = await DB.prepare(
+        "SELECT moderation_state FROM public_replies WHERE id = ?",
+      ).bind(held.data.id).first<{ moderation_state: string }>();
+      expect(heldRow?.moderation_state).toBe("REVIEW");
+
+      const stillVisible = await api("reply-author", "GET", "/v1/open-sky/replyable-plane/replies");
+      expect(stillVisible.data.items).toHaveLength(1);
+
+      const replyDisabled = await api("reply-pilot", "POST", "/v1/open-sky/closed-replies-plane/replies", {
+        message: "Quero responder.",
+      });
+      expect(replyDisabled.status).toBe(403);
+      expect(replyDisabled.data.error).toBe("REPLIES_DISABLED");
+
+      await DB.prepare("INSERT INTO blocks(blocker_uid, blocked_uid) VALUES (?, ?)").bind("reply-pilot", "reply-author").run();
+      const blockedReply = await api("reply-pilot", "POST", "/v1/open-sky/replyable-plane/replies", {
+        message: "Esta resposta não deve passar.",
+      });
+      expect(blockedReply.status).toBe(403);
+      expect(blockedReply.data.error).toBe("REPLY_UNAVAILABLE");
+    } finally {
+      aiRun.mockRestore();
+    }
   });
 });
