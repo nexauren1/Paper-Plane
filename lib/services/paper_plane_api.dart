@@ -184,7 +184,6 @@ class PaperPlaneApi {
         'language': language,
       });
 
-  Future<Map<String, dynamic>> updateAvatarUrl(String? avatarUrl) =>
       _request('/v1/profile/avatar', method: 'POST', body: {'avatarUrl': avatarUrl});
 
   Future<Map<String, dynamic>> updateLanguagePreference(String language) =>
