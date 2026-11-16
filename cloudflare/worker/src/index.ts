@@ -3110,11 +3110,32 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   const likeMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/like$/);
   if (method === "POST" && likeMatch) {
     const id = likeMatch[1];
-    const inserted = await env.DB.prepare("INSERT OR IGNORE INTO public_likes(airplane_id, uid) SELECT ?, ? WHERE EXISTS (SELECT 1 FROM public_sky WHERE airplane_id = ?)")
-      .bind(id, uid, id).run();
-    if ((inserted.meta?.changes ?? 0) === 0) return json({ error: "NOT_FOUND_OR_ALREADY_LIKED" }, 404);
-    await env.DB.prepare("UPDATE public_sky SET likes_count = likes_count + 1 WHERE airplane_id = ?").bind(id).run();
-    return json({ ok: true });
+    const parent = await env.DB.prepare(
+      "SELECT airplane_id FROM public_sky WHERE airplane_id = ? LIMIT 1",
+    ).bind(id).first();
+    if (!parent) return json({ error: "NOT_FOUND" }, 404);
+
+    const existing = await env.DB.prepare(
+      "SELECT 1 AS liked FROM public_likes WHERE airplane_id = ? AND uid = ? LIMIT 1",
+    ).bind(id, uid).first();
+    if (existing) {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM public_likes WHERE airplane_id = ? AND uid = ?").bind(id, uid),
+        env.DB.prepare("UPDATE public_sky SET likes_count = MAX(0, likes_count - 1) WHERE airplane_id = ?").bind(id),
+      ]);
+      return json({ ok: true, liked: false });
+    }
+
+    const inserted = await env.DB.prepare(
+      "INSERT OR IGNORE INTO public_likes(airplane_id, uid) VALUES (?, ?)",
+    ).bind(id, uid).run();
+    if ((inserted.meta?.changes ?? 0) > 0) {
+      await env.DB.prepare("UPDATE public_sky SET likes_count = likes_count + 1 WHERE airplane_id = ?").bind(id).run();
+    }
+    const liked = await env.DB.prepare(
+      "SELECT 1 AS liked FROM public_likes WHERE airplane_id = ? AND uid = ? LIMIT 1",
+    ).bind(id, uid).first();
+    return json({ ok: true, liked: Boolean(liked) });
   }
 
   const publicRepliesMatch = path.match(/^\/v1\/open-sky\/([^/]+)\/replies$/);
