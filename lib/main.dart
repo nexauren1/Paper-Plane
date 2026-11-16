@@ -4552,68 +4552,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _editAvatar(String? currentUrl) async {
-    final controller = TextEditingController(text: currentUrl ?? '');
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, updateDialog) => AlertDialog(
-          backgroundColor: const Color(0xFF142541),
-          title: const PlaneText('A tua foto de perfil'),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                PilotAvatar(url: controller.text.trim(), fallbackLabel: _profile['pilot_name']?.toString(), size: 88),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  onChanged: (_) => updateDialog(() {}),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    prefixIcon: Icon(Icons.link_rounded, color: ppGoldBright),
-                    labelText: PaperPlaneLocale.translate('Link da foto ou perfil público'),
-                    hintText: PaperPlaneLocale.translate('https://…'),
-                    labelStyle: TextStyle(color: Colors.white70),
-                    hintStyle: TextStyle(color: Colors.white38),
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                    focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: ppGold)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const PlaneText(
-                  'Podes usar um link de imagem ou de uma página pública. O Paper Plane tenta encontrar a fotografia automaticamente.',
-                  style: TextStyle(color: Colors.white54, fontSize: 11, height: 1.4),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const PlaneText('Cancelar')),
-            TextButton(onPressed: () { controller.clear(); updateDialog(() {}); }, child: const PlaneText('Remover')),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const PlaneText('Guardar')),
-          ],
-        ),
-      ),
-    );
-    if (saved == true) {
-      try {
-        await PaperPlaneApi.instance.updateAvatarUrl(
-          controller.text.trim().isEmpty ? null : controller.text.trim(),
-        );
-        await _refresh();
-      } catch (error) {
-        if (!mounted) return;
-        final message = error is PaperPlaneApiException ? error.message : 'Não foi possível actualizar a foto.';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: PlaneText(message)));
-      }
-    }
-    controller.dispose();
-  }
-
   Future<void> _copyInvite(String handle) async {
     final link = PaperPlaneApi.instance.buildFriendInviteLink(handle);
     await Clipboard.setData(ClipboardData(text: link));
@@ -4631,7 +4569,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final name = pilot['pilot_name']?.toString() ?? 'Piloto';
     final handle = pilot['pilot_handle']?.toString();
     final country = pilot['country_code']?.toString();
-    final avatarUrl = pilot['avatar_url']?.toString();
     final sent = int.tryParse(stats['sent']?.toString() ?? '') ?? 0;
     final received = int.tryParse(stats['received']?.toString() ?? '') ?? 0;
 
@@ -4662,25 +4599,7 @@ class _ProfilePageState extends State<ProfilePage> {
             GlassPanel(
               highlight: true,
               child: Row(children: [
-                InkWell(
-                  onTap: () => _editAvatar(avatarUrl),
-                  borderRadius: BorderRadius.circular(42),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      PilotAvatar(url: avatarUrl, fallbackLabel: name, size: 76),
-                      Positioned(
-                        right: -1,
-                        bottom: -1,
-                        child: Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(color: ppGold, shape: BoxShape.circle, border: Border.all(color: ppNavy, width: 2)),
-                          child: const Icon(Icons.edit_rounded, color: ppInk, size: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                PilotAvatar(fallbackLabel: name, size: 76),
                 const SizedBox(width: 15),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   PlaneText(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
