@@ -5,15 +5,12 @@ import 'package:flutter/material.dart';
 class PilotAvatar extends StatelessWidget {
   const PilotAvatar({
     super.key,
-    this.url,
     this.size = 48,
     this.borderColor,
     this.iconSize,
     this.fallbackLabel,
   });
 
-  /// Retained for source compatibility with older screens; never fetched or rendered.
-  final String? url;
   final double size;
   final Color? borderColor;
   final double? iconSize;
