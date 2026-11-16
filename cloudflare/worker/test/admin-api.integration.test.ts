@@ -168,10 +168,57 @@ describe("Paper Plane Admin API integration", () => {
     await DB.prepare(
       "INSERT INTO admin_notifications(id, actor_uid, target_type, recipient_uid, title, body, device_count, sent_count, failed_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind("notification-history-test", ADMIN_UID, "USER", "target-test", "Teste", "Histórico de teste", 1, 1, 0).run();
+
+    await seedUser("sky-author", "CODE-SKY-AUTHOR", "Sky Author");
+    await seedUser("sky-reader", "CODE-SKY-READER", "Sky Reader");
+    await DB.prepare(
+      "INSERT INTO friendships(id, requester_uid, addressee_uid, status) VALUES (?, ?, ?, 'ACCEPTED')",
+    ).bind("sky-friendship", "sky-reader", "sky-author").run();
+    await seedPlane("open-sky-public", "sky-author", "PUBLIC", "DELIVERED", "SAFE");
+    await DB.prepare("INSERT INTO public_sky(airplane_id) VALUES (?)")
+      .bind("open-sky-public").run();
+
+    // Backdate the test conversation so account-level hourly anti-spam limits
+    // remain independent from the per-publication reply count.
+    for (let index = 0; index < 55; index++) {
+      const replyId = "sky-reply-" + index.toString().padStart(2, "0");
+      await DB.prepare(
+        "INSERT INTO public_replies(id, airplane_id, sender_uid, message_text, moderation_state, created_at) VALUES (?, ?, ?, ?, 'SAFE', '2000-01-01T00:00:00.000Z')",
+      ).bind(replyId, "open-sky-public", "sky-reader", "Resposta pública " + index).run();
+    }
   }, 30_000);
 
   afterAll(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("serves long Open Sky conversations, friend feeds and reversible reactions", async () => {
+    const following = await api("sky-reader", "GET", "/v1/open-sky?feed=FOLLOWING");
+    expect(following.status).toBe(200);
+    expect(following.data.items.some((item: any) => item.id === "open-sky-public")).toBe(true);
+
+    const firstPage = await api("sky-reader", "GET", "/v1/open-sky/open-sky-public/replies?page=0");
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.data.items).toHaveLength(50);
+    expect(firstPage.data.hasMore).toBe(true);
+    expect(firstPage.data.items[0].pilot_name).toBe("Sky Reader");
+    expect(firstPage.data.items[0].pilot_handle).toBeDefined();
+
+    const secondPage = await api("sky-reader", "GET", "/v1/open-sky/open-sky-public/replies?page=1");
+    expect(secondPage.status).toBe(200);
+    expect(secondPage.data.items).toHaveLength(5);
+    expect(secondPage.data.hasMore).toBe(false);
+
+    const liked = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/like");
+    expect(liked.status).toBe(200);
+    expect(liked.data.liked).toBe(true);
+    const unliked = await api("sky-reader", "POST", "/v1/open-sky/open-sky-public/like");
+    expect(unliked.status).toBe(200);
+    expect(unliked.data.liked).toBe(false);
+
+    const popular = await api("sky-reader", "GET", "/v1/open-sky?feed=POPULAR");
+    expect(popular.status).toBe(200);
+    expect(popular.data.items.some((item: any) => item.id === "open-sky-public")).toBe(true);
   });
 
   it("validates authentication and executes every Admin operation against local D1", async () => {
