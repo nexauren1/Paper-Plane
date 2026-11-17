@@ -300,7 +300,7 @@ jobs:
                                      .replace('android:height="108dp"', 'android:height="48dp"')
           legacy_vector = legacy_vector.replace(
               'android:viewportWidth="108" android:viewportHeight="108">',
-              'android:viewportWidth="108" android:viewportHeight="108">\\n'
+              'android:viewportWidth="108" android:viewportHeight="108">\n'
               '              <path android:fillColor="#FF020817" android:pathData="M0,0h108v108h-108z" />',
               1,
           )
