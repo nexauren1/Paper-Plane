@@ -905,8 +905,8 @@ class _MainShellState extends State<MainShell> {
           child: SizedBox(
             height: 76,
             child: Row(children: [
-              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
-              _navItem(1, Icons.explore_outlined, Icons.explore_rounded, 'Explore'),
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
+              _navItem(1, Icons.explore_outlined, Icons.explore_rounded, 'Explorar'),
               Expanded(
                 child: Center(
                   child: InkWell(
@@ -933,8 +933,8 @@ class _MainShellState extends State<MainShell> {
                   ),
                 ),
               ),
-              _navItem(3, Icons.people_outline_rounded, Icons.people_alt_rounded, 'Friends'),
-              _navItem(4, Icons.grid_view_rounded, Icons.grid_view_rounded, 'More'),
+              _navItem(3, Icons.people_outline_rounded, Icons.people_alt_rounded, 'Amigos'),
+              _navItem(4, Icons.grid_view_rounded, Icons.grid_view_rounded, 'Mais'),
             ]),
           ),
         ),
@@ -1092,7 +1092,6 @@ class _HomePageState extends State<HomePage> {
     final received = int.tryParse(_stats['received']?.toString() ?? '') ?? 0;
     final sentCount = int.tryParse(_stats['sent']?.toString() ?? '') ?? _sent.length;
     final active = _sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).length;
-    final profileReady = _profile['profile_completed'] == 1;
 
     return RefreshIndicator(
       color: ppBlueLight,
@@ -1127,7 +1126,7 @@ class _HomePageState extends State<HomePage> {
               clipBehavior: Clip.none,
               children: [
                 IconButton(
-                  tooltip: PaperPlaneLocale.translate('Inbox'),
+                  tooltip: PaperPlaneLocale.translate('Caixa de entrada'),
                   onPressed: widget.onOpenInbox,
                   icon: const Icon(Icons.notifications_none_rounded, color: ppBlueLight, size: 25),
                 ),
@@ -1144,7 +1143,7 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             IconButton(
-              tooltip: PaperPlaneLocale.translate('More'),
+              tooltip: PaperPlaneLocale.translate('Mais'),
               onPressed: widget.onOpenMore,
               icon: const Icon(Icons.grid_view_rounded, color: Colors.white70),
             ),
@@ -1221,7 +1220,7 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 14),
-          GoldButton(label: 'Send a Message', icon: Icons.send_rounded, onPressed: widget.onWrite, height: 62),
+          GoldButton(label: 'Enviar mensagem', icon: Icons.send_rounded, onPressed: widget.onWrite, height: 62),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(child: _featureCard(
@@ -1234,8 +1233,8 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(width: 10),
             Expanded(child: _featureCard(
               icon: Icons.stars_rounded,
-              title: 'Quiz World',
-              subtitle: 'Play and earn XP',
+              title: 'Quiz do mundo',
+              subtitle: 'Joga e ganha XP',
               gradient: const [Color(0xFF38206D), Color(0xFF142C62)],
               onTap: () => ppPush(context, const QuizScreen()),
             )),
@@ -1264,17 +1263,17 @@ class _HomePageState extends State<HomePage> {
           GlassPanel(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 14),
             child: Row(children: [
-              Expanded(child: _homeStat(Icons.flight_takeoff_rounded, 'Flights', sentCount.toString())),
+              Expanded(child: _homeStat(Icons.flight_takeoff_rounded, 'Voos', sentCount.toString())),
               Container(width: 1, height: 52, color: Colors.white12),
-              Expanded(child: _homeStat(Icons.mark_email_read_outlined, 'Received', received.toString())),
+              Expanded(child: _homeStat(Icons.mark_email_read_outlined, 'Recebidas', received.toString())),
               Container(width: 1, height: 52, color: Colors.white12),
-              Expanded(child: _homeStat(Icons.mark_email_unread_outlined, 'Unread', _unread.toString())),
+              Expanded(child: _homeStat(Icons.mark_email_unread_outlined, 'Por ler', _unread.toString())),
             ]),
           ),
           const SizedBox(height: 14),
           Row(children: [
             const Expanded(child: PlaneText('Voos em andamento', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
-            TextButton(onPressed: widget.onOpenFriends, child: const PlaneText('Friends')),
+            TextButton(onPressed: widget.onOpenFriends, child: const PlaneText('Amigos')),
           ]),
           if (_loading)
             const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: ppBlueLight)))
@@ -1285,7 +1284,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 7),
                 PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 8),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Try again')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
               ]),
             )
           else if (_sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).isEmpty)
@@ -1376,9 +1375,9 @@ class MorePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ScreenFrame(
-      title: 'More',
+      title: 'Mais',
       action: IconButton(
-        tooltip: PaperPlaneLocale.translate('Settings'),
+        tooltip: PaperPlaneLocale.translate('Definições'),
         onPressed: () => ppPush(context, const SettingsScreen()),
         icon: const Icon(Icons.settings_rounded, color: ppBlueLight),
       ),
@@ -1400,66 +1399,66 @@ class MorePage extends StatelessWidget {
               Icon(Icons.public_rounded, color: ppBlueLight, size: 37),
               SizedBox(width: 14),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                PlaneText('Explore more of the world', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                PlaneText('Descobre mais do mundo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                 SizedBox(height: 4),
-                PlaneText('Tools, collections and account controls in one place.',
+                PlaneText('Ferramentas, coleções e controlos da conta num só lugar.',
                   style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.35)),
               ])),
             ]),
           ),
           const SizedBox(height: 16),
-          const SectionTitle('Discover'),
+          const SectionTitle('Descobrir'),
           const _MoreEntry(
             icon: Icons.public_rounded, color: Color(0xFF36CFFF),
-            title: 'World Atlas', subtitle: 'Explore countries and flight routes',
+            title: 'Atlas mundial', subtitle: 'Explora países e rotas dos voos',
             destination: SkyAtlasScreen(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.quiz_rounded, color: Color(0xFFAC80FF),
-            title: 'Quiz World', subtitle: 'Test your knowledge and earn XP',
+            title: 'Quiz do mundo', subtitle: 'Testa os teus conhecimentos e ganha XP',
             destination: QuizScreen(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.collections_bookmark_rounded, color: Color(0xFFFFA85B),
-            title: 'Flight Collections', subtitle: 'Keep the places your flights have reached',
+            title: 'Coleções de voos', subtitle: 'Guarda os locais alcançados pelos teus voos',
             destination: CollectionScreen(),
           ),
-          const SectionTitle('Your Paper Plane'),
+          const SectionTitle('O teu Paper Plane'),
           const _MoreEntry(
             icon: Icons.inbox_rounded, color: Color(0xFF36CFFF),
-            title: 'Inbox', subtitle: 'Read letters and follow your sent planes',
+            title: 'Caixa de entrada', subtitle: 'Lê cartas e acompanha os teus aviões',
             destination: InboxPage(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.person_rounded, color: Color(0xFFBA8BFF),
-            title: 'My Profile', subtitle: 'Edit your profile and profile photo',
+            title: 'O meu perfil', subtitle: 'Edita o teu perfil e a fotografia',
             destination: ProfilePage(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.settings_rounded, color: Color(0xFF8BA8FF),
-            title: 'Settings', subtitle: 'Language and app preferences',
+            title: 'Definições', subtitle: 'Idioma e preferências da aplicação',
             destination: SettingsScreen(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.shield_rounded, color: Color(0xFF52D6B5),
-            title: 'Safety & Privacy', subtitle: 'Blocks, reports and privacy controls',
+            title: 'Segurança e privacidade', subtitle: 'Bloqueios, denúncias e controlos de privacidade',
             destination: SafetyScreen(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.help_rounded, color: Color(0xFF58C9FF),
-            title: 'Help & Support', subtitle: 'Contact the team and track requests',
+            title: 'Ajuda e suporte', subtitle: 'Contacta a equipa e acompanha os pedidos',
             destination: SupportScreen(),
           ),
           const SizedBox(height: 9),
           const _MoreEntry(
             icon: Icons.manage_accounts_rounded, color: Color(0xFFB08DFF),
-            title: 'Account', subtitle: 'Sign-in and account management',
+            title: 'Conta', subtitle: 'Início de sessão e gestão da conta',
             destination: AccountScreen(),
           ),
         ],
@@ -4747,9 +4746,9 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
         children: [
           Row(children: [
             const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              PlaneText('Open Sky', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
+              PlaneText('Explorar', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -0.7)),
               SizedBox(height: 3),
-              PlaneText('A comunidade global do Paper Plane', style: TextStyle(color: Colors.white60, fontSize: 12)),
+              PlaneText('Descobre mensagens, ideias e culturas de todo o mundo.', style: TextStyle(color: Colors.white60, fontSize: 12)),
             ])),
             IconButton(
               tooltip: 'Caixa de entrada',
