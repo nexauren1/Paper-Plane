@@ -798,14 +798,16 @@ class _MainShellState extends State<MainShell> {
 
   void _openInboxFromNotification() {
     if (!mounted) return;
-    setState(() => _index = 0);
+    setState(() => _index = 2);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ppPush(context, const InboxPage());
+      if (mounted) ppPush(context, const ChatHubScreen(initialSection: 1));
     });
   }
 
   void _openChatFromNotification() {
-    if (mounted) setState(() => _index = 2);
+    if (!mounted) return;
+    ChatHubScreen.sectionRequests.value = 1;
+    setState(() => _index = 2);
   }
 
   void _openOpenSkyAfterPublish() {
@@ -1057,6 +1059,12 @@ class MorePage extends StatelessWidget {
         action(
           icon: Icons.mail_outline_rounded,
           title: 'Inbox',
+          subtitle: 'Private conversations with your co-pilots',
+          onTap: () => ppPush(context, const ChatHubScreen(initialSection: 1)),
+        ),
+        action(
+          icon: Icons.flight_takeoff_rounded,
+          title: 'Flight mailbox',
           subtitle: 'Received and sent paper planes',
           onTap: () => ppPush(context, const InboxPage()),
         ),
@@ -4591,7 +4599,7 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
             ])),
             IconButton(
               tooltip: 'Caixa de entrada',
-              onPressed: () => ppPush(context, const InboxPage()),
+              onPressed: () => ppPush(context, const ChatHubScreen(initialSection: 1)),
               icon: const Icon(Icons.mark_email_unread_outlined, color: ppBlueLight),
             ),
             IconButton(
