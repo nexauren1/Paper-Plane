@@ -127,6 +127,9 @@ class _AccountScreenState extends State<AccountScreen> {
     await PaperPlaneApi.instance.bootstrapPilot();
     var profileResult = await PaperPlaneApi.instance.getProfile();
     var pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+    PaperPlaneLocale.setLanguage(
+      pilot['preferred_language']?.toString() ?? pilot['language']?.toString(),
+    );
 
     if (pilot['profile_completed'] != 1) {
       if (!mounted) return 'Completa o perfil para continuar.';
