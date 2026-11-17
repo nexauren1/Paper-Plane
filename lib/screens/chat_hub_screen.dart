@@ -21,6 +21,14 @@ class ChatHubScreen extends StatefulWidget {
   final int initialSection;
   static final ValueNotifier<int> sectionRequests = ValueNotifier<int>(0);
 
+  static void requestSection(int section) {
+    final target = section.clamp(0, 2).toInt();
+    if (sectionRequests.value == target) {
+      sectionRequests.value = target == 2 ? 1 : 2;
+    }
+    sectionRequests.value = target;
+  }
+
   @override
   State<ChatHubScreen> createState() => _ChatHubScreenState();
 }
