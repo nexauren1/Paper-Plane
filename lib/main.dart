@@ -1015,7 +1015,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       ),
       OpenSkyPage(key: _openSkyKey),
       const SizedBox.shrink(),
-      const ChatHubScreen(),
+      ChatHubScreen(onExplore: () => _selectTab(1)),
       const MorePage(),
     ];
 
