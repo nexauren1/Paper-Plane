@@ -116,6 +116,30 @@ void main() {
     );
   });
 
+
+  test('resets a previous account language to the device default', () {
+    PaperPlaneLocale.setLanguage('fr');
+    PaperPlaneLocale.resetToDeviceLanguage();
+    final deviceCode = WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+    final expected = PaperPlaneLocale.supportedLanguages.contains(deviceCode)
+        ? deviceCode
+        : 'pt';
+    expect(PaperPlaneLocale.current.value.languageCode, expected);
+  });
+
+  test('translates account-switch protection message', () {
+    const message = 'A conta mudou durante a operação. Aguarda a atualização e tenta novamente.';
+    expect(PaperPlaneLocale.translate(message, 'pt'), message);
+    expect(
+      PaperPlaneLocale.translate(message, 'en'),
+      'The account changed during this operation. Wait for the refresh and try again.',
+    );
+    expect(
+      PaperPlaneLocale.translate(message, 'fr'),
+      'Le compte a changé pendant cette opération. Attends l’actualisation et réessaie.',
+    );
+  });
+
   test('normalizes region-specific language codes and falls back safely', () {
     PaperPlaneLocale.setLanguage('de-DE');
     expect(PaperPlaneLocale.current.value.languageCode, 'de');
