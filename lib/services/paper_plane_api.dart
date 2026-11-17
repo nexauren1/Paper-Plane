@@ -28,6 +28,15 @@ class PaperPlaneApi {
 
   final http.Client _client = http.Client();
 
+  void _assertActiveUser(String expectedUid) {
+    if (FirebaseAuth.instance.currentUser?.uid != expectedUid) {
+      throw const PaperPlaneApiException(
+        'AUTH_SESSION_CHANGED',
+        'A conta mudou durante a operação. Aguarda a atualização e tenta novamente.',
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> _request(
     String path, {
     String method = 'GET',
@@ -73,13 +82,16 @@ class PaperPlaneApi {
       if (response.statusCode == 401) {
         final refreshed = await user.getIdToken(true);
         if (refreshed != null && refreshed.isNotEmpty && refreshed != idToken) {
+          _assertActiveUser(user.uid);
           idToken = refreshed;
           response = await sendWithToken(idToken);
         }
       }
-    } catch (_) {
+    } catch (error) {
+      if (error is PaperPlaneApiException) rethrow;
       throw const PaperPlaneApiException('NETWORK_ERROR', 'Não foi possível contactar o servidor. Verifica a ligação à internet.');
     }
+    _assertActiveUser(user.uid);
 
     Map<String, dynamic> payload;
     try {
@@ -180,13 +192,16 @@ class PaperPlaneApi {
       if (response.statusCode == 401) {
         final refreshed = await user.getIdToken(true);
         if (refreshed != null && refreshed.isNotEmpty && refreshed != token) {
+          _assertActiveUser(user.uid);
           token = refreshed;
           response = await send(token);
         }
       }
-    } catch (_) {
+    } catch (error) {
+      if (error is PaperPlaneApiException) rethrow;
       throw const PaperPlaneApiException('NETWORK_ERROR', 'Não foi possível enviar a fotografia. Verifica a ligação à internet.');
     }
+    _assertActiveUser(user.uid);
 
     Map<String, dynamic> payload;
     try {
