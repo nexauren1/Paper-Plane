@@ -998,8 +998,39 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   }
 
   Future<void> _translateIncomingMessages(List<Map<String, dynamic>> messages) async {
-    if (widget.isChama) return;
     final myUid = FirebaseAuth.instance.currentUser?.uid;
+    if (widget.isChama) {
+      final planes = _chamaHistory.where((plane) {
+        if (plane['sender_uid']?.toString() == myUid) return false;
+        final id = plane['id']?.toString() ?? '';
+        final key = 'plane:$id';
+        final source = (plane['message_language_tag']?.toString() ?? 'pt').toLowerCase().split('-').first;
+        return id.isNotEmpty && source != _myLanguage &&
+            !_translatedMessages.containsKey(key) && !_translatingMessages.contains(key);
+      }).take(8).toList();
+      if (planes.isEmpty) return;
+      final keys = planes.map((plane) => 'plane:${plane['id']}').toList();
+      if (mounted) setState(() => _translatingMessages.addAll(keys));
+      try {
+        final translated = await Future.wait(planes.map((plane) async {
+          final id = plane['id']?.toString() ?? '';
+          final result = await PaperPlaneApi.instance.translatePlane(id, _myLanguage);
+          return MapEntry('plane:$id', result['text']?.toString() ?? '');
+        }));
+        if (!mounted) return;
+        setState(() {
+          for (final entry in translated) {
+            if (entry.value.isNotEmpty) _translatedMessages[entry.key] = entry.value;
+          }
+        });
+      } catch (_) {
+        // Keep original paper-plane messages visible if translation is unavailable.
+      } finally {
+        if (mounted) setState(() => _translatingMessages.removeAll(keys));
+      }
+      return;
+    }
+
     final ids = <String>[];
     for (final message in messages) {
       if (message['sender_uid']?.toString() == myUid) continue;
@@ -1197,7 +1228,12 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         const SizedBox(width: 8),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           PlaneText(own ? 'O teu avião' : 'Avião recebido', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: _chatGoldBright)),
-          PlaneText(plane['message_text']?.toString() ?? '', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: Colors.white70)),
+          PlaneText(
+            _translatedMessages['plane:${plane['id']}'] ?? plane['message_text']?.toString() ?? '',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: Colors.white70),
+          ),
         ])),
         const SizedBox(width: 7),
         PlaneText(time, style: const TextStyle(fontSize: 8, color: Colors.white38)),
