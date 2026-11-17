@@ -5,8 +5,8 @@ import '../services/paper_plane_api.dart';
 
 const _navy = Color(0xFF071225);
 const _panel = Color(0xFF142541);
-const _gold = Color(0xFFF0CE7C);
-const _goldLight = Color(0xFFFFE7A8);
+const _gold = Color(0xFF42D9FF);
+const _goldLight = Color(0xFFB8F1FF);
 
 const _supportCategories = <String, String>{
   'TECHNICAL': 'Problema técnico',

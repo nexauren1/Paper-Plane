@@ -29,7 +29,7 @@ Future<bool> showReportDialog(BuildContext context, String airplaneId) async {
           backgroundColor: const Color(0xFF142541),
           title: const Row(
             children: [
-              Icon(Icons.shield_outlined, color: Color(0xFFFFE7A8)),
+              Icon(Icons.shield_outlined, color: Color(0xFFB8F1FF)),
               SizedBox(width: 10),
               Expanded(child: PlaneText('Denunciar avião')),
             ],

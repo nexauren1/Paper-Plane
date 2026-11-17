@@ -8,12 +8,13 @@ import '../services/paper_plane_localization.dart';
 import '../services/firebase_runtime.dart';
 import '../services/paper_plane_api.dart';
 import '../services/paper_plane_auth.dart';
+import '../services/paper_plane_notifications.dart';
 import 'pilot_profile_setup_screen.dart';
 import 'first_flight_workshop_screen.dart';
 
 const Color _navy = Color(0xFF071225);
-const Color _gold = Color(0xFFF0CE7C);
-const Color _goldLight = Color(0xFFFFE7A8);
+const Color _gold = Color(0xFF42D9FF);
+const Color _goldLight = Color(0xFFB8F1FF);
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, this.onAuthenticated});
@@ -126,6 +127,9 @@ class _AccountScreenState extends State<AccountScreen> {
     await PaperPlaneApi.instance.bootstrapPilot();
     var profileResult = await PaperPlaneApi.instance.getProfile();
     var pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+    PaperPlaneLocale.setLanguage(
+      pilot['preferred_language']?.toString() ?? pilot['language']?.toString(),
+    );
 
     if (pilot['profile_completed'] != 1) {
       if (!mounted) return 'Completa o perfil para continuar.';
@@ -298,6 +302,7 @@ class _AccountScreenState extends State<AccountScreen> {
       await PaperPlaneAuth.reauthenticateCurrentUser(
         password: needsPassword ? passwordController.text : null,
       );
+      await PaperPlaneNotifications.unregisterDeviceForSessionEnd();
       await PaperPlaneApi.instance.deleteAccountData();
       serverDataDeleted = true;
       await FirebaseAuth.instance.currentUser?.delete();

@@ -211,6 +211,28 @@ class PaperPlaneNotifications {
     }
   }
 
+  /// Drops notification destinations belonging to the account that just ended.
+  static void resetPendingRoutes() {
+    _pendingInboxOpen = false;
+    _pendingChatOpen = false;
+    _pendingAirplaneId = null;
+    _pendingSentAirplaneId = null;
+  }
+
+  /// Removes this device's push-token association before Firebase signs out.
+  /// The local FCM token is retained so the next account can register it.
+  static Future<void> unregisterDeviceForSessionEnd() async {
+    if (!FirebaseRuntime.isInitialized || !PaperPlaneApi.isConfigured) return;
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null && token.isNotEmpty) {
+        await PaperPlaneApi.instance.unregisterDevice(token).timeout(const Duration(seconds: 4));
+      }
+    } catch (error) {
+      debugPrint('Paper Plane: device token could not be detached from the previous account: $error');
+    }
+  }
+
   static bool consumePendingChatOpen() {
     final pending = _pendingChatOpen;
     _pendingChatOpen = false;

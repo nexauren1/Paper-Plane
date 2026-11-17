@@ -28,6 +28,15 @@ class PaperPlaneApi {
 
   final http.Client _client = http.Client();
 
+  void _assertActiveUser(String expectedUid) {
+    if (FirebaseAuth.instance.currentUser?.uid != expectedUid) {
+      throw const PaperPlaneApiException(
+        'AUTH_SESSION_CHANGED',
+        'A conta mudou durante a operação. Aguarda a atualização e tenta novamente.',
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> _request(
     String path, {
     String method = 'GET',
@@ -73,13 +82,16 @@ class PaperPlaneApi {
       if (response.statusCode == 401) {
         final refreshed = await user.getIdToken(true);
         if (refreshed != null && refreshed.isNotEmpty && refreshed != idToken) {
+          _assertActiveUser(user.uid);
           idToken = refreshed;
           response = await sendWithToken(idToken);
         }
       }
-    } catch (_) {
+    } catch (error) {
+      if (error is PaperPlaneApiException) rethrow;
       throw const PaperPlaneApiException('NETWORK_ERROR', 'Não foi possível contactar o servidor. Verifica a ligação à internet.');
     }
+    _assertActiveUser(user.uid);
 
     Map<String, dynamic> payload;
     try {
@@ -180,13 +192,16 @@ class PaperPlaneApi {
       if (response.statusCode == 401) {
         final refreshed = await user.getIdToken(true);
         if (refreshed != null && refreshed.isNotEmpty && refreshed != token) {
+          _assertActiveUser(user.uid);
           token = refreshed;
           response = await send(token);
         }
       }
-    } catch (_) {
+    } catch (error) {
+      if (error is PaperPlaneApiException) rethrow;
       throw const PaperPlaneApiException('NETWORK_ERROR', 'Não foi possível enviar a fotografia. Verifica a ligação à internet.');
     }
+    _assertActiveUser(user.uid);
 
     Map<String, dynamic> payload;
     try {
@@ -258,6 +273,9 @@ class PaperPlaneApi {
   Future<Map<String, dynamic>> getInbox() => _request('/v1/inbox');
 
   Future<Map<String, dynamic>> getSentPlanes() => _request('/v1/airplanes/sent');
+
+  Future<Map<String, dynamic>> updatePresence() =>
+      _request('/v1/presence/heartbeat', method: 'POST', body: const {});
 
   Future<Map<String, dynamic>> getFriends() => _request('/v1/friends');
 
@@ -333,6 +351,19 @@ class PaperPlaneApi {
         method: 'POST',
         body: {'language': language},
       );
+
+  Future<Map<String, dynamic>> translateChatMessages(
+    String conversationId,
+    List<String> messageIds,
+    String language,
+  ) {
+    if (messageIds.isEmpty) return Future.value({'items': <dynamic>[]});
+    return _request(
+      '/v1/chats/$conversationId/translations',
+      method: 'POST',
+      body: {'messageIds': messageIds.take(20).toList(), 'language': language},
+    );
+  }
 
   String buildFriendInviteLink(String pilotHandle) =>
       'https://paper-plane.nexaurenstore.workers.dev/invite?handle=${Uri.encodeQueryComponent(pilotHandle.replaceFirst(RegExp(r'^@'), ''))}';

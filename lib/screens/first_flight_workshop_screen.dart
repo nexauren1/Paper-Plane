@@ -6,8 +6,8 @@ import '../services/paper_plane_localization.dart';
 import '../services/paper_plane_api.dart';
 
 const Color _workshopNavy = Color(0xFF071225);
-const Color _workshopGold = Color(0xFFF0CE7C);
-const Color _workshopGoldBright = Color(0xFFFFE7A8);
+const Color _workshopGold = Color(0xFF42D9FF);
+const Color _workshopGoldBright = Color(0xFFB8F1FF);
 const Color _workshopPaper = Color(0xFFF3EFE5);
 
 class FirstFlightWorkshopScreen extends StatefulWidget {
@@ -174,8 +174,8 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                     maxLines: 4,
                     minLines: 3,
                     style: const TextStyle(color: Color(0xFF252A33), fontSize: 17, height: 1.4),
-                    decoration: const InputDecoration(
-                      hintText: 'Escreve algo gentil para o mundo…',
+                    decoration: InputDecoration(
+                      hintText: PaperPlaneLocale.translate('Escreve algo gentil para o mundo…'),
                       hintStyle: TextStyle(color: Color(0xFF8B877F)),
                       border: InputBorder.none,
                       counterStyle: TextStyle(color: Color(0xFF82745A)),

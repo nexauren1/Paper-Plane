@@ -225,6 +225,111 @@ jobs:
           print("Paper Plane launcher/adaptive icon and branded native splash configured.")
           PY
 
+      - name: Apply Paper Plane globe-and-airplane launcher icon
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          res = Path("android/app/src/main/res")
+          drawable = res / "drawable"
+          values = res / "values"
+          legacy = res / "mipmap-anydpi"
+          adaptive = res / "mipmap-anydpi-v26"
+          for folder in (drawable, values, legacy, adaptive):
+              folder.mkdir(parents=True, exist_ok=True)
+
+          background = """<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+              <gradient android:type="radial" android:gradientRadius="100%p"
+                  android:centerX="46%" android:centerY="35%"
+                  android:startColor="#FF124B98" android:centerColor="#FF081E4B"
+                  android:endColor="#FF020817" />
+          </shape>
+          """
+          (drawable / "ic_launcher_background.xml").write_text(background, encoding="utf-8")
+
+          foreground = """<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#00000000" android:strokeColor="#FF7449F4"
+                  android:strokeWidth="2.5"
+                  android:pathData="M5,66 C20,97 78,104 103,45" />
+              <path android:fillColor="#00000000" android:strokeColor="#FF38D8FF"
+                  android:strokeWidth="2.2"
+                  android:pathData="M9,43 C26,9 79,5 99,37" />
+              <path android:fillColor="#FF082A65" android:strokeColor="#FF45CFFF"
+                  android:strokeWidth="2.8"
+                  android:pathData="M54,10 C78,10 98,30 98,54 C98,78 78,98 54,98 C30,98 10,78 10,54 C10,30 30,10 54,10 Z" />
+              <path android:fillColor="#00000000" android:strokeColor="#FF55CFFF"
+                  android:strokeWidth="1.6"
+                  android:pathData="M54,11 C38,22 31,37 31,54 C31,71 38,86 54,97" />
+              <path android:fillColor="#00000000" android:strokeColor="#FF55CFFF"
+                  android:strokeWidth="1.6"
+                  android:pathData="M54,11 C70,22 77,37 77,54 C77,71 70,86 54,97" />
+              <path android:fillColor="#00000000" android:strokeColor="#FF368CCB"
+                  android:strokeWidth="1.4"
+                  android:pathData="M13,43 C27,53 81,53 95,43" />
+              <path android:fillColor="#00000000" android:strokeColor="#FF368CCB"
+                  android:strokeWidth="1.4"
+                  android:pathData="M13,65 C27,55 81,55 95,65" />
+              <path android:fillColor="#FF1B6BC0"
+                  android:pathData="M30,34 L43,28 L48,37 L41,46 L32,43 Z" />
+              <path android:fillColor="#FF2C8BDB"
+                  android:pathData="M60,61 L73,49 L81,54 L76,67 L64,72 Z" />
+              <path android:fillColor="#FF1B6BC0"
+                  android:pathData="M41,75 L52,68 L59,76 L54,88 L45,88 Z" />
+              <path android:fillColor="#FFFFFFFF" android:strokeColor="#FFB8F1FF"
+                  android:strokeWidth="1.8" android:strokeLineJoin="round"
+                  android:pathData="M17,55 L90,28 L66,84 L48,65 L29,74 Z" />
+              <path android:fillColor="#FFEAFBFF"
+                  android:pathData="M17,55 L90,28 L48,65 Z" />
+              <path android:fillColor="#FF9AD9F2"
+                  android:pathData="M90,28 L66,84 L48,65 Z" />
+              <path android:fillColor="#FF7245E8"
+                  android:pathData="M48,65 L66,84 L55,67 Z" />
+              <path android:fillColor="#FFFFFFFF"
+                  android:pathData="M19,20a2.2,2.2 0,1 0,4.4 0a2.2,2.2 0,1 0,-4.4 0" />
+              <path android:fillColor="#FF8DEBFF"
+                  android:pathData="M87,16a1.7,1.7 0,1 0,3.4 0a1.7,1.7 0,1 0,-3.4 0" />
+          </vector>
+          """
+          (drawable / "ic_launcher_foreground.xml").write_text(foreground, encoding="utf-8")
+
+          legacy_vector = foreground.replace('android:width="108dp"', 'android:width="48dp"') \
+                                     .replace('android:height="108dp"', 'android:height="48dp"')
+          legacy_vector = legacy_vector.replace(
+              'android:viewportWidth="108" android:viewportHeight="108">',
+              'android:viewportWidth="108" android:viewportHeight="108">\n'
+              '              <path android:fillColor="#FF020817" android:pathData="M0,0h108v108h-108z" />',
+              1,
+          )
+          (legacy / "ic_launcher.xml").write_text(legacy_vector, encoding="utf-8")
+          (legacy / "ic_launcher_round.xml").write_text(legacy_vector, encoding="utf-8")
+
+          adaptive_xml = """<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_background" />
+              <foreground android:drawable="@drawable/ic_launcher_foreground" />
+          </adaptive-icon>
+          """
+          (adaptive / "ic_launcher.xml").write_text(adaptive_xml, encoding="utf-8")
+          (adaptive / "ic_launcher_round.xml").write_text(adaptive_xml, encoding="utf-8")
+
+          color_file = values / "colors.xml"
+          color_value = '<color name="ic_launcher_background">#020817</color>'
+          if color_file.exists():
+              text = color_file.read_text(encoding="utf-8")
+              if 'name="ic_launcher_background"' in text:
+                  text = re.sub(r'<color name="ic_launcher_background">.*?</color>', color_value, text, count=1)
+              else:
+                  text = text.replace("</resources>", "    " + color_value + "\n</resources>")
+          else:
+              text = "<resources>\n    " + color_value + "\n</resources>\n"
+          color_file.write_text(text, encoding="utf-8")
+
+          print("Globe-and-paper-airplane adaptive and legacy launcher icons are ready.")
+          PY
+
       - name: Enable core library desugaring for Android notifications
         shell: bash
         run: |

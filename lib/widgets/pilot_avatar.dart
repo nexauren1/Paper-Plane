@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 /// Paper Plane pilot avatar. Uploaded photos are optional; the generated
 /// identity mark remains the fallback when no image exists or loading fails.
@@ -81,6 +82,7 @@ class PilotAvatar extends StatelessWidget {
             if (safeUrl != null && safeUrl.startsWith('https://'))
               Image.network(
                 safeUrl,
+                key: ValueKey('${FirebaseAuth.instance.currentUser?.uid ?? 'signed-out'}:$safeUrl'),
                 fit: BoxFit.cover,
                 gaplessPlayback: true,
                 errorBuilder: (_, __, ___) => fallback,

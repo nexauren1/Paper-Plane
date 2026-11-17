@@ -4,8 +4,8 @@ import '../services/paper_plane_localization.dart';
 import '../data/quiz_question_bank.dart';
 import '../services/paper_plane_api.dart';
 
-const Color _gold = Color(0xFFF0CE7C);
-const Color _lightGold = Color(0xFFFFE7A8);
+const Color _gold = Color(0xFF42D9FF);
+const Color _lightGold = Color(0xFFB8F1FF);
 const Color _panel = Color(0xCC172844);
 const Color _mint = Color(0xFF8EE0B1);
 const Color _navy = Color(0xFF071225);
