@@ -1400,6 +1400,14 @@ class PaperPlaneLocale {
     "ROTAS DOS TEUS AVIÕES": ["YOUR PLANE ROUTES","RUTAS DE TUS AVIONES","ITINÉRAIRES DE TES AVIONS","DEINE FLUGROUTEN"],
     "O teu nome e o teu @nome criam a tua identidade no Paper Plane. O avatar é gerado no aplicativo; não precisas de fotografia.": ["Your name and @handle create your Paper Plane identity. Your avatar is generated in the app; no photo is needed.","Tu nombre y tu @usuario crean tu identidad en Paper Plane. El avatar se genera en la aplicación; no necesitas una foto.","Ton nom et ton @identifiant créent ton identité Paper Plane. Ton avatar est généré dans l’application ; aucune photo n’est nécessaire.","Dein Name und dein @Handle bilden deine Paper-Plane-Identität. Dein Avatar wird in der App erstellt; ein Foto ist nicht erforderlich."],
     "PAPER PLANE": ["PAPER PLANE","PAPER PLANE","PAPER PLANE","PAPER PLANE"],
+    "ESCREVE A TUA MENSAGEM": ["WRITE YOUR MESSAGE","ESCRIBE TU MENSAJE","ÉCRIS TON MESSAGE","SCHREIBE DEINE NACHRICHT"],
+    "Escreve uma mensagem e deixa-a voar pelo mundo.": ["Write a message and let it fly around the world.","Escribe un mensaje y déjalo volar por el mundo.","Écris un message et laisse-le parcourir le monde.","Schreibe eine Nachricht und lass sie um die Welt fliegen."],
+    "Descobre mensagens, ideias e culturas de todo o mundo.": ["Discover messages, ideas and cultures from around the world.","Descubre mensajes, ideas y culturas de todo el mundo.","Découvre des messages, des idées et des cultures du monde entier.","Entdecke Nachrichten, Ideen und Kulturen aus aller Welt."],
+    "SEND  ·  CONNECT  ·  DISCOVER": ["SEND  ·  CONNECT  ·  DISCOVER","ENVÍA  ·  CONECTA  ·  DESCUBRE","ENVOIE  ·  CONNECTE  ·  DÉCOUVRE","SENDEN  ·  VERBINDEN  ·  ENTDECKEN"],
+    "O mundo\\nà distância\\nde um avião.": ["The world\\nwithin one paper plane.","El mundo\\na bordo de un avión de papel.","Le monde\\nà portée d’un avion en papier.","Die Welt\\nin Reichweite eines Papierfliegers."],
+    "Partilha uma ideia e descobre pessoas em todo o mundo.": ["Share an idea and discover people around the world.","Comparte una idea y descubre personas de todo el mundo.","Partage une idée et découvre des personnes partout dans le monde.","Teile eine Idee und entdecke Menschen auf der ganzen Welt."],
+    "Enviar avião": ["Send a plane","Enviar un avión","Envoyer un avion","Papierflieger senden"],
+    "Ver rotas": ["View routes","Ver rutas","Voir les itinéraires","Routen ansehen"],
   };
 }
 
