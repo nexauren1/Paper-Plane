@@ -290,12 +290,12 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sectionTitle = _section == 2 ? 'Friends' : _section == 1 ? 'Your chats' : 'Flight connections';
+    final sectionTitle = _section == 2 ? 'Amigos' : _section == 1 ? 'Conversas' : 'Ligações por avião';
     final sectionSubtitle = _section == 2
-        ? 'Find people and build your global network.'
+        ? PaperPlaneLocale.translate('Encontra pessoas e constrói a tua rede mundial.')
         : _section == 1
-            ? 'Private conversations with your co-pilots.'
-            : 'Keep the people you meet along the way.';
+            ? PaperPlaneLocale.translate('Conversas privadas com os teus copilotos.')
+            : PaperPlaneLocale.translate('Mantém contacto com as pessoas que conheces pelo caminho.');
     final sectionIcon = _section == 2
         ? Icons.people_alt_rounded
         : _section == 1
@@ -329,7 +329,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         PlaneText(
-                          sectionTitle,
+                          PaperPlaneLocale.translate(sectionTitle),
                           style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.5),
                         ),
                         PlaneText(
@@ -567,10 +567,10 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const PlaneText('Meet people around the world', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                      PlaneText(PaperPlaneLocale.translate('Conhece pessoas em todo o mundo'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 5),
                       const PlaneText(
-                        'Search by pilot name or invite someone to join your network.',
+                        PaperPlaneLocale.translate('Procura pelo nome do piloto ou convida alguém para se juntar à tua rede.'),
                         style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.4),
                       ),
                       const SizedBox(height: 9),
@@ -581,7 +581,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                           borderRadius: BorderRadius.circular(30),
                           border: Border.all(color: _chatGoldBright.withOpacity(0.25)),
                         ),
-                        child: const PlaneText('GLOBAL COMMUNITY', style: TextStyle(color: _chatGoldBright, fontSize: 8, letterSpacing: 1.0, fontWeight: FontWeight.w900)),
+                        child: PlaneText(PaperPlaneLocale.translate('COMUNIDADE GLOBAL'), style: const TextStyle(color: _chatGoldBright, fontSize: 8, letterSpacing: 1.0, fontWeight: FontWeight.w900)),
                       ),
                     ],
                   ),
