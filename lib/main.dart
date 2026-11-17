@@ -777,17 +777,26 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _index = 0;
   final GlobalKey<_OpenSkyPageState> _openSkyKey = GlobalKey<_OpenSkyPageState>();
   StreamSubscription<User?>? _authSubscription;
   String? _activeUid;
   bool _sessionTransitioning = false;
+  Timer? _presenceTimer;
+
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _activeUid = _signedInUid(FirebaseAuth.instance.currentUser);
+    _sendPresenceHeartbeat();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _sendPresenceHeartbeat();
+      }
+    });
     _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
       _handleAuthStateChanged,
       onError: (Object error, StackTrace stack) {
@@ -822,6 +831,23 @@ class _MainShellState extends State<MainShell> {
 
   String? _signedInUid(User? user) =>
       user == null || user.isAnonymous ? null : user.uid;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _sendPresenceHeartbeat();
+    }
+  }
+
+  Future<void> _sendPresenceHeartbeat() async {
+    if (_signedInUid(FirebaseAuth.instance.currentUser) == null) return;
+    try {
+      await PaperPlaneApi.instance.updatePresence();
+    } catch (error) {
+      // Presence is best-effort; chat and messaging stay available offline.
+      debugPrint('Paper Plane: presence heartbeat skipped: $error');
+    }
+  }
 
   void _handleAuthStateChanged(User? user) {
     final nextUid = _signedInUid(user);
@@ -955,6 +981,8 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _presenceTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _authSubscription?.cancel();
     PaperPlaneNotifications.onOpenInbox = null;
     PaperPlaneNotifications.onOpenPlane = null;
