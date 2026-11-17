@@ -7,8 +7,8 @@ import '../services/paper_plane_api.dart';
 import '../widgets/pilot_avatar.dart';
 
 const Color _setupNavy = Color(0xFF071225);
-const Color _setupGold = Color(0xFFF0CE7C);
-const Color _setupGoldLight = Color(0xFFFFE7A8);
+const Color _setupGold = Color(0xFF42D9FF);
+const Color _setupGoldLight = Color(0xFFB8F1FF);
 
 class PilotProfileSetupScreen extends StatefulWidget {
   const PilotProfileSetupScreen({super.key});
