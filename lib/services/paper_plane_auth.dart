@@ -6,6 +6,7 @@ import 'firebase_runtime.dart';
 import 'paper_plane_analytics.dart';
 import 'paper_plane_api.dart';
 import 'paper_plane_notifications.dart';
+import 'paper_plane_localization.dart';
 
 class PaperPlaneAuth {
   PaperPlaneAuth._();
@@ -162,6 +163,8 @@ class PaperPlaneAuth {
     if (!FirebaseRuntime.isInitialized) return;
     await PaperPlaneAnalytics.logLogout();
     await PaperPlaneNotifications.unregisterDeviceForSessionEnd();
+    PaperPlaneNotifications.resetPendingRoutes();
+    PaperPlaneLocale.resetToDeviceLanguage();
     await FirebaseAuth.instance.signOut();
     if (_googleInitialized) {
       try {
