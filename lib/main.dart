@@ -27,7 +27,7 @@ const Color ppNavy = Color(0xFF040A18);
 const Color ppNavyDeep = Color(0xFF020611);
 const Color ppBlue = Color(0xFF155ECB);
 const Color ppBlueLight = Color(0xFF57D6FF);
-const Color ppGold = Color(0xFF258BFF);
+const Color ppGold = Color(0xFF42D9FF);
 const Color ppGoldBright = Color(0xFFB8F1FF);
 const Color ppPaper = Color(0xFFF4FAFF);
 const Color ppInk = Color(0xFF0C1730);
@@ -473,23 +473,37 @@ class GoldButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return Container(
       width: double.infinity,
       height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(19),
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xFF22D8FF), Color(0xFF1677F8), Color(0xFF843CF4)],
+        ),
+        boxShadow: [
+          BoxShadow(color: ppBlueLight.withOpacity(0.22), blurRadius: 19, offset: const Offset(0, 6)),
+          BoxShadow(color: const Color(0xFF843CF4).withOpacity(0.16), blurRadius: 24, offset: const Offset(0, 8)),
+        ],
+      ),
       child: FilledButton(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
-          foregroundColor: ppInk,
-          backgroundColor: ppGold,
+          foregroundColor: Colors.white,
+          backgroundColor: Colors.transparent,
+          disabledBackgroundColor: Colors.white12,
+          disabledForegroundColor: Colors.white38,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(19)),
-          elevation: 5,
-          shadowColor: ppGold.withOpacity(0.24),
-          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (icon != null) ...[Icon(icon, size: 22), const SizedBox(width: 10)],
+            if (icon != null) ...[Icon(icon, size: 21), const SizedBox(width: 10)],
             PlaneText(label),
           ],
         ),
@@ -796,21 +810,27 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
-  void _openInboxFromNotification() {
+  void _selectTab(int index) {
+    if (mounted) setState(() => _index = index);
+  }
+
+  void _openWrite() => ppPush(context, const WritePlaneScreen());
+
+  void _openInboxFromHome() {
     if (!mounted) return;
-    setState(() => _index = 0);
+    _selectTab(3);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ppPush(context, const InboxPage());
     });
   }
 
-  void _openChatFromNotification() {
-    if (mounted) setState(() => _index = 2);
-  }
+  void _openInboxFromNotification() => _openInboxFromHome();
+
+  void _openChatFromNotification() => _selectTab(3);
 
   void _openOpenSkyAfterPublish() {
     if (!mounted) return;
-    setState(() => _index = 0);
+    _selectTab(1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openSkyKey.currentState?._refresh();
     });
@@ -823,7 +843,7 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _openPlaneFromNotification(String airplaneId) async {
     if (!mounted || airplaneId.isEmpty) return;
-    setState(() => _index = 0);
+    _selectTab(3);
     String? senderCountry;
     try {
       final response = await PaperPlaneApi.instance.getInbox();
@@ -835,7 +855,7 @@ class _MainShellState extends State<MainShell> {
         }
       }
     } catch (_) {
-      // The inbox remains accessible if the connection is temporarily unavailable.
+      // The inbox remains available if the connection is temporarily unavailable.
     }
     if (!mounted) return;
     ppPush(context, IncomingPlaneScreen(airplaneId: airplaneId, countryCode: senderCountry));
@@ -853,56 +873,68 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
+    final pages = <Widget>[
+      HomePage(
+        onWrite: _openWrite,
+        onOpenInbox: _openInboxFromHome,
+        onExplore: () => _selectTab(1),
+        onOpenFriends: () => _selectTab(3),
+        onOpenMore: () => _selectTab(4),
+      ),
       OpenSkyPage(key: _openSkyKey),
+      const SizedBox.shrink(),
       const ChatHubScreen(),
-      const ProfilePage(),
+      const MorePage(),
     ];
 
     return Scaffold(
-      backgroundColor: ppNavy,
+      backgroundColor: ppNavyDeep,
       body: SpaceBackground(
         child: SafeArea(child: IndexedStack(index: _index, children: pages)),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: const Color(0xF2081428),
-          border: Border(top: BorderSide(color: ppBlueLight.withOpacity(0.24))),
-          boxShadow: [BoxShadow(color: ppBlue.withOpacity(0.16), blurRadius: 22, offset: const Offset(0, -5))],
+          color: const Color(0xF2051028),
+          border: Border(top: BorderSide(color: ppBlueLight.withOpacity(0.20))),
+          boxShadow: [
+            BoxShadow(color: ppBlue.withOpacity(0.16), blurRadius: 24, offset: const Offset(0, -6)),
+          ],
         ),
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 72,
+            height: 76,
             child: Row(children: [
-              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+              _navItem(1, Icons.explore_outlined, Icons.explore_rounded, 'Explore'),
               Expanded(
                 child: Center(
                   child: InkWell(
-                    onTap: () => ppPush(context, const WritePlaneScreen()),
-                    borderRadius: BorderRadius.circular(24),
+                    onTap: _openWrite,
+                    borderRadius: BorderRadius.circular(30),
                     child: Container(
-                      height: 54,
-                      width: 58,
+                      height: 58,
+                      width: 62,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(19),
+                        shape: BoxShape.circle,
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Color(0xFF42D9FF), Color(0xFF1677F8), Color(0xFF6044D8)],
+                          colors: [Color(0xFF40E0FF), Color(0xFF147BFA), Color(0xFF8538F4)],
                         ),
+                        border: Border.all(color: Colors.white.withOpacity(0.42), width: 1.2),
                         boxShadow: [
-                          BoxShadow(color: ppBlueLight.withOpacity(0.38), blurRadius: 19, spreadRadius: 1),
-                          BoxShadow(color: ppBlue.withOpacity(0.30), blurRadius: 28, offset: const Offset(0, 6)),
+                          BoxShadow(color: ppBlueLight.withOpacity(0.42), blurRadius: 22, spreadRadius: 1),
+                          BoxShadow(color: const Color(0xFF8438F4).withOpacity(0.25), blurRadius: 28, offset: const Offset(0, 7)),
                         ],
                       ),
-                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 25),
+                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 27),
                     ),
                   ),
                 ),
               ),
-              _navItem(1, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
-              _navItem(2, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
+              _navItem(3, Icons.people_outline_rounded, Icons.people_alt_rounded, 'Friends'),
+              _navItem(4, Icons.grid_view_rounded, Icons.grid_view_rounded, 'More'),
             ]),
           ),
         ),
@@ -914,22 +946,22 @@ class _MainShellState extends State<MainShell> {
     final selected = _index == index;
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _index = index),
-        borderRadius: BorderRadius.circular(14),
+        onTap: () => _selectTab(index),
+        borderRadius: BorderRadius.circular(16),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
-          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 1),
+          margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 1),
           decoration: BoxDecoration(
-            color: selected ? ppBlue.withOpacity(0.20) : Colors.transparent,
-            borderRadius: BorderRadius.circular(13),
-            border: selected ? Border.all(color: ppBlueLight.withOpacity(0.20)) : null,
+            color: selected ? ppBlue.withOpacity(0.19) : Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            border: selected ? Border.all(color: ppBlueLight.withOpacity(0.18)) : null,
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(selected ? selectedIcon : icon, color: selected ? ppBlueLight : Colors.white70, size: 21),
-              const SizedBox(height: 3),
+              const SizedBox(height: 4),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: PlaneText(
@@ -951,9 +983,20 @@ class _MainShellState extends State<MainShell> {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.onWrite, required this.onOpenInbox});
+  const HomePage({
+    super.key,
+    required this.onWrite,
+    required this.onOpenInbox,
+    required this.onExplore,
+    required this.onOpenFriends,
+    required this.onOpenMore,
+  });
+
   final VoidCallback onWrite;
   final VoidCallback onOpenInbox;
+  final VoidCallback onExplore;
+  final VoidCallback onOpenFriends;
+  final VoidCallback onOpenMore;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -963,12 +1006,12 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic> _profile = {};
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _sent = [];
+  List<Map<String, dynamic>> _atlasRoutes = [];
   int _unread = 0;
   String? _firstFlightState;
   Map<String, dynamic> _firstFlight = {};
   bool _loading = true;
   String? _error;
-
   Timer? _syncTimer;
 
   @override
@@ -992,6 +1035,7 @@ class _HomePageState extends State<HomePage> {
         PaperPlaneApi.instance.getProfile(),
         PaperPlaneApi.instance.getSentPlanes(),
         PaperPlaneApi.instance.getInbox(),
+        PaperPlaneApi.instance.getSkyAtlas(),
       ]);
       final pilot = results[0]['pilot'] as Map<String, dynamic>? ?? {};
       final stats = results[0]['stats'] as Map<String, dynamic>? ?? {};
@@ -999,11 +1043,14 @@ class _HomePageState extends State<HomePage> {
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       final inbox = (results[2]['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      final routes = (results[3]['routes'] as List<dynamic>? ?? const [])
+          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       if (!mounted) return;
       setState(() {
         _profile = pilot;
         _stats = stats;
         _sent = sent;
+        _atlasRoutes = routes;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
         _firstFlightState = results[0]['firstFlightState']?.toString();
         _firstFlight = results[0]['firstFlight'] as Map<String, dynamic>? ?? {};
@@ -1013,7 +1060,9 @@ class _HomePageState extends State<HomePage> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = error is PaperPlaneApiException ? error.message : 'Não foi possível sincronizar o painel do piloto.';
+        _error = error is PaperPlaneApiException
+            ? error.message
+            : 'Não foi possível sincronizar o painel do piloto.';
       });
     }
   }
@@ -1041,160 +1090,432 @@ class _HomePageState extends State<HomePage> {
     final name = _profile['pilot_name']?.toString();
     final handle = _profile['pilot_handle']?.toString();
     final received = int.tryParse(_stats['received']?.toString() ?? '') ?? 0;
+    final sentCount = int.tryParse(_stats['sent']?.toString() ?? '') ?? _sent.length;
     final active = _sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).length;
     final profileReady = _profile['profile_completed'] == 1;
 
     return RefreshIndicator(
-      color: ppGold,
+      color: ppBlueLight,
       onRefresh: _refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-        padding: const EdgeInsets.fromLTRB(20, 15, 20, 24),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
         children: [
           Row(children: [
-            const Icon(Icons.send_rounded, color: ppGold, size: 22),
-            const SizedBox(width: 8),
-            const PlaneText('PAPER PLANE', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.w800, color: ppGoldBright)),
-            const Spacer(),
-            IconButton(onPressed: widget.onOpenInbox, icon: const Icon(Icons.notifications_none_rounded, color: ppGoldBright)),
-            IconButton(onPressed: () => ppPush(context, const ProfilePage()), icon: const Icon(Icons.account_circle_outlined, color: ppGoldBright)),
-          ]),
-          const SizedBox(height: 12),
-          PlaneText('Olá, ' + (name == null || name.isEmpty ? 'Piloto' : name), style: const TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
-          if (handle != null && handle.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: PlaneText('@' + handle, style: const TextStyle(color: ppGoldBright, fontSize: 13)),
+            InkWell(
+              onTap: () => ppPush(context, const ProfilePage()),
+              borderRadius: BorderRadius.circular(30),
+              child: PilotAvatar(
+                fallbackLabel: name?.isNotEmpty == true ? name! : 'Pilot',
+                imageUrl: _profile['avatar_url']?.toString(),
+                size: 46,
+              ),
             ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PlaneText('Olá, ' + (name == null || name.isEmpty ? 'Pilot' : name),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                  PlaneText(handle == null || handle.isEmpty ? 'PAPER PLANE' : '@$handle',
+                    style: const TextStyle(color: ppBlueLight, fontSize: 11, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  tooltip: PaperPlaneLocale.translate('Inbox'),
+                  onPressed: widget.onOpenInbox,
+                  icon: const Icon(Icons.notifications_none_rounded, color: ppBlueLight, size: 25),
+                ),
+                if (_unread > 0)
+                  Positioned(
+                    right: 7,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Color(0xFFFF4D78), shape: BoxShape.circle),
+                      child: PlaneText(_unread.toString(), style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+              ],
+            ),
+            IconButton(
+              tooltip: PaperPlaneLocale.translate('More'),
+              onPressed: widget.onOpenMore,
+              icon: const Icon(Icons.grid_view_rounded, color: Colors.white70),
+            ),
+          ]),
+          const SizedBox(height: 18),
+          PlaneText('O teu mundo, a uma mensagem de distância.',
+            style: const TextStyle(fontSize: 24, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
           const SizedBox(height: 5),
-          const PlaneText('O teu correio digital está ligado ao mundo.', style: TextStyle(color: Color(0xFFB8C8E5), fontSize: 14)),
-          const SizedBox(height: 19),
+          const PlaneText('Descobre pessoas, ideias e culturas em todo o mundo.',
+            style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+          const SizedBox(height: 16),
+          Container(
+            height: 264,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(27),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0B3470), Color(0xFF0B1A46), Color(0xFF211044)],
+              ),
+              border: Border.all(color: ppBlueLight.withOpacity(0.40)),
+              boxShadow: [
+                BoxShadow(color: ppBlue.withOpacity(0.22), blurRadius: 26, offset: const Offset(0, 10)),
+                BoxShadow(color: const Color(0xFF8139ED).withOpacity(0.12), blurRadius: 32, offset: const Offset(0, 8)),
+              ],
+            ),
+            child: Stack(children: [
+              Positioned.fill(
+                child: IgnorePointer(child: AnimatedFleetGlobe(routes: _atlasRoutes)),
+              ),
+              Positioned(
+                top: 14,
+                left: 15,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC07142D),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: ppBlueLight.withOpacity(0.30)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Container(width: 7, height: 7, decoration: const BoxDecoration(color: Color(0xFF40F3B0), shape: BoxShape.circle)),
+                    const SizedBox(width: 7),
+                    const PlaneText('VOOS ACTIVOS', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    const SizedBox(width: 7),
+                    PlaneText(active.toString(), style: const TextStyle(color: ppBlueLight, fontSize: 10, fontWeight: FontWeight.w900)),
+                  ]),
+                ),
+              ),
+              Positioned(
+                left: 15,
+                right: 15,
+                bottom: 14,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const PlaneText('Ligações sem fronteiras',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+                          const SizedBox(height: 3),
+                          const PlaneText('Um avião pode aproximar pessoas de qualquer parte do mundo.',
+                            style: TextStyle(color: Colors.white70, fontSize: 10, height: 1.3)),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.public_rounded, color: ppBlueLight, size: 27),
+                  ],
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          GoldButton(label: 'Send a Message', icon: Icons.send_rounded, onPressed: widget.onWrite, height: 62),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: _featureCard(
+              icon: Icons.public_rounded,
+              title: 'Open Sky',
+              subtitle: 'Public messages',
+              gradient: const [Color(0xFF143B83), Color(0xFF31206F)],
+              onTap: widget.onExplore,
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: _featureCard(
+              icon: Icons.stars_rounded,
+              title: 'Quiz World',
+              subtitle: 'Play and earn XP',
+              gradient: const [Color(0xFF38206D), Color(0xFF142C62)],
+              onTap: () => ppPush(context, const QuizScreen()),
+            )),
+          ]),
+          if (_firstFlightState == 'READY_TO_LAUNCH') ...[
+            const SizedBox(height: 13),
+            GlassPanel(
+              highlight: true,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Row(children: [
+                  Icon(Icons.flight_takeoff_rounded, color: ppBlueLight, size: 24),
+                  SizedBox(width: 9),
+                  Expanded(child: PlaneText('O teu primeiro avião está pronto',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14))),
+                ]),
+                const SizedBox(height: 7),
+                const PlaneText('A tua primeira mensagem está guardada. Podes terminar a preparação e lançar o avião.',
+                  style: TextStyle(color: Colors.white65, fontSize: 11, height: 1.4)),
+                const SizedBox(height: 10),
+                GoldButton(label: 'Retomar primeiro voo', icon: Icons.rocket_launch_rounded,
+                  onPressed: _launchSavedFirstFlight, height: 48),
+              ]),
+            ),
+          ],
+          const SizedBox(height: 15),
+          GlassPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 14),
+            child: Row(children: [
+              Expanded(child: _homeStat(Icons.flight_takeoff_rounded, 'Flights', sentCount.toString())),
+              Container(width: 1, height: 52, color: Colors.white12),
+              Expanded(child: _homeStat(Icons.mark_email_read_outlined, 'Received', received.toString())),
+              Container(width: 1, height: 52, color: Colors.white12),
+              Expanded(child: _homeStat(Icons.mark_email_unread_outlined, 'Unread', _unread.toString())),
+            ]),
+          ),
+          const SizedBox(height: 14),
+          Row(children: [
+            const Expanded(child: PlaneText('Voos em andamento', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+            TextButton(onPressed: widget.onOpenFriends, child: const PlaneText('Friends')),
+          ]),
           if (_loading)
-            const Center(child: Padding(padding: EdgeInsets.all(26), child: CircularProgressIndicator(color: ppGold)))
+            const Center(child: Padding(padding: EdgeInsets.all(18), child: CircularProgressIndicator(color: ppBlueLight)))
           else if (_error != null)
             GlassPanel(
               child: Column(children: [
-                const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 30),
+                const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 29),
+                const SizedBox(height: 7),
+                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 const SizedBox(height: 8),
-                PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                const SizedBox(height: 9),
-                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
+                OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Try again')),
               ]),
             )
-          else ...[
-            if (!profileReady)
-              GlassPanel(
-                highlight: true,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const PlaneText('Completa o teu perfil de copiloto', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-                  const SizedBox(height: 6),
-                  const PlaneText('Escolhe o teu nome único, ano de nascimento e país para preparar a rota.', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  const SizedBox(height: 10),
-                  GoldButton(
-                    label: 'Completar perfil',
-                    icon: Icons.person_add_alt_1_rounded,
-                    onPressed: () async {
-                      final completed = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(builder: (_) => const PilotProfileSetupScreen()),
-                      );
-                      if (completed == true) _refresh();
-                    },
-                  ),
-                ]),
-              ),
-            if (_firstFlightState == 'READY_TO_LAUNCH')
-              GlassPanel(
-                highlight: true,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Row(children: [
-                    Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 26),
-                    SizedBox(width: 10),
-                    Expanded(child: PlaneText('O teu primeiro avião está pronto', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16))),
+          else if (_sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).isEmpty)
+            const GlassPanel(child: PlaneText('Não tens aviões em viagem neste momento.',
+              style: TextStyle(color: Colors.white60, fontSize: 11)))
+          else
+            for (final plane in _sent.where((item) => ['QUEUED', 'FLYING'].contains(item['status'])).take(2)) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => ppPush(context, FlightScreen(airplaneId: plane['id'].toString())),
+                borderRadius: BorderRadius.circular(17),
+                child: GlassPanel(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(children: [
+                    const Icon(Icons.flight_rounded, color: ppBlueLight, size: 24),
+                    const SizedBox(width: 10),
+                    Expanded(child: PlaneText(
+                      plane['status'] == 'QUEUED'
+                        ? 'À procura de destinatário'
+                        : 'Em viagem · ' + (plane['flight_distance_km']?.toString() ?? 'a calcular') + ' km',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.white54),
                   ]),
-                  const SizedBox(height: 6),
-                  const PlaneText('O teu primeiro avião está guardado no servidor e pronto para a viagem. Retoma a oficina para rever o desenho e lança-o quando estiveres preparado.', style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.45)),
-                  const SizedBox(height: 12),
-                  GoldButton(
-                    label: 'Lançar o primeiro avião',
-                    icon: Icons.rocket_launch_rounded,
-                    onPressed: _launchSavedFirstFlight,
-                    height: 54,
-                  ),
-                ]),
-              ),
-            GlassPanel(
-              highlight: true,
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 15),
-              child: Column(children: [
-                const SizedBox(height: 4),
-                const AnimatedPlane(width: 150),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: _homeStat(Icons.flight_rounded, 'Voos ativos', active.toString())),
-                  Container(width: 1, height: 62, color: Colors.white24),
-                  Expanded(child: _homeStat(Icons.send_outlined, 'Aviões enviados', _sent.length.toString())),
-                  Container(width: 1, height: 62, color: Colors.white24),
-                  Expanded(child: _homeStat(Icons.mark_email_read_outlined, 'Recebidos', received.toString())),
-                ]),
-              ]),
-            ),
-            const SizedBox(height: 16),
-            GoldButton(label: 'Escrever Avião', icon: Icons.edit_outlined, onPressed: widget.onWrite, height: 64),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 58,
-              child: OutlinedButton.icon(
-                onPressed: widget.onOpenInbox,
-                icon: const Icon(Icons.markunread_mailbox_outlined),
-                label: PlaneText(_unread == 0 ? 'Abrir caixa de entrada' : 'Abrir ' + _unread.toString() + ' carta(s) nova(s)'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: ppGoldBright,
-                  side: BorderSide(color: ppGold.withOpacity(0.58)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  backgroundColor: Colors.white.withOpacity(0.05),
                 ),
               ),
+            ],
+          const SizedBox(height: 14),
+          Align(
+            alignment: Alignment.center,
+            child: TextButton.icon(
+              onPressed: widget.onOpenFriends,
+              icon: const Icon(Icons.people_alt_outlined, size: 17),
+              label: const PlaneText('Conhece novos amigos'),
             ),
-            const SectionTitle('Acompanhar voos'),
-            if (_sent.where((plane) => ['QUEUED', 'FLYING'].contains(plane['status'])).isEmpty)
-              const GlassPanel(child: PlaneText('Não tens aviões em viagem neste momento.', style: TextStyle(color: Colors.white70)))
-            else
-              for (final plane in _sent.where((item) => ['QUEUED', 'FLYING'].contains(item['status'])).take(3)) ...[
-                const SizedBox(height: 9),
-                InkWell(
-                  onTap: () => ppPush(context, FlightScreen(airplaneId: plane['id'].toString())),
-                  borderRadius: BorderRadius.circular(18),
-                  child: GlassPanel(
-                    child: Row(children: [
-                      const Icon(Icons.flight_takeoff_rounded, color: ppGoldBright, size: 27),
-                      const SizedBox(width: 11),
-                      Expanded(child: PlaneText(
-                        plane['status'] == 'QUEUED' ? 'À procura de destinatário' : 'Em viagem · ' + (plane['flight_distance_km']?.toString() ?? 'a calcular') + ' km',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      )),
-                      const Icon(Icons.chevron_right, color: ppGold),
-                    ]),
-                  ),
-                ),
-              ],
-            const SizedBox(height: 10),
-            const PlaneText('Os totais e os estados acima são carregados da conta e do servidor.', textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11)),
-          ],
+          ),
         ],
       ),
     );
   }
 
+  Widget _featureCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required List<Color> gradient,
+    required VoidCallback onTap,
+  }) {
+    return GlassPanel(
+      padding: EdgeInsets.zero,
+      radius: 20,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          height: 112,
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: gradient),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Icon(icon, color: ppBlueLight, size: 25),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              PlaneText(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
+              PlaneText(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 9)),
+            ]),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Widget _homeStat(IconData icon, String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 5),
+    padding: const EdgeInsets.symmetric(horizontal: 4),
     child: Column(children: [
-      Icon(icon, color: ppGoldBright),
+      Icon(icon, color: ppBlueLight, size: 18),
       const SizedBox(height: 5),
-      PlaneText(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: Colors.white70)),
-      const SizedBox(height: 1),
-      PlaneText(value, style: const TextStyle(fontSize: 27, color: ppGoldBright, fontWeight: FontWeight.w800)),
+      PlaneText(label, textAlign: TextAlign.center, style: const TextStyle(fontSize: 9, color: Colors.white60)),
+      const SizedBox(height: 2),
+      PlaneText(value, style: const TextStyle(fontSize: 21, color: Colors.white, fontWeight: FontWeight.w900)),
     ]),
   );
+}
+
+class MorePage extends StatelessWidget {
+  const MorePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ScreenFrame(
+      title: 'More',
+      action: IconButton(
+        tooltip: PaperPlaneLocale.translate('Settings'),
+        onPressed: () => ppPush(context, const SettingsScreen()),
+        icon: const Icon(Icons.settings_rounded, color: ppBlueLight),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(23),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF0F3B80), Color(0xFF31206D), Color(0xFF101A43)],
+              ),
+              border: Border.all(color: ppBlueLight.withOpacity(0.26)),
+            ),
+            child: const Row(children: [
+              Icon(Icons.public_rounded, color: ppBlueLight, size: 37),
+              SizedBox(width: 14),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                PlaneText('Explore more of the world', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                SizedBox(height: 4),
+                PlaneText('Tools, collections and account controls in one place.',
+                  style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.35)),
+              ])),
+            ]),
+          ),
+          const SizedBox(height: 16),
+          const SectionTitle('Discover'),
+          const _MoreEntry(
+            icon: Icons.public_rounded, color: Color(0xFF36CFFF),
+            title: 'World Atlas', subtitle: 'Explore countries and flight routes',
+            destination: SkyAtlasScreen(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.quiz_rounded, color: Color(0xFFAC80FF),
+            title: 'Quiz World', subtitle: 'Test your knowledge and earn XP',
+            destination: QuizScreen(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.collections_bookmark_rounded, color: Color(0xFFFFA85B),
+            title: 'Flight Collections', subtitle: 'Keep the places your flights have reached',
+            destination: CollectionScreen(),
+          ),
+          const SectionTitle('Your Paper Plane'),
+          const _MoreEntry(
+            icon: Icons.inbox_rounded, color: Color(0xFF36CFFF),
+            title: 'Inbox', subtitle: 'Read letters and follow your sent planes',
+            destination: InboxPage(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.person_rounded, color: Color(0xFFBA8BFF),
+            title: 'My Profile', subtitle: 'Edit your profile and profile photo',
+            destination: ProfilePage(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.settings_rounded, color: Color(0xFF8BA8FF),
+            title: 'Settings', subtitle: 'Language and app preferences',
+            destination: SettingsScreen(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.shield_rounded, color: Color(0xFF52D6B5),
+            title: 'Safety & Privacy', subtitle: 'Blocks, reports and privacy controls',
+            destination: SafetyScreen(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.help_rounded, color: Color(0xFF58C9FF),
+            title: 'Help & Support', subtitle: 'Contact the team and track requests',
+            destination: SupportScreen(),
+          ),
+          const SizedBox(height: 9),
+          const _MoreEntry(
+            icon: Icons.manage_accounts_rounded, color: Color(0xFFB08DFF),
+            title: 'Account', subtitle: 'Sign-in and account management',
+            destination: AccountScreen(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MoreEntry extends StatelessWidget {
+  const _MoreEntry({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.destination,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final Widget destination;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      padding: EdgeInsets.zero,
+      radius: 17,
+      child: InkWell(
+        onTap: () => ppPush(context, destination),
+        borderRadius: BorderRadius.circular(17),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+          child: Row(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(13),
+                color: color.withOpacity(0.15),
+                border: Border.all(color: color.withOpacity(0.22)),
+              ),
+              child: Icon(icon, color: color, size: 21),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              PlaneText(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 3),
+              PlaneText(subtitle, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+            ])),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white54, size: 21),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 class WritePlaneScreen extends StatefulWidget {
