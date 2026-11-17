@@ -229,6 +229,18 @@ class PaperPlaneLocale {
   }
 
   static const Map<String, List<String>> _translations = {
+    'Amigos': ['Friends', 'Amigos', 'Amis', 'Freunde'],
+    'Conversas': ['Chats', 'Conversaciones', 'Conversations', 'Chats'],
+    'Ligações por avião': ['Flight connections', 'Conexiones de vuelo', 'Liens par avion', 'Flugverbindungen'],
+    'Encontra pessoas e constrói a tua rede mundial.': ['Find people and build your global network.', 'Encuentra personas y construye tu red mundial.', 'Rencontre des personnes et crée ton réseau mondial.', 'Finde Menschen und baue dein globales Netzwerk auf.'],
+    'Conversas privadas com os teus copilotos.': ['Private conversations with your co-pilots.', 'Conversaciones privadas con tus copilotos.', 'Conversations privées avec tes copilotes.', 'Private Unterhaltungen mit deinen Co-Piloten.'],
+    'Mantém contacto com as pessoas que conheces pelo caminho.': ['Keep in touch with the people you meet along the way.', 'Mantén el contacto con las personas que conoces en el camino.', 'Garde le contact avec les personnes rencontrées en chemin.', 'Bleib mit den Menschen in Kontakt, die du unterwegs kennenlernst.'],
+    'Conhece pessoas em todo o mundo': ['Meet people around the world', 'Conoce personas de todo el mundo', 'Rencontre des personnes du monde entier', 'Lerne Menschen auf der ganzen Welt kennen'],
+    'Procura pelo nome do piloto ou convida alguém para se juntar à tua rede.': ['Search by pilot name or invite someone to join your network.', 'Busca por nombre de piloto o invita a alguien a unirse a tu red.', 'Recherche par nom de pilote ou invite quelqu’un à rejoindre ton réseau.', 'Suche nach Pilotennamen oder lade jemanden in dein Netzwerk ein.'],
+    'COMUNIDADE GLOBAL': ['GLOBAL COMMUNITY', 'COMUNIDAD GLOBAL', 'COMMUNAUTÉ MONDIALE', 'GLOBALE COMMUNITY'],
+    'Descobre países, rotas e ligações criadas pelo Paper Plane.': ['Discover countries, routes and connections made on Paper Plane.', 'Descubre países, rutas y conexiones creadas en Paper Plane.', 'Découvre les pays, les itinéraires et les liens créés sur Paper Plane.', 'Entdecke Länder, Routen und Verbindungen auf Paper Plane.'],
+    'EXPLORA O MUNDO': ['EXPLORE THE WORLD', 'EXPLORA EL MUNDO', 'EXPLORE LE MONDE', 'ENTDECKE DIE WELT'],
+
     'Abrir Chat': ['Open Chat', 'Abrir Chat', 'Ouvrir le Chat', 'Chat öffnen'],
     'Ver voo': ['View flight', 'Ver vuelo', 'Voir le vol', 'Flug ansehen'],
     'Início': ['Home', 'Inicio', 'Accueil', 'Startseite'],
