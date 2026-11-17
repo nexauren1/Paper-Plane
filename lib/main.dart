@@ -2552,7 +2552,7 @@ class GlobeFlightPainter extends CustomPainter {
       canvas.drawPath(
         metric.extractPath(0, metric.length),
         Paint()
-          ..color = const Color(0xFFFFE7A8).withOpacity(0.82)
+          ..color = const Color(0xFFB8F1FF).withOpacity(0.82)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.1
           ..strokeCap = StrokeCap.round,
@@ -3880,7 +3880,7 @@ class _IncomingPlanePainter extends CustomPainter {
       seal,
       14,
       Paint()
-        ..color = const Color(0xFFFFE7A8).withOpacity(0.85)
+        ..color = const Color(0xFFB8F1FF).withOpacity(0.85)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2,
     );
