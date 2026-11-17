@@ -19,6 +19,7 @@ class ChatHubScreen extends StatefulWidget {
   const ChatHubScreen({super.key, this.initialSection = 0});
 
   final int initialSection;
+  static final ValueNotifier<int> sectionRequests = ValueNotifier<int>(0);
 
   @override
   State<ChatHubScreen> createState() => _ChatHubScreenState();
@@ -51,13 +52,21 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   void initState() {
     super.initState();
     _section = widget.initialSection.clamp(0, 2).toInt();
+    ChatHubScreen.sectionRequests.addListener(_applySectionRequest);
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 10), (_) => _refresh(silent: true));
+  }
+
+  void _applySectionRequest() {
+    if (!mounted) return;
+    final requested = ChatHubScreen.sectionRequests.value.clamp(0, 2).toInt();
+    if (_section != requested) setState(() => _section = requested);
   }
 
   @override
   void dispose() {
     _poller?.cancel();
+    ChatHubScreen.sectionRequests.removeListener(_applySectionRequest);
     _search.dispose();
     super.dispose();
   }
@@ -280,14 +289,26 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             padding: const EdgeInsets.fromLTRB(19, 15, 19, 10),
             child: Row(
               children: [
-                const Icon(Icons.local_fire_department_rounded, color: _chatGold, size: 27),
+                Icon(
+                  widget.initialSection == 1 ? Icons.inbox_rounded : Icons.local_fire_department_rounded,
+                  color: _chatGold,
+                  size: 27,
+                ),
                 const SizedBox(width: 9),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      PlaneText('Chat & Amigos', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
-                      PlaneText('Liga-te a copilotos de todo o mundo', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                      PlaneText(
+                        widget.initialSection == 1 ? 'Your inbox' : 'Chat & Friends',
+                        style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
+                      ),
+                      PlaneText(
+                        widget.initialSection == 1
+                            ? 'Messages from your co-pilots'
+                            : 'Connect with co-pilots around the world.',
+                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
