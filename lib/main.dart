@@ -855,8 +855,9 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = [
       OpenSkyPage(key: _openSkyKey),
-      const ChatHubScreen(),
-      const ProfilePage(),
+      const SkyAtlasScreen(),
+      const ChatHubScreen(initialSection: 2),
+      const MorePage(),
     ];
 
     return Scaffold(
@@ -873,36 +874,37 @@ class _MainShellState extends State<MainShell> {
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 72,
+            height: 78,
             child: Row(children: [
-              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Início'),
+              _navItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+              _navItem(1, Icons.explore_outlined, Icons.explore_rounded, 'Explore'),
               Expanded(
                 child: Center(
                   child: InkWell(
                     onTap: () => ppPush(context, const WritePlaneScreen()),
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(25),
                     child: Container(
-                      height: 54,
-                      width: 58,
+                      height: 62,
+                      width: 66,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(19),
+                        borderRadius: BorderRadius.circular(22),
                         gradient: const LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Color(0xFF42D9FF), Color(0xFF1677F8), Color(0xFF6044D8)],
+                          colors: [Color(0xFF42D9FF), Color(0xFF1677F8), Color(0xFF6846E8)],
                         ),
                         boxShadow: [
-                          BoxShadow(color: ppBlueLight.withOpacity(0.38), blurRadius: 19, spreadRadius: 1),
-                          BoxShadow(color: ppBlue.withOpacity(0.30), blurRadius: 28, offset: const Offset(0, 6)),
+                          BoxShadow(color: ppBlueLight.withOpacity(0.42), blurRadius: 22, spreadRadius: 1),
+                          BoxShadow(color: ppBlue.withOpacity(0.32), blurRadius: 30, offset: const Offset(0, 7)),
                         ],
                       ),
-                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 25),
+                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 28),
                     ),
                   ),
                 ),
               ),
-              _navItem(1, Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, 'Chats'),
-              _navItem(2, Icons.person_outline_rounded, Icons.person_rounded, 'Perfil'),
+              _navItem(2, Icons.people_outline_rounded, Icons.people_alt_rounded, 'Friends'),
+              _navItem(3, Icons.grid_view_rounded, Icons.grid_view_rounded, 'More'),
             ]),
           ),
         ),
@@ -946,6 +948,163 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class MorePage extends StatelessWidget {
+  const MorePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget action({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required VoidCallback onTap,
+      Color accent = ppBlueLight,
+    }) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xD910203B),
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: accent.withOpacity(0.18)),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(19),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+              child: Row(children: [
+                Container(
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    color: accent.withOpacity(0.12),
+                  ),
+                  child: Icon(icon, color: accent, size: 22),
+                ),
+                const SizedBox(width: 13),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PlaneText(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    PlaneText(subtitle, style: const TextStyle(fontSize: 11, color: Colors.white60)),
+                  ],
+                )),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white54),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+      children: [
+        const PlaneText('More', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900)),
+        const SizedBox(height: 4),
+        const PlaneText('Your Paper Plane universe', style: TextStyle(color: Colors.white60, fontSize: 13)),
+        const SizedBox(height: 20),
+        InkWell(
+          onTap: () => ppPush(context, const ProfilePage()),
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF10396B), Color(0xFF111C49), Color(0xFF28184D)],
+              ),
+              border: Border.all(color: ppBlueLight.withOpacity(0.34)),
+              boxShadow: [BoxShadow(color: ppBlue.withOpacity(0.18), blurRadius: 22, offset: const Offset(0, 8))],
+            ),
+            child: Row(children: [
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: ppBlueLight.withOpacity(0.15),
+                  border: Border.all(color: ppBlueLight.withOpacity(0.55), width: 1.5),
+                ),
+                child: const Icon(Icons.person_rounded, color: ppBlueLight, size: 30),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  PlaneText('Your profile', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
+                  SizedBox(height: 4),
+                  PlaneText('Pilot details, avatar and personal invite', style: TextStyle(fontSize: 11, color: Colors.white70)),
+                ],
+              )),
+              const Icon(Icons.arrow_forward_rounded, color: ppBlueLight),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const SectionTitle('Explore'),
+        action(
+          icon: Icons.mail_outline_rounded,
+          title: 'Inbox',
+          subtitle: 'Received and sent paper planes',
+          onTap: () => ppPush(context, const InboxPage()),
+        ),
+        action(
+          icon: Icons.public_rounded,
+          title: 'Flight collections',
+          subtitle: 'Your routes, countries and flight history',
+          onTap: () => ppPush(context, const CollectionScreen()),
+        ),
+        action(
+          icon: Icons.travel_explore_rounded,
+          title: 'Sky Atlas',
+          subtitle: 'Explore the countries connected by your planes',
+          onTap: () => ppPush(context, const SkyAtlasScreen()),
+        ),
+        action(
+          icon: Icons.quiz_rounded,
+          title: 'Quiz World',
+          subtitle: 'Geography, nature and culture',
+          onTap: () => ppPush(context, const QuizScreen()),
+        ),
+        const SizedBox(height: 12),
+        const SectionTitle('Account & support'),
+        action(
+          icon: Icons.person_add_alt_1_rounded,
+          title: 'Invite friends',
+          subtitle: 'Share your personal Paper Plane invite',
+          onTap: () => ppPush(context, const InviteScreen()),
+        ),
+        action(
+          icon: Icons.settings_outlined,
+          title: 'Settings',
+          subtitle: 'Language and app preferences',
+          onTap: () => ppPush(context, const SettingsScreen()),
+        ),
+        action(
+          icon: Icons.shield_outlined,
+          title: 'Safety & privacy',
+          subtitle: 'Blocks, reports and privacy controls',
+          onTap: () => ppPush(context, const SafetyScreen()),
+        ),
+        action(
+          icon: Icons.support_agent_rounded,
+          title: 'Help & support',
+          subtitle: 'Contact the Paper Plane support team',
+          onTap: () => ppPush(context, const SupportScreen()),
+        ),
+      ],
     );
   }
 }
