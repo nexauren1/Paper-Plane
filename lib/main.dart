@@ -1007,6 +1007,7 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _sent = [];
   List<Map<String, dynamic>> _atlasRoutes = [];
+  bool _atlasLoaded = false;
   int _unread = 0;
   String? _firstFlightState;
   Map<String, dynamic> _firstFlight = {};
@@ -1018,7 +1019,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _refresh();
-    _syncTimer = Timer.periodic(const Duration(seconds: 45), (_) => _refresh());
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
   }
 
   @override
@@ -1031,26 +1032,31 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() { _loading = true; _error = null; });
     try {
       await PaperPlaneAuth.requireSignedInPilot();
-      final results = await Future.wait([
+      final includeAtlas = !_atlasLoaded;
+      final requests = <Future<Map<String, dynamic>>>[
         PaperPlaneApi.instance.getProfile(),
         PaperPlaneApi.instance.getSentPlanes(),
         PaperPlaneApi.instance.getInbox(),
-        PaperPlaneApi.instance.getSkyAtlas(),
-      ]);
+      ];
+      if (includeAtlas) requests.add(PaperPlaneApi.instance.getSkyAtlas());
+      final results = await Future.wait(requests);
       final pilot = results[0]['pilot'] as Map<String, dynamic>? ?? {};
       final stats = results[0]['stats'] as Map<String, dynamic>? ?? {};
       final sent = (results[1]['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
       final inbox = (results[2]['items'] as List<dynamic>? ?? const [])
           .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
-      final routes = (results[3]['routes'] as List<dynamic>? ?? const [])
-          .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      final routes = includeAtlas
+          ? (results[3]['routes'] as List<dynamic>? ?? const [])
+              .whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList()
+          : _atlasRoutes;
       if (!mounted) return;
       setState(() {
         _profile = pilot;
         _stats = stats;
         _sent = sent;
         _atlasRoutes = routes;
+        if (includeAtlas) _atlasLoaded = true;
         _unread = inbox.where((item) => item['status'] == 'DELIVERED').length;
         _firstFlightState = results[0]['firstFlightState']?.toString();
         _firstFlight = results[0]['firstFlight'] as Map<String, dynamic>? ?? {};
@@ -1088,6 +1094,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final name = _profile['pilot_name']?.toString();
+    final displayName = name == null || name.isEmpty ? PaperPlaneLocale.translate('Piloto') : name;
     final handle = _profile['pilot_handle']?.toString();
     final received = int.tryParse(_stats['received']?.toString() ?? '') ?? 0;
     final sentCount = int.tryParse(_stats['sent']?.toString() ?? '') ?? _sent.length;
@@ -1105,7 +1112,7 @@ class _HomePageState extends State<HomePage> {
               onTap: () => ppPush(context, const ProfilePage()),
               borderRadius: BorderRadius.circular(30),
               child: PilotAvatar(
-                fallbackLabel: name?.isNotEmpty == true ? name! : 'Pilot',
+                fallbackLabel: displayName,
                 imageUrl: _profile['avatar_url']?.toString(),
                 size: 46,
               ),
@@ -1115,7 +1122,7 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PlaneText('Olá, ' + (name == null || name.isEmpty ? 'Pilot' : name),
+                  PlaneText('Olá, ' + displayName,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
                   PlaneText(handle == null || handle.isEmpty ? 'PAPER PLANE' : '@$handle',
                     style: const TextStyle(color: ppBlueLight, fontSize: 11, fontWeight: FontWeight.w700)),
