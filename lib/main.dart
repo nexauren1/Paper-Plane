@@ -5370,7 +5370,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
     final countryCount = int.tryParse(_stats['countriesCount']?.toString() ?? '') ?? _countries.length;
 
     return ScreenFrame(
-      title: 'Atlas do Céu',
+      title: 'Explore',
       action: IconButton(
         onPressed: _refresh,
         tooltip: PaperPlaneLocale.translate('Atualizar atlas'),
@@ -5384,7 +5384,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
           children: [
             const PlaneText(
-              'O mundo que as tuas cartas estão a ligar.',
+              'Explore countries, flight paths and the connections made by Paper Plane.',
               style: TextStyle(color: Colors.white70, height: 1.45),
             ),
             const SizedBox(height: 15),
@@ -5421,7 +5421,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 child: Stack(children: [
                   Positioned.fill(child: AnimatedFleetGlobe(routes: _routes)),
                   const Positioned(left: 16, bottom: 14, child: PlaneText(
-                    'ROTAS DOS TEUS AVIÕES',
+                    'EXPLORE THE WORLD',
                     style: TextStyle(color: ppBlueLight, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w900),
                   )),
                 ]),
