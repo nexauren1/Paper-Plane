@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'firebase_runtime.dart';
 import 'paper_plane_analytics.dart';
 import 'paper_plane_api.dart';
+import 'paper_plane_notifications.dart';
 
 class PaperPlaneAuth {
   PaperPlaneAuth._();
@@ -28,6 +29,12 @@ class PaperPlaneAuth {
     }
 
     await PaperPlaneApi.instance.bootstrapPilot();
+    if (FirebaseAuth.instance.currentUser?.uid != user.uid) {
+      throw const PaperPlaneApiException(
+        'AUTH_SESSION_CHANGED',
+        'A conta mudou durante a operação. Aguarda a atualização e tenta novamente.',
+      );
+    }
     return user;
   }
 
@@ -154,6 +161,7 @@ class PaperPlaneAuth {
   static Future<void> signOut() async {
     if (!FirebaseRuntime.isInitialized) return;
     await PaperPlaneAnalytics.logLogout();
+    await PaperPlaneNotifications.unregisterDeviceForSessionEnd();
     await FirebaseAuth.instance.signOut();
     if (_googleInitialized) {
       try {
