@@ -16,7 +16,9 @@ const Color _chatGoldBright = Color(0xFFB8F1FF);
 const Color _chatPanel = Color(0xDD0E203B);
 
 class ChatHubScreen extends StatefulWidget {
-  const ChatHubScreen({super.key});
+  const ChatHubScreen({super.key, this.initialSection = 0});
+
+  final int initialSection;
 
   @override
   State<ChatHubScreen> createState() => _ChatHubScreenState();
@@ -48,6 +50,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   @override
   void initState() {
     super.initState();
+    _section = widget.initialSection.clamp(0, 2);
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 10), (_) => _refresh(silent: true));
   }
