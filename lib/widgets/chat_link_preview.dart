@@ -72,7 +72,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 1.8,
-                  color: Color(0xFFFFE7A8),
+                  color: Color(0xFFB8F1FF),
                 ),
               ),
               SizedBox(width: 9),
@@ -125,7 +125,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFFFFE7A8),
+                            color: Color(0xFFB8F1FF),
                             fontSize: 8,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 0.7,
@@ -162,7 +162,7 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
                 ),
                 const Padding(
                   padding: EdgeInsets.only(top: 9, right: 8),
-                  child: Icon(Icons.open_in_new_rounded, size: 13, color: Color(0xFFFFE7A8)),
+                  child: Icon(Icons.open_in_new_rounded, size: 13, color: Color(0xFFB8F1FF)),
                 ),
               ],
             ),
@@ -175,6 +175,6 @@ class _ChatLinkPreviewState extends State<ChatLinkPreview> {
   Widget _fallback() => Container(
         color: const Color(0xFF1C365A),
         alignment: Alignment.center,
-        child: const Icon(Icons.link_rounded, color: Color(0xFFFFE7A8), size: 25),
+        child: const Icon(Icons.link_rounded, color: Color(0xFFB8F1FF), size: 25),
       );
 }
