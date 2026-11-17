@@ -50,7 +50,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
   @override
   void initState() {
     super.initState();
-    _section = widget.initialSection.clamp(0, 2);
+    _section = widget.initialSection.clamp(0, 2).toInt();
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 10), (_) => _refresh(silent: true));
   }
