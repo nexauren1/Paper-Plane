@@ -299,8 +299,9 @@ jobs:
           legacy_vector = foreground.replace('android:width="108dp"', 'android:width="48dp"') \
                                      .replace('android:height="108dp"', 'android:height="48dp"')
           legacy_vector = legacy_vector.replace(
-              '<vector xmlns:android="http://schemas.android.com/apk/res/android"',
-              '<vector xmlns:android="http://schemas.android.com/apk/res/android"',
+              'android:viewportWidth="108" android:viewportHeight="108">',
+              'android:viewportWidth="108" android:viewportHeight="108">\\n'
+              '              <path android:fillColor="#FF020817" android:pathData="M0,0h108v108h-108z" />',
               1,
           )
           (legacy / "ic_launcher.xml").write_text(legacy_vector, encoding="utf-8")
