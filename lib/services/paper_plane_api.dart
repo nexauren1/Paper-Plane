@@ -274,6 +274,9 @@ class PaperPlaneApi {
 
   Future<Map<String, dynamic>> getSentPlanes() => _request('/v1/airplanes/sent');
 
+  Future<Map<String, dynamic>> updatePresence() =>
+      _request('/v1/presence/heartbeat', method: 'POST', body: const {});
+
   Future<Map<String, dynamic>> getFriends() => _request('/v1/friends');
 
   Future<Map<String, dynamic>> getFriendRequests() =>
@@ -348,6 +351,19 @@ class PaperPlaneApi {
         method: 'POST',
         body: {'language': language},
       );
+
+  Future<Map<String, dynamic>> translateChatMessages(
+    String conversationId,
+    List<String> messageIds,
+    String language,
+  ) {
+    if (messageIds.isEmpty) return Future.value({'items': <dynamic>[]});
+    return _request(
+      '/v1/chats/$conversationId/translations',
+      method: 'POST',
+      body: {'messageIds': messageIds.take(20).toList(), 'language': language},
+    );
+  }
 
   String buildFriendInviteLink(String pilotHandle) =>
       'https://paper-plane.nexaurenstore.workers.dev/invite?handle=${Uri.encodeQueryComponent(pilotHandle.replaceFirst(RegExp(r'^@'), ''))}';
