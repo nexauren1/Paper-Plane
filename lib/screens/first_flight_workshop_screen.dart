@@ -6,8 +6,8 @@ import '../services/paper_plane_localization.dart';
 import '../services/paper_plane_api.dart';
 
 const Color _workshopNavy = Color(0xFF071225);
-const Color _workshopGold = Color(0xFFF0CE7C);
-const Color _workshopGoldBright = Color(0xFFFFE7A8);
+const Color _workshopGold = Color(0xFF42D9FF);
+const Color _workshopGoldBright = Color(0xFFB8F1FF);
 const Color _workshopPaper = Color(0xFFF3EFE5);
 
 class FirstFlightWorkshopScreen extends StatefulWidget {
