@@ -19,6 +19,11 @@ class PaperPlaneLocale {
     current.value = Locale(supportedLanguages.contains(code) ? code : 'pt');
   }
 
+  /// Clears the previous account's preference while a different session loads.
+  static void resetToDeviceLanguage() {
+    current.value = _deviceLocale();
+  }
+
   static String translate(String source, [String? language]) {
     final code = language ?? current.value.languageCode;
     final values = _translations[source];
