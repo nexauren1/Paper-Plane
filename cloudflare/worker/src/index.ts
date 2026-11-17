@@ -3193,10 +3193,13 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     }
     const target = normalizeLanguage(body.language) ??
       normalizeLanguage(pilot?.preferred_language) ?? "pt";
-    const conversation = await env.DB.prepare(
-      "SELECT id FROM conversations WHERE id = ? AND kind = 'CHAT' AND (user_a = ? OR user_b = ?) LIMIT 1",
-    ).bind(chatTranslationsMatch[1], uid, uid).first();
-    if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    const inboxBatch = chatTranslationsMatch[1] === "inbox";
+    if (!inboxBatch) {
+      const conversation = await env.DB.prepare(
+        "SELECT id FROM conversations WHERE id = ? AND kind = 'CHAT' AND (user_a = ? OR user_b = ?) LIMIT 1",
+      ).bind(chatTranslationsMatch[1], uid, uid).first();
+      if (!conversation) return json({ error: "CHAT_NOT_FOUND" }, 404);
+    }
 
     const requestedIds = Array.isArray(body.messageIds)
       ? [...new Set(body.messageIds.map((value) => text(value, 128)).filter(Boolean))].slice(0, 20)
@@ -3204,18 +3207,28 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     if (requestedIds.length === 0) return json({ items: [] });
 
     const placeholders = requestedIds.map(() => "?").join(", ");
-    const rows = await env.DB.prepare(
-      \`SELECT id, message_text, message_language_tag
-       FROM chat_messages
-       WHERE conversation_id = ? AND sender_uid <> ? AND id IN (\${placeholders})
-       ORDER BY created_at ASC\`,
-    ).bind(chatTranslationsMatch[1], uid, ...requestedIds).all<{
-      id: string; message_text: string; message_language_tag: string;
-    }>();
+    const rows = inboxBatch
+      ? await env.DB.prepare(
+          `SELECT m.id, m.message_text, m.message_language_tag
+           FROM chat_messages m
+           JOIN conversations c ON c.id = m.conversation_id
+           WHERE (c.user_a = ? OR c.user_b = ?) AND c.kind = 'CHAT'
+             AND m.sender_uid <> ? AND m.id IN (${placeholders})
+           ORDER BY m.created_at ASC`,
+        ).bind(uid, uid, uid, ...requestedIds).all<{
+          id: string; message_text: string; message_language_tag: string;
+        }>()
+      : await env.DB.prepare(
+          `SELECT id, message_text, message_language_tag
+           FROM chat_messages
+           WHERE conversation_id = ? AND sender_uid <> ? AND id IN (${placeholders})
+           ORDER BY created_at ASC`,
+        ).bind(chatTranslationsMatch[1], uid, ...requestedIds).all<{
+          id: string; message_text: string; message_language_tag: string;
+        }>();
 
     const messages = rows.results ?? [];
     const translatedItems: Array<{ id: string; text: string; language: string; sourceLanguage: string }> = [];
-    // Keep translation calls bounded so a long chat does not overwhelm the AI binding.
     for (let index = 0; index < messages.length; index += 4) {
       const group = messages.slice(index, index + 4);
       const translated = await Promise.all(group.map(async (message) => {
