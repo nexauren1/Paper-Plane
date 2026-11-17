@@ -8,6 +8,7 @@ import '../services/paper_plane_localization.dart';
 import '../services/firebase_runtime.dart';
 import '../services/paper_plane_api.dart';
 import '../services/paper_plane_auth.dart';
+import '../services/paper_plane_notifications.dart';
 import 'pilot_profile_setup_screen.dart';
 import 'first_flight_workshop_screen.dart';
 
@@ -298,6 +299,7 @@ class _AccountScreenState extends State<AccountScreen> {
       await PaperPlaneAuth.reauthenticateCurrentUser(
         password: needsPassword ? passwordController.text : null,
       );
+      await PaperPlaneNotifications.unregisterDeviceForSessionEnd();
       await PaperPlaneApi.instance.deleteAccountData();
       serverDataDeleted = true;
       await FirebaseAuth.instance.currentUser?.delete();
