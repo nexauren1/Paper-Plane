@@ -175,7 +175,7 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                     minLines: 3,
                     style: const TextStyle(color: Color(0xFF252A33), fontSize: 17, height: 1.4),
                     decoration: const InputDecoration(
-                      hintText: 'Escreve algo gentil para o mundo…',
+                      hintText: PaperPlaneLocale.translate('Escreve algo gentil para o mundo…'),
                       hintStyle: TextStyle(color: Color(0xFF8B877F)),
                       border: InputBorder.none,
                       counterStyle: TextStyle(color: Color(0xFF82745A)),
