@@ -290,6 +290,17 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sectionTitle = _section == 2 ? 'Friends' : _section == 1 ? 'Your chats' : 'Flight connections';
+    final sectionSubtitle = _section == 2
+        ? 'Find people and build your global network.'
+        : _section == 1
+            ? 'Private conversations with your co-pilots.'
+            : 'Keep the people you meet along the way.';
+    final sectionIcon = _section == 2
+        ? Icons.people_alt_rounded
+        : _section == 1
+            ? Icons.chat_bubble_rounded
+            : Icons.local_fire_department_rounded;
     return SafeArea(
       child: Column(
         children: [
@@ -297,27 +308,37 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             padding: const EdgeInsets.fromLTRB(19, 15, 19, 10),
             child: Row(
               children: [
-                Icon(
-                  widget.initialSection == 1 ? Icons.inbox_rounded : Icons.local_fire_department_rounded,
-                  color: _chatGold,
-                  size: 27,
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    color: _chatGold.withOpacity(0.15),
+                    border: Border.all(color: _chatGold.withOpacity(0.32)),
+                    boxShadow: [BoxShadow(color: _chatGold.withOpacity(0.10), blurRadius: 15)],
+                  ),
+                  child: Icon(sectionIcon, color: _chatGoldBright, size: 22),
                 ),
-                const SizedBox(width: 9),
+                const SizedBox(width: 11),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      PlaneText(
-                        widget.initialSection == 1 ? 'Your inbox' : 'Chat & Friends',
-                        style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900),
-                      ),
-                      PlaneText(
-                        widget.initialSection == 1
-                            ? 'Messages from your co-pilots'
-                            : 'Connect with co-pilots around the world.',
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
-                      ),
-                    ],
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Column(
+                      key: ValueKey(_section),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PlaneText(
+                          sectionTitle,
+                          style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                        ),
+                        PlaneText(
+                          sectionSubtitle,
+                          maxLines: 1,
+                          style: const TextStyle(color: Colors.white60, fontSize: 11),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 IconButton(
@@ -520,12 +541,58 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
 
   List<Widget> _buildFriends() {
     return [
-      _infoPanel(
-        icon: Icons.public_rounded,
-        title: 'A tua rede mundial',
-        body: 'Procura pelo nome de copiloto que começa com @. As amizades respeitam a faixa etária declarada e os bloqueios de segurança.',
+      Container(
+        margin: const EdgeInsets.only(bottom: 13),
+        padding: const EdgeInsets.fromLTRB(16, 15, 14, 15),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF103B70), Color(0xFF10264D), Color(0xFF211B4D)],
+          ),
+          border: Border.all(color: _chatGoldBright.withOpacity(0.22)),
+          boxShadow: [BoxShadow(color: _chatGold.withOpacity(0.10), blurRadius: 18, offset: const Offset(0, 6))],
+        ),
+        child: Stack(
+          children: [
+            const Positioned(
+              right: 0,
+              top: -7,
+              child: Icon(Icons.public_rounded, size: 84, color: Color(0x2257D6FF)),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const PlaneText('Meet people around the world', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                      const SizedBox(height: 5),
+                      const PlaneText(
+                        'Search by pilot name or invite someone to join your network.',
+                        style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.4),
+                      ),
+                      const SizedBox(height: 9),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0x3357D6FF),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: _chatGoldBright.withOpacity(0.25)),
+                        ),
+                        child: const PlaneText('GLOBAL COMMUNITY', style: TextStyle(color: _chatGoldBright, fontSize: 8, letterSpacing: 1.0, fontWeight: FontWeight.w900)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.travel_explore_rounded, color: _chatGoldBright, size: 34),
+              ],
+            ),
+          ],
+        ),
       ),
-      const SizedBox(height: 12),
       Row(
         children: [
           Expanded(
