@@ -229,7 +229,6 @@ class PaperPlaneLocale {
   }
 
   static const Map<String, List<String>> _translations = {
-    'Amigos': ['Friends', 'Amigos', 'Amis', 'Freunde'],
     'Conversas': ['Chats', 'Conversaciones', 'Conversations', 'Chats'],
     'Ligações por avião': ['Flight connections', 'Conexiones de vuelo', 'Liens par avion', 'Flugverbindungen'],
     'Encontra pessoas e constrói a tua rede mundial.': ['Find people and build your global network.', 'Encuentra personas y construye tu red mundial.', 'Rencontre des personnes et crée ton réseau mondial.', 'Finde Menschen und baue dein globales Netzwerk auf.'],
