@@ -12,8 +12,8 @@ import 'pilot_profile_setup_screen.dart';
 import 'first_flight_workshop_screen.dart';
 
 const Color _navy = Color(0xFF071225);
-const Color _gold = Color(0xFFF0CE7C);
-const Color _goldLight = Color(0xFFFFE7A8);
+const Color _gold = Color(0xFF42D9FF);
+const Color _goldLight = Color(0xFFB8F1FF);
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, this.onAuthenticated});
