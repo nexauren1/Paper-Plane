@@ -1259,7 +1259,7 @@ class _HomePageState extends State<HomePage> {
                 ]),
                 const SizedBox(height: 7),
                 const PlaneText('A tua primeira mensagem está guardada. Podes terminar a preparação e lançar o avião.',
-                  style: TextStyle(color: Colors.white65, fontSize: 11, height: 1.4)),
+                  style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.4)),
                 const SizedBox(height: 10),
                 GoldButton(label: 'Retomar primeiro voo', icon: Icons.rocket_launch_rounded,
                   onPressed: _launchSavedFirstFlight, height: 48),
