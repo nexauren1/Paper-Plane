@@ -1226,7 +1226,7 @@ class _HomePageState extends State<HomePage> {
             Expanded(child: _featureCard(
               icon: Icons.public_rounded,
               title: 'Open Sky',
-              subtitle: 'Public messages',
+              subtitle: 'Mensagens públicas',
               gradient: const [Color(0xFF143B83), Color(0xFF31206F)],
               onTap: widget.onExplore,
             )),
@@ -1648,7 +1648,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     return ScreenFrame(
-      title: 'Escrever Avião',
+      title: 'Enviar mensagem',
       action: IconButton(onPressed: _send, icon: const Icon(Icons.send_rounded, color: ppGoldBright)),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
@@ -1674,9 +1674,9 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                 left: 18,
                 bottom: 17,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-                  PlaneText('PREPARA A TUA MENSAGEM', style: TextStyle(color: ppGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+                  PlaneText('ESCREVE A TUA MENSAGEM', style: TextStyle(color: ppGoldBright, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
                   SizedBox(height: 5),
-                  PlaneText('Uma ideia. Um voo. Outro mundo.', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  PlaneText('Escreve uma mensagem e deixa-a voar pelo mundo.', style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ]),
               ),
               Positioned(
@@ -1705,7 +1705,8 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
             height: 250,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: ppPaper,
+              color: const Color(0xFF101D42),
+              border: Border.all(color: ppBlueLight.withOpacity(0.28)),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [BoxShadow(color: ppGold.withOpacity(0.13), blurRadius: 18)],
             ),
@@ -1718,10 +1719,10 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                     maxLength: 200,
                     maxLines: null,
                     expands: true,
-                    style: const TextStyle(color: ppInk, fontSize: 18, height: 1.45),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, height: 1.45),
                     decoration: InputDecoration(
                       hintText: PaperPlaneLocale.translate('Escreve algo gentil...'),
-                      hintStyle: TextStyle(color: Color(0xFF77736B)),
+                      hintStyle: const TextStyle(color: Color(0xFF91A8CC)),
                       border: InputBorder.none,
                       counterText: '',
                     ),
