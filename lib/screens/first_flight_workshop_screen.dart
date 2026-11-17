@@ -5,10 +5,10 @@ import '../services/paper_plane_localization.dart';
 
 import '../services/paper_plane_api.dart';
 
-const Color _workshopNavy = Color(0xFF071225);
-const Color _workshopGold = Color(0xFFF0CE7C);
-const Color _workshopGoldBright = Color(0xFFFFE7A8);
-const Color _workshopPaper = Color(0xFFF3EFE5);
+const Color _workshopNavy = Color(0xFF06142B);
+const Color _workshopGold = Color(0xFF258BFF);
+const Color _workshopGoldBright = Color(0xFFB8F1FF);
+const Color _workshopPaper = Color(0xFF10233F);
 
 class FirstFlightWorkshopScreen extends StatefulWidget {
   const FirstFlightWorkshopScreen({
@@ -166,14 +166,14 @@ class _FirstFlightWorkshopScreenState extends State<FirstFlightWorkshopScreen>
                   boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 14, offset: const Offset(0, 6))],
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const PlaneText('A tua primeira carta', style: TextStyle(color: Color(0xFF766B58), fontWeight: FontWeight.w800)),
+                  const PlaneText('A tua primeira carta', style: TextStyle(color: Color(0xFFB8F1FF), fontWeight: FontWeight.w800)),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _message,
                     maxLength: 200,
                     maxLines: 4,
                     minLines: 3,
-                    style: const TextStyle(color: Color(0xFF252A33), fontSize: 17, height: 1.4),
+                    style: const TextStyle(color: Color(0xFFF1F7FF), fontSize: 17, height: 1.4),
                     decoration: const InputDecoration(
                       hintText: 'Escreve algo gentil para o mundo…',
                       hintStyle: TextStyle(color: Color(0xFF8B877F)),
