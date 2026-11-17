@@ -5383,7 +5383,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
           children: [
-            const PlaneText(
+            PlaneText(
               PaperPlaneLocale.translate('Descobre países, rotas e ligações criadas pelo Paper Plane.'),
               style: TextStyle(color: Colors.white70, height: 1.45),
             ),
@@ -5420,7 +5420,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 clipBehavior: Clip.antiAlias,
                 child: Stack(children: [
                   Positioned.fill(child: AnimatedFleetGlobe(routes: _routes)),
-                  const Positioned(left: 16, bottom: 14, child: PlaneText(
+                  Positioned(left: 16, bottom: 14, child: PlaneText(
                     PaperPlaneLocale.translate('EXPLORA O MUNDO'),
                     style: TextStyle(color: ppBlueLight, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w900),
                   )),
