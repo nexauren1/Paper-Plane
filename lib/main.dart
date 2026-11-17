@@ -918,7 +918,10 @@ class _MainShellState extends State<MainShell> {
     final selected = _index == index;
     return Expanded(
       child: InkWell(
-        onTap: () => setState(() => _index = index),
+        onTap: () {
+          if (index == 2) ChatHubScreen.sectionRequests.value = 2;
+          setState(() => _index = index);
+        },
         borderRadius: BorderRadius.circular(14),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
