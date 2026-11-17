@@ -4752,12 +4752,12 @@ class _OpenSkyPageState extends State<OpenSkyPage> {
               PlaneText('Descobre mensagens, ideias e culturas de todo o mundo.', style: TextStyle(color: Colors.white60, fontSize: 12)),
             ])),
             IconButton(
-              tooltip: 'Caixa de entrada',
+              tooltip: PaperPlaneLocale.translate('Caixa de entrada'),
               onPressed: () => ppPush(context, const InboxPage()),
               icon: const Icon(Icons.mark_email_unread_outlined, color: ppBlueLight),
             ),
             IconButton(
-              tooltip: 'Perfil',
+              tooltip: PaperPlaneLocale.translate('Perfil'),
               onPressed: () => ppPush(context, const ProfilePage()),
               icon: const Icon(Icons.account_circle_outlined, color: ppBlueLight),
             ),
