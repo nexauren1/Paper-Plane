@@ -1544,7 +1544,7 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
             height: 250,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: ppPaper,
+              color: const Color(0xFF10233F),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [BoxShadow(color: ppGold.withOpacity(0.13), blurRadius: 18)],
             ),
@@ -1557,10 +1557,10 @@ class _WritePlaneScreenState extends State<WritePlaneScreen> with SingleTickerPr
                     maxLength: 200,
                     maxLines: null,
                     expands: true,
-                    style: const TextStyle(color: ppInk, fontSize: 18, height: 1.45),
+                    style: const TextStyle(color: Color(0xFFF1F7FF), fontSize: 18, height: 1.45),
                     decoration: InputDecoration(
                       hintText: PaperPlaneLocale.translate('Escreve algo gentil...'),
-                      hintStyle: TextStyle(color: Color(0xFF77736B)),
+                      hintStyle: TextStyle(color: Color(0xFF91A8C6)),
                       border: InputBorder.none,
                       counterText: '',
                     ),
@@ -3307,9 +3307,9 @@ class _InboxPageState extends State<InboxPage> {
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.fromLTRB(20, 21, 20, 24),
         children: [
-          const PlaneText('A tua caixa', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w800)),
+          const PlaneText('Inbox', style: TextStyle(fontSize: 31, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
           const SizedBox(height: 5),
-          const PlaneText('Correio sincronizado com o servidor', style: TextStyle(color: Colors.white70)),
+          const PlaneText('As tuas cartas e voos num só lugar.', style: TextStyle(color: Colors.white60, fontSize: 13)),
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
