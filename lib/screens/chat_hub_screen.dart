@@ -837,7 +837,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         ]),
         const SizedBox(height: 5),
         PlaneText(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: Colors.white80, fontSize: 9, fontWeight: FontWeight.w700)),
+          style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w700)),
       ])),
     );
   }
