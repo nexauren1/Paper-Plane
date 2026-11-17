@@ -226,7 +226,7 @@ class PaperPlaneNotifications {
     try {
       final token = await FirebaseMessaging.instance.getToken();
       if (token != null && token.isNotEmpty) {
-        await PaperPlaneApi.instance.unregisterDevice(token);
+        await PaperPlaneApi.instance.unregisterDevice(token).timeout(const Duration(seconds: 4));
       }
     } catch (error) {
       debugPrint('Paper Plane: device token could not be detached from the previous account: $error');
