@@ -1414,6 +1414,7 @@ class PaperPlaneLocale {
     "Enviar avião": ["Send a plane","Enviar un avión","Envoyer un avion","Papierflieger senden"],
     "Ver rotas": ["View routes","Ver rutas","Voir les itinéraires","Routen ansehen"],
     "Piloto": ["Pilot", "Piloto", "Pilote", "Pilot"],
+    "A conta mudou durante a operação. Aguarda a atualização e tenta novamente.": ["The account changed during this operation. Wait for the refresh and try again.", "La cuenta cambió durante esta operación. Espera a que se actualice e inténtalo de nuevo.", "Le compte a changé pendant cette opération. Attends l’actualisation et réessaie.", "Das Konto wurde während dieses Vorgangs gewechselt. Warte auf die Aktualisierung und versuche es erneut."],
   };
 }
 
