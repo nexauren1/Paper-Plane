@@ -780,10 +780,20 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _index = 0;
   final GlobalKey<_OpenSkyPageState> _openSkyKey = GlobalKey<_OpenSkyPageState>();
+  StreamSubscription<User?>? _authSubscription;
+  String? _activeUid;
+  bool _sessionTransitioning = false;
 
   @override
   void initState() {
     super.initState();
+    _activeUid = _signedInUid(FirebaseAuth.instance.currentUser);
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen(
+      _handleAuthStateChanged,
+      onError: (Object error, StackTrace stack) {
+        debugPrint('Paper Plane: account-session listener failed: $error');
+      },
+    );
     PaperPlaneNotifications.onOpenInbox = _openInboxFromNotification;
     PaperPlaneNotifications.onOpenPlane = _openPlaneFromNotification;
     PaperPlaneNotifications.onOpenSentPlane = _openSentPlaneFromNotification;
@@ -808,6 +818,80 @@ class _MainShellState extends State<MainShell> {
         ppPush(context, FlightScreen(airplaneId: firstFlightId));
       }
     });
+  }
+
+  String? _signedInUid(User? user) =>
+      user == null || user.isAnonymous ? null : user.uid;
+
+  void _handleAuthStateChanged(User? user) {
+    final nextUid = _signedInUid(user);
+    if (nextUid == _activeUid) return;
+    _activeUid = nextUid;
+    unawaited(_transitionToAccountSession(user, nextUid));
+  }
+
+  Future<void> _transitionToAccountSession(User? user, String? uid) async {
+    if (!mounted) return;
+    final navigator = Navigator.of(context);
+    setState(() => _sessionTransitioning = true);
+
+    // Account-scoped UI, media and pending notification destinations must never
+    // survive into another Firebase identity.
+    PaperPlaneNotifications.resetPendingRoutes();
+    PaperPlaneLocale.resetToDeviceLanguage();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+
+    Widget destination;
+    if (uid == null || user == null) {
+      destination = const SplashScreen();
+    } else {
+      try {
+        await PaperPlaneApi.instance
+            .bootstrapPilot()
+            .timeout(const Duration(seconds: 8));
+        final profileResult = await PaperPlaneApi.instance
+            .getProfile()
+            .timeout(const Duration(seconds: 8));
+        if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+        final pilot = profileResult['pilot'] as Map<String, dynamic>? ?? const {};
+        PaperPlaneLocale.setLanguage(
+          pilot['preferred_language']?.toString() ??
+              pilot['language']?.toString(),
+        );
+        final profileCompleted = pilot['profile_completed'] == 1 ||
+            pilot['profile_completed'] == true;
+        if (profileCompleted) {
+          destination = MainShell(key: ValueKey('paper-plane-session-$uid'));
+        } else {
+          destination = AccountScreen(
+            onAuthenticated: (firstFlightId) =>
+                _replaceWithMain(navigator, firstFlightId),
+          );
+        }
+      } catch (error) {
+        if (FirebaseAuth.instance.currentUser?.uid != uid) return;
+        debugPrint('Paper Plane: new account profile could not be loaded yet: $error');
+        destination = AccountScreen(
+          onAuthenticated: (firstFlightId) =>
+              _replaceWithMain(navigator, firstFlightId),
+        );
+      }
+    }
+
+    if (!mounted || _signedInUid(FirebaseAuth.instance.currentUser) != uid) {
+      return;
+    }
+    navigator.pushAndRemoveUntil(
+      PageRouteBuilder(
+        settings: RouteSettings(name: uid == null ? 'SignedOut' : 'AccountSession:$uid'),
+        pageBuilder: (_, animation, secondaryAnimation) => destination,
+        transitionsBuilder: (_, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 320),
+      ),
+      (route) => false,
+    );
   }
 
   void _selectTab(int index) {
@@ -863,6 +947,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     PaperPlaneNotifications.onOpenInbox = null;
     PaperPlaneNotifications.onOpenPlane = null;
     PaperPlaneNotifications.onOpenSentPlane = null;
@@ -873,6 +958,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (_sessionTransitioning) {
+      return const Scaffold(
+        backgroundColor: ppNavyDeep,
+        body: SpaceBackground(
+          child: Center(
+            child: CircularProgressIndicator(color: ppBlueLight),
+          ),
+        ),
+      );
+    }
+
     final pages = <Widget>[
       HomePage(
         onWrite: _openWrite,
