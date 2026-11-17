@@ -11,7 +11,7 @@ import '../widgets/pilot_avatar.dart';
 import '../widgets/report_dialog.dart';
 
 const Color _chatNavy = Color(0xFF050B19);
-const Color _chatGold = Color(0xFF258BFF);
+const Color _chatGold = Color(0xFF42D9FF);
 const Color _chatGoldBright = Color(0xFFB8F1FF);
 const Color _chatPanel = Color(0xDD0E203B);
 
@@ -277,14 +277,14 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
             padding: const EdgeInsets.fromLTRB(19, 15, 19, 10),
             child: Row(
               children: [
-                const Icon(Icons.local_fire_department_rounded, color: _chatGold, size: 27),
+                const Icon(Icons.people_alt_rounded, color: _chatGold, size: 27),
                 const SizedBox(width: 9),
                 const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      PlaneText('Chat & Amigos', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
-                      PlaneText('Liga-te a copilotos de todo o mundo', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                      PlaneText('Amigos', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+                      PlaneText('Conhece pessoas e mantém contacto com amigos de todo o mundo.', style: TextStyle(color: Colors.white60, fontSize: 12)),
                     ],
                   ),
                 ),
