@@ -837,6 +837,11 @@ class _MainShellState extends State<MainShell> {
 
     // Account-scoped UI, media and pending notification destinations must never
     // survive into another Firebase identity.
+    PaperPlaneNotifications.onOpenInbox = null;
+    PaperPlaneNotifications.onOpenPlane = null;
+    PaperPlaneNotifications.onOpenSentPlane = null;
+    PaperPlaneNotifications.onOpenChat = null;
+    PaperPlaneNotifications.onOpenOpenSky = null;
     PaperPlaneNotifications.resetPendingRoutes();
     PaperPlaneLocale.resetToDeviceLanguage();
     PaintingBinding.instance.imageCache.clear();
@@ -882,6 +887,9 @@ class _MainShellState extends State<MainShell> {
     if (!mounted || _signedInUid(FirebaseAuth.instance.currentUser) != uid) {
       return;
     }
+    // Ignore any notification tap that arrived while the old shell was being
+    // replaced; the new account must not inherit an old account's destination.
+    PaperPlaneNotifications.resetPendingRoutes();
     navigator.pushAndRemoveUntil(
       PageRouteBuilder(
         settings: RouteSettings(name: uid == null ? 'SignedOut' : 'AccountSession:$uid'),
