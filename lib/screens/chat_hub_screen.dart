@@ -16,45 +16,59 @@ const Color _chatGoldBright = Color(0xFFB8F1FF);
 const Color _chatPanel = Color(0xDD0E203B);
 
 class ChatHubScreen extends StatefulWidget {
-  const ChatHubScreen({super.key});
+  const ChatHubScreen({super.key, required this.onExplore});
+  final VoidCallback onExplore;
 
   @override
   State<ChatHubScreen> createState() => _ChatHubScreenState();
 }
 
 class _ChatHubScreenState extends State<ChatHubScreen> {
-  int _section = 2;
+  int _filter = 0;
   bool _loading = true;
+  bool _searchOpen = false;
   bool _searching = false;
   String? _error;
   String _myHandle = '';
   String _myLanguage = 'pt';
-  static const Map<String, String> _languageNames = {
-    'pt': 'Português',
-    'en': 'English',
-    'es': 'Español',
-    'fr': 'Français',
-    'de': 'Deutsch',
-  };
   final TextEditingController _search = TextEditingController();
   Timer? _poller;
   List<Map<String, dynamic>> _chats = [];
   List<Map<String, dynamic>> _chamas = [];
   List<Map<String, dynamic>> _friends = [];
-  List<Map<String, dynamic>> _incoming = [];
-  List<Map<String, dynamic>> _outgoing = [];
-  List<Map<String, dynamic>> _results = [];
+  List<Map<String, dynamic>> _requests = [];
+  List<Map<String, dynamic>> _searchResults = [];
+  final Map<String, String> _translatedPreviews = {};
+  final Set<String> _translatingPreviews = {};
 
   @override
   void initState() {
     super.initState();
+    _myLanguage = PaperPlaneLocale.current.value.languageCode;
+    PaperPlaneLocale.current.addListener(_onLocaleChanged);
     _refresh();
-    _poller = Timer.periodic(const Duration(seconds: 10), (_) => _refresh(silent: true));
+    _poller = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+        _refresh(silent: true);
+      }
+    });
+  }
+
+  void _onLocaleChanged() {
+    final next = PaperPlaneLocale.current.value.languageCode;
+    if (!mounted || next == _myLanguage) return;
+    setState(() {
+      _myLanguage = next;
+      _translatedPreviews.clear();
+      _translatingPreviews.clear();
+    });
+    _translateConversationPreviews();
   }
 
   @override
   void dispose() {
     _poller?.cancel();
+    PaperPlaneLocale.current.removeListener(_onLocaleChanged);
     _search.dispose();
     super.dispose();
   }
@@ -65,11 +79,31 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
 
-  Future<void> _refresh({bool silent = false}) async {
-    if (!silent && mounted) setState(() {
-      _loading = true;
-      _error = null;
+  List<Map<String, dynamic>> get _conversations {
+    final rows = <Map<String, dynamic>>[
+      ..._chats.map((item) => {...item, 'kind': 'CHAT'}),
+      ..._chamas.map((item) => {...item, 'kind': 'CHAMA'}),
+    ];
+    rows.sort((a, b) {
+      final aDate = DateTime.tryParse(a['last_message_at']?.toString() ??
+          a['last_plane_at']?.toString() ?? a['created_at']?.toString() ?? '');
+      final bDate = DateTime.tryParse(b['last_message_at']?.toString() ??
+          b['last_plane_at']?.toString() ?? b['created_at']?.toString() ?? '');
+      return (bDate ?? DateTime.fromMillisecondsSinceEpoch(0))
+          .compareTo(aDate ?? DateTime.fromMillisecondsSinceEpoch(0));
     });
+    final query = _search.text.trim().toLowerCase();
+    if (query.isEmpty) return rows;
+    return rows.where((item) {
+      final name = (item['pilot_name']?.toString() ?? '').toLowerCase();
+      final handle = (item['pilot_handle']?.toString() ?? '').toLowerCase();
+      final message = (item['last_message']?.toString() ?? '').toLowerCase();
+      return name.contains(query) || handle.contains(query) || message.contains(query);
+    }).toList();
+  }
+
+  Future<void> _refresh({bool silent = false}) async {
+    if (!silent && mounted) setState(() { _loading = true; _error = null; });
     try {
       final responses = await Future.wait([
         PaperPlaneApi.instance.getChats(),
@@ -78,53 +112,81 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
         PaperPlaneApi.instance.getFriendRequests(),
         PaperPlaneApi.instance.getProfile(),
       ]);
-      if (!mounted) return;
       final pilot = responses[4]['pilot'] as Map<String, dynamic>? ?? const {};
-      final accepted = _items(responses[2], 'items');
-      final friendRequests = _items(responses[3], 'incoming');
-      final pending = _items(responses[2], 'incomingRequests');
-      final incomingById = <String, Map<String, dynamic>>{
-        for (final item in [...pending, ...friendRequests])
-          item['id']?.toString() ?? '': item,
-      }..remove('');
+      final savedLanguage = pilot['preferred_language']?.toString() ??
+          pilot['language']?.toString() ??
+          PaperPlaneLocale.current.value.languageCode;
+      if (!mounted) return;
       setState(() {
         _chats = _items(responses[0], 'items');
         _chamas = _items(responses[1], 'items');
-        _friends = accepted;
-        _incoming = incomingById.values.toList();
-        _outgoing = _items(responses[2], 'outgoing');
+        _friends = _items(responses[2], 'items');
+        _requests = _items(responses[3], 'incoming');
         _myHandle = pilot['pilot_handle']?.toString() ?? '';
-        final savedLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
-        _myLanguage = PaperPlaneLocale.supportedLanguages.contains(savedLanguage) ? savedLanguage : 'pt';
+        _myLanguage = PaperPlaneLocale.supportedLanguages.contains(savedLanguage)
+            ? savedLanguage
+            : PaperPlaneLocale.current.value.languageCode;
         _loading = false;
         _error = null;
       });
+      _translateConversationPreviews();
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = error is PaperPlaneApiException
             ? error.message
-            : 'Não foi possível atualizar as tuas amizades e Chamas.';
+            : PaperPlaneLocale.translate('Não foi possível carregar as conversas.');
       });
+    }
+  }
+
+  Future<void> _translateConversationPreviews() async {
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    final ids = _chats
+        .where((chat) =>
+            chat['last_message_id'] != null &&
+            chat['last_message_sender_uid']?.toString() != myUid &&
+            (chat['last_message_language_tag']?.toString().split('-').first ?? 'pt') != _myLanguage)
+        .map((chat) => chat['last_message_id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty && !_translatedPreviews.containsKey(id) && !_translatingPreviews.contains(id))
+        .take(20)
+        .toList();
+    if (ids.isEmpty) return;
+    setState(() => _translatingPreviews.addAll(ids));
+    try {
+      final result = await PaperPlaneApi.instance.translateChatMessages('inbox', ids, _myLanguage);
+      final items = _items(result, 'items');
+      if (!mounted) return;
+      setState(() {
+        for (final item in items) {
+          final id = item['id']?.toString() ?? '';
+          final text = item['text']?.toString() ?? '';
+          if (id.isNotEmpty && text.isNotEmpty) _translatedPreviews[id] = text;
+        }
+      });
+    } catch (_) {
+      // Keep the source preview visible when automatic translation is unavailable.
+    } finally {
+      if (mounted) setState(() => _translatingPreviews.removeAll(ids));
     }
   }
 
   Future<void> _searchPilots() async {
     final query = _search.text.trim().replaceFirst(RegExp(r'^@'), '');
     if (query.length < 2) {
-      _notice('Escreve pelo menos duas letras do nome de copiloto.');
+      _notice(PaperPlaneLocale.translate('Escreve pelo menos duas letras do nome de copiloto.'));
       return;
     }
     setState(() => _searching = true);
     try {
       final result = await PaperPlaneApi.instance.searchFriends(query);
       if (!mounted) return;
-      setState(() => _results = _items(result, 'items'));
-      if (_results.isEmpty) _notice('Não encontrámos copilotos com esse nome.');
+      setState(() => _searchResults = _items(result, 'items'));
+      if (_searchResults.isEmpty) _notice(PaperPlaneLocale.translate('Não encontrámos copilotos com esse nome.'));
     } catch (error) {
       if (!mounted) return;
-      _notice(error is PaperPlaneApiException ? error.message : 'A pesquisa falhou. Tenta novamente.');
+      _notice(error is PaperPlaneApiException ? error.message : PaperPlaneLocale.translate('A pesquisa falhou. Tenta novamente.'));
     } finally {
       if (mounted) setState(() => _searching = false);
     }
@@ -134,15 +196,14 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     try {
       final result = await PaperPlaneApi.instance.requestFriend(handle);
       if (!mounted) return;
-      final status = result['status']?.toString();
-      _notice(status == 'ACCEPTED'
-          ? 'Amizade confirmada. A Chama acende quando trocarem aviões.'
-          : 'Pedido enviado. O outro copiloto pode aceitar no Chat.');
+      _notice(PaperPlaneLocale.translate(
+        result['status']?.toString() == 'ACCEPTED' ? 'Amizade confirmada.' : 'Pedido de amizade enviado.',
+      ));
       await _refresh(silent: true);
-      await _searchPilots();
+      if (_search.text.trim().length >= 2) await _searchPilots();
     } catch (error) {
       if (!mounted) return;
-      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível enviar o pedido.');
+      _notice(error is PaperPlaneApiException ? error.message : PaperPlaneLocale.translate('Não foi possível enviar o pedido.'));
     }
   }
 
@@ -150,310 +211,12 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
     try {
       await PaperPlaneApi.instance.respondFriendRequest(id, accept: accept);
       if (!mounted) return;
-      _notice(accept ? 'Pedido aceite. Já fazem parte da lista de amigos.' : 'Pedido recusado.');
+      _notice(PaperPlaneLocale.translate(accept ? 'Pedido aceite.' : 'Pedido recusado.'));
       await _refresh(silent: true);
     } catch (error) {
       if (!mounted) return;
-      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível atualizar o pedido.');
+      _notice(error is PaperPlaneApiException ? error.message : PaperPlaneLocale.translate('Não foi possível atualizar o pedido.'));
     }
-  }
-
-  Future<void> _deleteConversation(String id, {required bool chama, required String name}) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF172844),
-        title: const PlaneText('Eliminar conversa?'),
-        content: PlaneText('A conversa com $name será removida da tua lista. A outra pessoa continuará a ter a sua cópia.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Cancelar')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy),
-            child: const PlaneText('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await PaperPlaneApi.instance.deleteConversation(id, chama: chama);
-      await _refresh(silent: true);
-      _notice('Conversa removida da tua lista.');
-    } catch (error) {
-      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível eliminar a conversa.');
-    }
-  }
-
-  Future<void> _removeFriend(String uid, String handle) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF172844),
-        title: const PlaneText('Remover amigo?'),
-        content: PlaneText('Queres remover @$handle da tua lista de amigos? A conversa Chama não será apagada.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const PlaneText('Cancelar')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy),
-            child: const PlaneText('Remover'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await PaperPlaneApi.instance.removeFriend(uid);
-      await _refresh(silent: true);
-      _notice('Amigo removido.');
-    } catch (error) {
-      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível remover o amigo.');
-    }
-  }
-
-  Future<void> _changeLanguage() async {
-    final selected = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: const Color(0xFF142541),
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
-          children: [
-            const PlaneText('Idioma preferido', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 6),
-            const PlaneText('Os aviões recebidos serão traduzidos para este idioma.', style: TextStyle(color: Colors.white60, fontSize: 12)),
-            const SizedBox(height: 10),
-            for (final entry in _languageNames.entries)
-              ListTile(
-                leading: Icon(_myLanguage == entry.key ? Icons.check_circle_rounded : Icons.language_rounded,
-                    color: _myLanguage == entry.key ? _chatGoldBright : Colors.white54),
-                title: PlaneText(entry.value),
-                onTap: () => Navigator.pop(sheetContext, entry.key),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (selected == null || selected == _myLanguage) return;
-    try {
-      await PaperPlaneApi.instance.updateLanguagePreference(selected);
-      if (!mounted) return;
-      setState(() => _myLanguage = selected);
-      PaperPlaneLocale.setLanguage(selected);
-      _notice('Idioma alterado para ${_languageNames[selected]}.');
-      await _refresh(silent: true);
-    } catch (error) {
-      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível alterar o idioma.');
-    }
-  }
-
-  Future<void> _copyInvite() async {
-    if (_myHandle.isEmpty) {
-      _notice('Completa primeiro o teu perfil de copiloto.');
-      return;
-    }
-    final link = PaperPlaneApi.instance.buildFriendInviteLink(_myHandle);
-    await Clipboard.setData(ClipboardData(text: link));
-    if (!mounted) return;
-    _notice('Link de convite copiado. Partilha-o com quem quiseres adicionar.');
-  }
-
-  void _notice(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(19, 15, 19, 10),
-            child: Row(
-              children: [
-                const Icon(Icons.people_alt_rounded, color: _chatGold, size: 27),
-                const SizedBox(width: 9),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      PlaneText('Amigos', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
-                      PlaneText('Conhece pessoas e mantém contacto com amigos de todo o mundo.', style: TextStyle(color: Colors.white60, fontSize: 12)),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: _copyInvite,
-                  tooltip: PaperPlaneLocale.translate('Copiar link de convite'),
-                  icon: const Icon(Icons.link_rounded, color: _chatGoldBright),
-                ),
-                IconButton(
-                  onPressed: _changeLanguage,
-                  tooltip: PaperPlaneLocale.translate('Idioma: ${_languageNames[_myLanguage] ?? _myLanguage}'),
-                  icon: const Icon(Icons.translate_rounded, color: _chatGoldBright),
-                ),
-                IconButton(
-                  onPressed: () => _refresh(),
-                  tooltip: PaperPlaneLocale.translate('Atualizar'),
-                  icon: const Icon(Icons.refresh_rounded, color: _chatGoldBright),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Row(
-              children: [
-                Expanded(child: _sectionChip(0, 'Chamas', Icons.local_fire_department_rounded)),
-                const SizedBox(width: 6),
-                Expanded(child: _sectionChip(1, 'Chat', Icons.chat_bubble_outline_rounded)),
-                const SizedBox(width: 6),
-                Expanded(child: _sectionChip(2, 'Amigos', Icons.people_alt_outlined)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(color: _chatGold))
-                : _error != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.cloud_off_outlined, color: Colors.orangeAccent, size: 34),
-                              const SizedBox(height: 10),
-                              PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                              const SizedBox(height: 10),
-                              OutlinedButton.icon(onPressed: _refresh, icon: const Icon(Icons.refresh), label: const PlaneText('Tentar novamente')),
-                            ],
-                          ),
-                        ),
-                      )
-                    : RefreshIndicator(
-                        color: _chatGold,
-                        onRefresh: _refresh,
-                        child: ListView(
-                          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                          padding: const EdgeInsets.fromLTRB(18, 4, 18, 26),
-                          children: _section == 0 ? _buildFlames() : _section == 1 ? _buildChats() : _buildFriends(),
-                        ),
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _sectionChip(int index, String label, IconData icon) {
-    final active = _section == index;
-    return InkWell(
-      onTap: () => setState(() => _section = index),
-      borderRadius: BorderRadius.circular(15),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 12),
-        decoration: BoxDecoration(
-          color: active ? _chatGold.withOpacity(0.18) : _chatPanel,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: active ? _chatGold : Colors.white12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18, color: active ? _chatGoldBright : Colors.white70),
-            const SizedBox(width: 6),
-            PlaneText(label, style: TextStyle(fontWeight: FontWeight.w800, color: active ? _chatGoldBright : Colors.white70)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildFlames() {
-    return [
-      _infoPanel(
-        icon: Icons.local_fire_department_rounded,
-        title: 'A Chama do Deserto',
-        body: 'A Chama só acende quando a resposta em avião chega ao remetente original. Os dois aviões ficam no início da conversa e o Chat permanece separado.',
-        highlight: true,
-      ),
-      const SizedBox(height: 15),
-      _sectionTitle('As tuas Chamas', _chamas.length.toString()),
-      if (_chamas.isEmpty)
-        _emptyPanel(
-          icon: Icons.flight_takeoff_rounded,
-          title: 'Ainda não tens uma Chama acesa',
-          body: 'Quando alguém te responde com um avião e essa resposta é entregue, a Chama abre automaticamente. Não é preciso adicionar a pessoa primeiro.',
-        )
-      else
-        for (final chama in _chamas) ...[
-          const SizedBox(height: 9),
-          _chatTile(chama, chama: true),
-        ],
-      const SizedBox(height: 12),
-      _infoPanel(
-        icon: Icons.public_rounded,
-        title: 'Amigos pelo mundo',
-        body: 'Podes adicionar amigos por @nome ou enviar o teu link de convite. A Chama nasce da troca de aviões; depois disso, a conversa fica sempre disponível nesta lista.',
-      ),
-      const SizedBox(height: 10),
-      OutlinedButton.icon(
-        onPressed: () => setState(() => _section = 2),
-        icon: const Icon(Icons.people_alt_outlined),
-        label: const PlaneText('Explorar amigos do mundo'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: _chatGoldBright,
-          side: BorderSide(color: _chatGold.withOpacity(0.55)),
-          minimumSize: const Size.fromHeight(49),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        ),
-      ),
-    ];
-  }
-
-  List<Widget> _buildChats() {
-    return [
-      _infoPanel(
-        icon: Icons.chat_bubble_outline_rounded,
-        title: 'Chat privado',
-        body: 'Esta área é independente das Chamas. Abre um Chat com um amigo aceite, mesmo antes de trocarem aviões.',
-        highlight: true,
-      ),
-      const SizedBox(height: 14),
-      _sectionTitle('As tuas conversas', _chats.length.toString()),
-      if (_chats.isEmpty)
-        _emptyPanel(
-          icon: Icons.chat_bubble_outline_rounded,
-          title: 'Ainda não tens Chats',
-          body: 'Vai a Amigos, procura um copiloto e abre um Chat depois de aceitarem o pedido de amizade.',
-        )
-      else
-        for (final chat in _chats) ...[
-          const SizedBox(height: 9),
-          _chatTile(chat),
-        ],
-      const SizedBox(height: 14),
-      OutlinedButton.icon(
-        onPressed: () => setState(() => _section = 2),
-        icon: const Icon(Icons.people_alt_outlined),
-        label: const PlaneText('Encontrar amigos'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: _chatGoldBright,
-          side: BorderSide(color: _chatGold.withOpacity(0.55)),
-          minimumSize: const Size.fromHeight(49),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        ),
-      ),
-    ];
   }
 
   Future<void> _openPrivateChat(Map<String, dynamic> friend) async {
@@ -465,335 +228,679 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
       final conversation = result['conversation'] as Map<String, dynamic>? ?? const {};
       final id = conversation['id']?.toString() ?? '';
       if (id.isEmpty) {
-        _notice('Não foi possível abrir o Chat.');
+        _notice(PaperPlaneLocale.translate('Não foi possível abrir a conversa.'));
         return;
       }
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ChamaConversationScreen(
-            conversationId: id,
-            fallbackName: friend['pilot_name']?.toString() ?? 'Copiloto',
-            fallbackHandle: friend['pilot_handle']?.toString() ?? 'piloto',
-            fallbackCountry: friend['country_code']?.toString(),
-            isChama: false,
-          ),
+      await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => ChamaConversationScreen(
+          conversationId: id,
+          fallbackName: friend['pilot_name']?.toString() ?? 'Copiloto',
+          fallbackHandle: friend['pilot_handle']?.toString() ?? 'piloto',
+          fallbackCountry: friend['country_code']?.toString(),
+          fallbackAvatarUrl: friend['avatar_url']?.toString(),
+          isChama: false,
         ),
-      );
+      ));
       await _refresh(silent: true);
     } catch (error) {
       if (!mounted) return;
-      _notice(error is PaperPlaneApiException ? error.message : 'Não foi possível abrir o Chat.');
+      _notice(error is PaperPlaneApiException ? error.message : PaperPlaneLocale.translate('Não foi possível abrir a conversa.'));
     }
   }
 
-  List<Widget> _buildFriends() {
-    return [
-      _infoPanel(
-        icon: Icons.public_rounded,
-        title: 'A tua rede mundial',
-        body: 'Procura pelo nome de copiloto que começa com @. As amizades respeitam a faixa etária declarada e os bloqueios de segurança.',
+  void _openConversation(Map<String, dynamic> item) {
+    final id = item['conversation_id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ChamaConversationScreen(
+        conversationId: id,
+        fallbackName: item['pilot_name']?.toString() ?? 'Copiloto',
+        fallbackHandle: item['pilot_handle']?.toString() ?? 'piloto',
+        fallbackCountry: item['country_code']?.toString(),
+        fallbackAvatarUrl: item['avatar_url']?.toString(),
+        isChama: item['kind']?.toString() == 'CHAMA',
       ),
-      const SizedBox(height: 12),
-      Row(
-        children: [
-          Expanded(
+    )).then((_) => _refresh(silent: true));
+  }
+
+  Future<void> _deleteConversation(Map<String, dynamic> item) async {
+    final id = item['conversation_id']?.toString() ?? '';
+    if (id.isEmpty) return;
+    final name = item['pilot_name']?.toString() ?? 'Copiloto';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF10213E),
+        title: PlaneText('Eliminar conversa?'),
+        content: PlaneText(PaperPlaneLocale.translate('A conversa com ') + name + PaperPlaneLocale.translate(' será removida da tua lista.')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: PlaneText('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF668C)),
+            child: PlaneText('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await PaperPlaneApi.instance.deleteConversation(id, chama: item['kind']?.toString() == 'CHAMA');
+      await _refresh(silent: true);
+    } catch (error) {
+      _notice(error is PaperPlaneApiException ? error.message : PaperPlaneLocale.translate('Não foi possível eliminar a conversa.'));
+    }
+  }
+
+  Future<void> _removeFriend(Map<String, dynamic> friend) async {
+    final uid = friend['uid']?.toString() ?? '';
+    final handle = friend['pilot_handle']?.toString() ?? '';
+    if (uid.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF10213E),
+        title: PlaneText('Remover amigo?'),
+        content: PlaneText(PaperPlaneLocale.translate('Queres remover ') + '@' + handle + PaperPlaneLocale.translate(' da tua lista de amigos?')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: PlaneText('Cancelar')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFF668C)),
+            child: PlaneText('Remover'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await PaperPlaneApi.instance.removeFriend(uid);
+      await _refresh(silent: true);
+    } catch (error) {
+      _notice(error is PaperPlaneApiException ? error.message : PaperPlaneLocale.translate('Não foi possível remover o amigo.'));
+    }
+  }
+
+  Future<void> _copyInvite() async {
+    if (_myHandle.isEmpty) {
+      _notice(PaperPlaneLocale.translate('Completa primeiro o teu perfil de copiloto.'));
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: PaperPlaneApi.instance.buildFriendInviteLink(_myHandle)));
+    if (mounted) _notice(PaperPlaneLocale.translate('Link de convite copiado.'));
+  }
+
+  void _notice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: PlaneText(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  bool _isOnline(String? value) {
+    final date = DateTime.tryParse(value ?? '')?.toLocal();
+    return date != null && DateTime.now().difference(date).inMinutes < 2;
+  }
+
+  String _presenceLabel(String? value) {
+    final date = DateTime.tryParse(value ?? '')?.toLocal();
+    if (date == null) return PaperPlaneLocale.translate('Offline');
+    final age = DateTime.now().difference(date);
+    if (age.inMinutes < 2) return PaperPlaneLocale.translate('Online');
+    if (age.inMinutes < 60) {
+      return PaperPlaneLocale.translate('Ativo há ') + age.inMinutes.toString() + ' ' + PaperPlaneLocale.translate('min');
+    }
+    if (age.inHours < 24) {
+      return PaperPlaneLocale.translate('Ativo há ') + age.inHours.toString() + ' ' + PaperPlaneLocale.translate('h');
+    }
+    if (age.inDays == 1) return PaperPlaneLocale.translate('Ativo ontem');
+    return PaperPlaneLocale.translate('Ativo há ') + age.inDays.toString() + ' ' + PaperPlaneLocale.translate('dias');
+  }
+
+  String _timeLabel(String? value) {
+    final date = DateTime.tryParse(value ?? '')?.toLocal();
+    if (date == null) return '';
+    final now = DateTime.now();
+    if (now.year == date.year && now.month == date.month && now.day == date.day) {
+      return date.hour.toString().padLeft(2, '0') + ':' + date.minute.toString().padLeft(2, '0');
+    }
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (yesterday.year == date.year && yesterday.month == date.month && yesterday.day == date.day) {
+      return PaperPlaneLocale.translate('Ontem');
+    }
+    return date.day.toString().padLeft(2, '0') + '/' + date.month.toString().padLeft(2, '0');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 15, 10),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              PlaneText('Inbox', style: const TextStyle(fontSize: 29, fontWeight: FontWeight.w900, letterSpacing: -0.6)),
+              PlaneText('Mensagens, amigos e ligações pelo mundo', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+            ])),
+            IconButton(
+              onPressed: () => setState(() => _searchOpen = !_searchOpen),
+              tooltip: PaperPlaneLocale.translate('Pesquisar'),
+              icon: Icon(_searchOpen ? Icons.close_rounded : Icons.search_rounded, color: _chatGoldBright, size: 25),
+            ),
+            IconButton(
+              onPressed: _copyInvite,
+              tooltip: PaperPlaneLocale.translate('Copiar link de convite'),
+              icon: const Icon(Icons.link_rounded, color: _chatGoldBright, size: 24),
+            ),
+            IconButton(
+              onPressed: () => _refresh(),
+              tooltip: PaperPlaneLocale.translate('Atualizar'),
+              icon: const Icon(Icons.refresh_rounded, color: _chatGoldBright, size: 23),
+            ),
+          ]),
+        ),
+        if (_searchOpen)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
             child: TextField(
               controller: _search,
-              onSubmitted: (_) => _searchPilots(),
-              textInputAction: TextInputAction.search,
+              onChanged: (_) => setState(() {}),
+              autofocus: true,
               decoration: InputDecoration(
-                hintText: PaperPlaneLocale.translate('Pesquisar @nome_de_copiloto'),
+                hintText: PaperPlaneLocale.translate('Pesquisar conversas ou amigos'),
                 prefixIcon: const Icon(Icons.search_rounded, color: _chatGoldBright),
                 filled: true,
-                fillColor: const Color(0xFF132541),
-                contentPadding: const EdgeInsets.symmetric(vertical: 13, horizontal: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.white.withOpacity(0.12))),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: Colors.white.withOpacity(0.12))),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: _chatGold)),
+                fillColor: const Color(0xFF11233F),
+                contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: BorderSide(color: Colors.white.withOpacity(0.09))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: BorderSide(color: Colors.white.withOpacity(0.09))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(17), borderSide: const BorderSide(color: _chatGold)),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            height: 51,
-            child: FilledButton(
-              onPressed: _searching ? null : _searchPilots,
-              style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: _searching
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: _chatNavy))
-                  : const Icon(Icons.search_rounded),
-            ),
+        SizedBox(
+          height: 45,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: [
+              _filterChip(0, 'All', Icons.all_inbox_rounded),
+              _filterChip(1, 'Messages', Icons.chat_bubble_outline_rounded),
+              _filterChip(2, 'Friends', Icons.people_alt_outlined),
+              _filterChip(3, 'Open Sky', Icons.public_rounded),
+            ],
           ),
-        ],
-      ),
-      if (_results.isNotEmpty) ...[
-        const SizedBox(height: 12),
-        _sectionTitle('Resultados', _results.length.toString()),
-        for (final person in _results) ...[
-          const SizedBox(height: 8),
-          _personTile(person, action: 'Adicionar', onTap: () => _addFriend('@${person['pilot_handle']}')),
-        ],
-      ],
-      const SizedBox(height: 16),
-      _sectionTitle('Pedidos recebidos', _incoming.length.toString()),
-      if (_incoming.isEmpty)
-        _emptyPanel(icon: Icons.mark_email_read_outlined, title: 'Sem pedidos pendentes', body: 'Quando alguém te convidar, o pedido aparece aqui.')
-      else
-        for (final request in _incoming) ...[
-          const SizedBox(height: 8),
-          _requestTile(request),
-        ],
-      if (_outgoing.isNotEmpty) ...[
-        const SizedBox(height: 15),
-        _sectionTitle('Pedidos enviados', _outgoing.length.toString()),
-        for (final request in _outgoing) ...[
-          const SizedBox(height: 8),
-          _personTile(request, action: 'Pendente', onTap: null),
-        ],
-      ],
-      const SizedBox(height: 16),
-      _sectionTitle('Amigos', _friends.length.toString()),
-      if (_friends.isEmpty)
-        _emptyPanel(icon: Icons.people_outline_rounded, title: 'A tua lista está vazia', body: 'Procura um @nome ou copia o teu link de convite para começar.')
-      else
-        for (final friend in _friends) ...[
-          const SizedBox(height: 8),
-          _personTile(
-            friend,
-            action: 'Abrir Chat',
-            onTap: () => _openPrivateChat(friend),
-            secondaryAction: 'Remover',
-            secondaryTap: () => _removeFriend(
-              friend['uid']?.toString() ?? '',
-              friend['pilot_handle']?.toString() ?? 'copiloto',
-            ),
-            actionColor: _chatGoldBright,
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator(color: _chatGoldBright))
+              : _error != null && _chats.isEmpty && _friends.isEmpty
+                  ? Center(child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Icon(Icons.cloud_off_outlined, color: _chatGoldBright, size: 36),
+                        const SizedBox(height: 10),
+                        PlaneText(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(onPressed: () => _refresh(), icon: const Icon(Icons.refresh_rounded), label: PlaneText('Tentar novamente')),
+                      ]),
+                    ))
+                  : RefreshIndicator(
+                      color: _chatGoldBright,
+                      onRefresh: _refresh,
+                      child: ListView(
+                        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                        padding: const EdgeInsets.fromLTRB(17, 5, 17, 28),
+                        children: _filter == 0
+                            ? _buildAll()
+                            : _filter == 1
+                                ? _buildMessages()
+                                : _filter == 2
+                                    ? _buildFriends()
+                                    : _buildOpenSky(),
+                      ),
+                    ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _filterChip(int index, String label, IconData icon) {
+    final active = _filter == index;
+    final count = index == 0
+        ? _conversations.length + _requests.length
+        : index == 1
+            ? _conversations.length
+            : index == 2
+                ? _friends.length
+                : null;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: () {
+          if (index == 3) {
+            widget.onExplore();
+          } else {
+            setState(() => _filter = index);
+          }
+        },
+        borderRadius: BorderRadius.circular(15),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: active ? _chatGold.withOpacity(0.19) : const Color(0xFF10223F),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: active ? _chatGold : Colors.white.withOpacity(0.11)),
           ),
-        ],
-      const SizedBox(height: 10),
-      OutlinedButton.icon(
-        onPressed: _copyInvite,
-        icon: const Icon(Icons.link_rounded),
-        label: const PlaneText('Copiar o meu link de convite'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: _chatGoldBright,
-          side: BorderSide(color: _chatGold.withOpacity(0.55)),
-          minimumSize: const Size.fromHeight(50),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 16, color: active ? _chatGoldBright : Colors.white60),
+            const SizedBox(width: 6),
+            PlaneText(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: active ? _chatGoldBright : Colors.white70)),
+            if (count != null) ...[
+              const SizedBox(width: 6),
+              PlaneText(count.toString(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: active ? _chatGoldBright : Colors.white38)),
+            ],
+          ]),
         ),
       ),
+    );
+  }
+
+  List<Widget> _buildAll() {
+    final conversations = _conversations.take(8).toList();
+    final online = _friends.where((friend) => _isOnline(friend['last_seen_at']?.toString())).take(8).toList();
+    return [
+      _sectionTitle('Conversas recentes', _conversations.length.toString()),
+      const SizedBox(height: 9),
+      if (conversations.isEmpty)
+        _emptyPanel(icon: Icons.chat_bubble_outline_rounded, title: 'Ainda não tens mensagens',
+          body: 'Quando começares um Chat com um amigo, a conversa aparecerá aqui.')
+      else
+        for (final item in conversations) ...[
+          _conversationTile(item),
+          const SizedBox(height: 9),
+        ],
+      if (_requests.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        _sectionTitle('Pedidos de amizade', _requests.length.toString()),
+        const SizedBox(height: 8),
+        for (final request in _requests) ...[
+          _requestTile(request),
+          const SizedBox(height: 8),
+        ],
+      ],
+      if (online.isNotEmpty) ...[
+        const SizedBox(height: 10),
+        _sectionTitle('Amigos online', online.length.toString()),
+        const SizedBox(height: 9),
+        SizedBox(
+          height: 100,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: online.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (_, index) => _onlineFriend(online[index]),
+          ),
+        ),
+      ],
+      const SizedBox(height: 12),
+      _invitePanel(),
     ];
   }
 
-  Widget _chatTile(Map<String, dynamic> chat, {bool chama = false}) {
-    final name = chat['pilot_name']?.toString() ?? 'Copiloto';
-    final handle = chat['pilot_handle']?.toString() ?? 'piloto';
-    final country = chat['country_code']?.toString();
-    final last = chat['last_message']?.toString();
-    final conversationId = chat['conversation_id']?.toString() ?? '';
-    return InkWell(
-      onTap: conversationId.isEmpty
-          ? null
-          : () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => ChamaConversationScreen(
-                    conversationId: conversationId,
-                    fallbackName: name,
-                    fallbackHandle: handle,
-                    fallbackCountry: country,
-                    fallbackAvatarUrl: chat['avatar_url']?.toString(),
-                    isChama: chama,
-                  ),
-                ),
-              ),
-      borderRadius: BorderRadius.circular(18),
-      child: _panel(
-        highlight: true,
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                PilotAvatar(
-                   fallbackLabel: chat['pilot_name']?.toString(),
-                   imageUrl: chat['avatar_url']?.toString(),
-                   size: 52,
-                 ),
-                if (chama)
-                  Positioned(
-                    right: -2,
-                    bottom: -2,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Color(0xFF263D66), shape: BoxShape.circle),
-                      child: const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB66E), size: 15),
-                    ),
-                  ),
-              ],
+  List<Widget> _buildMessages() {
+    final conversations = _conversations;
+    return [
+      _sectionTitle('As tuas conversas', conversations.length.toString()),
+      const SizedBox(height: 9),
+      if (conversations.isEmpty)
+        _emptyPanel(icon: Icons.forum_outlined, title: 'Ainda não tens conversas',
+          body: 'Adiciona um amigo e abre uma conversa privada. As Chamas também aparecem nesta lista.')
+      else
+        for (final item in conversations) ...[
+          _conversationTile(item),
+          const SizedBox(height: 9),
+        ],
+    ];
+  }
+
+  List<Widget> _buildFriends() {
+    final query = _search.text.trim().toLowerCase();
+    final friends = query.isEmpty
+        ? _friends
+        : _friends.where((friend) {
+            final name = (friend['pilot_name']?.toString() ?? '').toLowerCase();
+            final handle = (friend['pilot_handle']?.toString() ?? '').toLowerCase();
+            return name.contains(query) || handle.contains(query);
+          }).toList();
+    return [
+      _infoPanel(icon: Icons.public_rounded, title: 'Os teus amigos pelo mundo',
+        body: 'Mantém contacto, vê quem está online e abre uma conversa privada.'),
+      const SizedBox(height: 12),
+      if (_requests.isNotEmpty) ...[
+        _sectionTitle('Pedidos recebidos', _requests.length.toString()),
+        const SizedBox(height: 8),
+        for (final request in _requests) ...[
+          _requestTile(request),
+          const SizedBox(height: 8),
+        ],
+        const SizedBox(height: 8),
+      ],
+      Row(children: [
+        Expanded(child: _sectionTitle('Lista de amigos', friends.length.toString())),
+        TextButton.icon(onPressed: _copyInvite, icon: const Icon(Icons.link_rounded, size: 15),
+          label: PlaneText('Convidar'), style: TextButton.styleFrom(foregroundColor: _chatGoldBright)),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(
+          child: TextField(
+            controller: _search,
+            onSubmitted: (_) => _searchPilots(),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: PaperPlaneLocale.translate('Pesquisar amigos ou @nome'),
+              prefixIcon: const Icon(Icons.search_rounded, color: _chatGoldBright),
+              filled: true,
+              fillColor: const Color(0xFF11233F),
+              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: _chatGold)),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
-                const SizedBox(height: 3),
-                PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                const SizedBox(height: 5),
-                PlaneText(last?.isNotEmpty == true ? last! : (chama ? 'A Chama está acesa. Continuem a trocar aviões.' : 'O vosso Chat está pronto.'),
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _chatGoldBright, fontSize: 12)),
-                if (chama) ...[
-                  const SizedBox(height: 4),
-                  PlaneText(
-                    '${chat['plane_count'] ?? 0} aviões · ${chat['exchange_count'] ?? 0} respostas',
-                    style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ]),
-            ),
-            PopupMenuButton<String>(
-              tooltip: PaperPlaneLocale.translate('Opções da conversa'),
-              onSelected: (value) {
-                if (value == 'delete' && conversationId.isNotEmpty) {
-                  _deleteConversation(conversationId, chama: chama, name: name);
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Row(children: [
-                  Icon(Icons.delete_outline_rounded, size: 18),
-                  SizedBox(width: 8),
-                  PlaneText('Eliminar conversa'),
-                ])),
-              ],
-              icon: const Icon(Icons.more_vert_rounded, color: _chatGold),
-            ),
-          ],
+          ),
         ),
+        const SizedBox(width: 8),
+        SizedBox(
+          height: 52,
+          child: FilledButton(
+            onPressed: _searching ? null : _searchPilots,
+            style: FilledButton.styleFrom(backgroundColor: _chatGold, foregroundColor: _chatNavy,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              padding: const EdgeInsets.symmetric(horizontal: 16)),
+            child: _searching
+                ? const SizedBox(width: 19, height: 19, child: CircularProgressIndicator(strokeWidth: 2, color: _chatNavy))
+                : const Icon(Icons.search_rounded),
+          ),
+        ),
+      ]),
+      if (_searchResults.isNotEmpty) ...[
+        const SizedBox(height: 12),
+        _sectionTitle('Resultados da pesquisa', _searchResults.length.toString()),
+        const SizedBox(height: 8),
+        for (final person in _searchResults) ...[
+          _personTile(person, action: 'Adicionar', onTap: () => _addFriend(person['pilot_handle']?.toString() ?? '')),
+          const SizedBox(height: 8),
+        ],
+      ],
+      const SizedBox(height: 11),
+      if (friends.isEmpty && _searchResults.isEmpty)
+        _emptyPanel(icon: Icons.people_outline_rounded, title: 'A tua lista ainda está vazia',
+          body: 'Procura um @nome ou partilha o teu link de convite.')
+      else
+        for (final friend in friends) ...[
+          _friendTile(friend),
+          const SizedBox(height: 8),
+        ],
+    ];
+  }
+
+  List<Widget> _buildOpenSky() => [
+    _infoPanel(icon: Icons.public_rounded, title: 'Open Sky',
+      body: 'Explora mensagens públicas de pessoas de todo o mundo.', highlight: true),
+    const SizedBox(height: 12),
+    OutlinedButton.icon(
+      onPressed: widget.onExplore,
+      icon: const Icon(Icons.explore_rounded),
+      label: PlaneText('Explorar mensagens públicas'),
+      style: OutlinedButton.styleFrom(foregroundColor: _chatGoldBright,
+        side: BorderSide(color: _chatGold.withOpacity(0.5)),
+        minimumSize: const Size.fromHeight(52)),
+    ),
+  ];
+
+  Widget _sectionTitle(String title, String count) => Row(children: [
+    Expanded(child: PlaneText(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
+    PlaneText(count, style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w900)),
+  ]);
+
+  Widget _conversationTile(Map<String, dynamic> item) {
+    final name = item['pilot_name']?.toString() ?? 'Copiloto';
+    final handle = item['pilot_handle']?.toString() ?? 'piloto';
+    final chama = item['kind']?.toString() == 'CHAMA';
+    final id = item['last_message_id']?.toString() ?? '';
+    final ownLast = item['last_message_sender_uid']?.toString() == FirebaseAuth.instance.currentUser?.uid;
+    final unread = int.tryParse(item['unread_count']?.toString() ?? '') ?? 0;
+    final online = _isOnline(item['last_seen_at']?.toString());
+    final preview = id.isNotEmpty ? (_translatedPreviews[id] ?? item['last_message']?.toString() ?? '') : '';
+    final time = _timeLabel(item['last_message_at']?.toString() ?? item['last_plane_at']?.toString() ?? item['created_at']?.toString());
+    return InkWell(
+      onTap: () => _openConversation(item),
+      borderRadius: BorderRadius.circular(19),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [const Color(0xFF102541), chama ? const Color(0xFF15264A) : const Color(0xFF0C1B34)]),
+          borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: unread > 0 ? _chatGold.withOpacity(0.55) : Colors.white.withOpacity(0.10)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 14, offset: const Offset(0, 5))],
+        ),
+        child: Row(children: [
+          Stack(clipBehavior: Clip.none, children: [
+            PilotAvatar(fallbackLabel: name, imageUrl: item['avatar_url']?.toString(), size: 53),
+            if (online) const Positioned(right: -1, bottom: 0, child: _PresenceDot()),
+            if (chama) Positioned(right: -4, top: -3,
+              child: Container(padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(color: Color(0xFF263D66), shape: BoxShape.circle),
+                child: const Icon(Icons.local_fire_department_rounded, color: Color(0xFFFFB66E), size: 13))),
+          ]),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: PlaneText(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14))),
+              PlaneText(time, style: const TextStyle(color: Colors.white38, fontSize: 9)),
+            ]),
+            const SizedBox(height: 3),
+            PlaneText('@' + handle + ' · ' + _presenceLabel(item['last_seen_at']?.toString()),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: online ? const Color(0xFF55E5AE) : Colors.white54, fontSize: 10)),
+            const SizedBox(height: 5),
+            Row(children: [
+              if (ownLast && !chama) ...[
+                Icon(item['last_message_read_at'] == null ? Icons.done_rounded : Icons.done_all_rounded,
+                  size: 14, color: item['last_message_read_at'] == null ? Colors.white54 : _chatGoldBright),
+                const SizedBox(width: 4),
+              ],
+              Expanded(child: PlaneText(
+                preview.isEmpty ? PaperPlaneLocale.translate(chama ? 'A Chama continua ativa.' : 'Começa uma conversa.') : preview,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: unread > 0 ? Colors.white : Colors.white60,
+                  fontSize: 11, fontWeight: unread > 0 ? FontWeight.w800 : FontWeight.w500))),
+              if (unread > 0) Container(
+                constraints: const BoxConstraints(minWidth: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: const BoxDecoration(color: Color(0xFF35BFFF), shape: BoxShape.circle),
+                child: PlaneText(unread > 99 ? '99+' : unread.toString(),
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900))),
+            ]),
+          ])),
+          PopupMenuButton<String>(
+            tooltip: PaperPlaneLocale.translate('Opções da conversa'),
+            onSelected: (value) { if (value == 'delete') _deleteConversation(item); },
+            itemBuilder: (_) => const [PopupMenuItem(value: 'delete', child: PlaneText('Eliminar conversa'))],
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white54, size: 21),
+          ),
+        ]),
       ),
     );
   }
 
   Widget _requestTile(Map<String, dynamic> request) {
+    final id = request['id']?.toString() ?? '';
     final name = request['pilot_name']?.toString() ?? 'Copiloto';
     final handle = request['pilot_handle']?.toString() ?? 'piloto';
-    final country = request['country_code']?.toString();
-    final id = request['id']?.toString() ?? '';
-    return _panel(
+    final online = _isOnline(request['last_seen_at']?.toString());
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      decoration: BoxDecoration(color: const Color(0xFF102541), borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: _chatGold.withOpacity(0.24))),
       child: Row(children: [
-        const CircleAvatar(backgroundColor: Color(0xFF253E65), child: Icon(Icons.person_add_alt_1_rounded, color: _chatGoldBright)),
+        Stack(children: [
+          PilotAvatar(fallbackLabel: name, imageUrl: request['avatar_url']?.toString(), size: 43),
+          if (online) const Positioned(right: 0, bottom: 0, child: _PresenceDot()),
+        ]),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-          PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+          PlaneText('@' + handle + ' · ' + _presenceLabel(request['last_seen_at']?.toString()),
+            style: TextStyle(color: online ? const Color(0xFF55E5AE) : Colors.white54, fontSize: 10)),
         ])),
-        IconButton(
-          tooltip: PaperPlaneLocale.translate('Aceitar'),
-          onPressed: id.isEmpty ? null : () => _respond(id, true),
-          icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF8EE0B1)),
-        ),
-        IconButton(
-          tooltip: PaperPlaneLocale.translate('Recusar'),
-          onPressed: id.isEmpty ? null : () => _respond(id, false),
-          icon: const Icon(Icons.cancel_outlined, color: Color(0xFFFFA6A6)),
+        IconButton(onPressed: id.isEmpty ? null : () => _respond(id, true),
+          tooltip: PaperPlaneLocale.translate('Aceitar'), icon: const Icon(Icons.check_circle_rounded, color: Color(0xFF55E5AE))),
+        IconButton(onPressed: id.isEmpty ? null : () => _respond(id, false),
+          tooltip: PaperPlaneLocale.translate('Recusar'), icon: const Icon(Icons.cancel_outlined, color: Color(0xFFFF8FAD))),
+      ]),
+    );
+  }
+
+  Widget _friendTile(Map<String, dynamic> friend) {
+    final name = friend['pilot_name']?.toString() ?? 'Copiloto';
+    final handle = friend['pilot_handle']?.toString() ?? 'piloto';
+    final online = _isOnline(friend['last_seen_at']?.toString());
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      decoration: BoxDecoration(color: const Color(0xFF0F213C), borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Colors.white.withOpacity(0.10))),
+      child: Row(children: [
+        Stack(children: [
+          PilotAvatar(fallbackLabel: name, imageUrl: friend['avatar_url']?.toString(), size: 48),
+          if (online) const Positioned(right: 0, bottom: 0, child: _PresenceDot()),
+        ]),
+        const SizedBox(width: 11),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13)),
+          const SizedBox(height: 2),
+          PlaneText('@' + handle, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+          const SizedBox(height: 3),
+          PlaneText(_presenceLabel(friend['last_seen_at']?.toString()),
+            style: TextStyle(color: online ? const Color(0xFF55E5AE) : Colors.white54, fontSize: 9)),
+        ])),
+        TextButton(onPressed: () => _openPrivateChat(friend),
+          child: PlaneText('Mensagem', style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w900, fontSize: 10))),
+        PopupMenuButton<String>(
+          onSelected: (_) => _removeFriend(friend),
+          itemBuilder: (_) => const [PopupMenuItem(value: 'remove', child: PlaneText('Remover amigo'))],
+          icon: const Icon(Icons.more_vert_rounded, color: Colors.white54),
         ),
       ]),
     );
   }
 
-  Widget _personTile(
-    Map<String, dynamic> person, {
-    required String action,
-    required VoidCallback? onTap,
-    Color actionColor = _chatGoldBright,
-    String? secondaryAction,
-    VoidCallback? secondaryTap,
-  }) {
+  Widget _personTile(Map<String, dynamic> person, {required String action, required VoidCallback onTap}) {
     final name = person['pilot_name']?.toString() ?? 'Copiloto';
     final handle = person['pilot_handle']?.toString() ?? 'piloto';
-    final country = person['country_code']?.toString();
-    return _panel(
+    final online = _isOnline(person['last_seen_at']?.toString());
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
+      decoration: BoxDecoration(color: const Color(0xFF102541), borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Colors.white.withOpacity(0.10))),
       child: Row(children: [
-        PilotAvatar(
-           fallbackLabel: person['pilot_name']?.toString(),
-           imageUrl: person['avatar_url']?.toString(),
-           size: 42,
-         ),
+        Stack(children: [
+          PilotAvatar(fallbackLabel: name, imageUrl: person['avatar_url']?.toString(), size: 43),
+          if (online) const Positioned(right: 0, bottom: 0, child: _PresenceDot()),
+        ]),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           PlaneText(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 3),
-          PlaneText('@$handle${country == null ? '' : ' · ${_flag(country)} ${_country(country)}'}', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+          PlaneText('@' + handle + ' · ' + _presenceLabel(person['last_seen_at']?.toString()),
+            style: TextStyle(color: online ? const Color(0xFF55E5AE) : Colors.white54, fontSize: 10)),
         ])),
-        if (secondaryAction != null)
-          PopupMenuButton<String>(
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.white60),
-            onSelected: (_) => secondaryTap?.call(),
-            itemBuilder: (_) => [PopupMenuItem(value: 'secondary', child: PlaneText(secondaryAction))],
-          ),
-        TextButton(
-          onPressed: onTap,
-          child: PlaneText(action, style: TextStyle(color: actionColor, fontWeight: FontWeight.w800, fontSize: 10)),
-        ),
+        TextButton(onPressed: onTap, child: PlaneText(action,
+          style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w900))),
       ]),
     );
   }
 
-  Widget _sectionTitle(String title, String count) => Row(children: [
-        Expanded(child: PlaneText(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900))),
-        PlaneText(count, style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w800)),
-      ]);
+  Widget _onlineFriend(Map<String, dynamic> friend) {
+    final name = friend['pilot_name']?.toString() ?? 'Copiloto';
+    return InkWell(
+      onTap: () => _openPrivateChat(friend),
+      borderRadius: BorderRadius.circular(15),
+      child: SizedBox(width: 69, child: Column(children: [
+        Stack(children: [
+          PilotAvatar(fallbackLabel: name, imageUrl: friend['avatar_url']?.toString(), size: 54),
+          const Positioned(right: 0, bottom: 0, child: _PresenceDot()),
+        ]),
+        const SizedBox(height: 5),
+        PlaneText(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white80, fontSize: 9, fontWeight: FontWeight.w700)),
+      ])),
+    );
+  }
+
+  Widget _invitePanel() => InkWell(
+    onTap: _copyInvite,
+    borderRadius: BorderRadius.circular(18),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+      decoration: BoxDecoration(color: const Color(0xFF09172C), borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _chatGold.withOpacity(0.48))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.link_rounded, color: _chatGoldBright, size: 19),
+        const SizedBox(width: 9),
+        PlaneText('Copiar o meu link de convite',
+          style: const TextStyle(color: _chatGoldBright, fontWeight: FontWeight.w900, fontSize: 12)),
+      ]),
+    ),
+  );
 
   Widget _infoPanel({required IconData icon, required String title, required String body, bool highlight = false}) =>
-      _panel(
-        highlight: highlight,
+      Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(color: const Color(0xFF102541), borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: highlight ? _chatGold.withOpacity(0.48) : Colors.white.withOpacity(0.12))),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: _chatGoldBright, size: 28),
+          Icon(icon, color: _chatGoldBright, size: 27),
           const SizedBox(width: 11),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            PlaneText(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
-            const SizedBox(height: 6),
-            PlaneText(body, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5)),
+            PlaneText(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+            const SizedBox(height: 5),
+            PlaneText(body, style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.4)),
           ])),
         ]),
       );
 
   Widget _emptyPanel({required IconData icon, required String title, required String body}) =>
-      _panel(
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
+        decoration: BoxDecoration(color: const Color(0xFF0F213B), borderRadius: BorderRadius.circular(19),
+          border: Border.all(color: Colors.white.withOpacity(0.10))),
         child: Column(children: [
-          Icon(icon, color: _chatGoldBright, size: 32),
-          const SizedBox(height: 8),
-          PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w800)),
+          Icon(icon, color: _chatGoldBright, size: 33),
+          const SizedBox(height: 9),
+          PlaneText(title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w900)),
           const SizedBox(height: 5),
-          PlaneText(body, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.45)),
+          PlaneText(body, textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white60, fontSize: 11, height: 1.45)),
         ]),
       );
+}
 
-  Widget _panel({required Widget child, bool highlight = false}) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _chatPanel,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: highlight ? _chatGold.withOpacity(0.46) : Colors.white.withOpacity(0.11)),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 12, offset: const Offset(0, 5)),
-            if (highlight) BoxShadow(color: _chatGold.withOpacity(0.06), blurRadius: 14),
-          ],
-        ),
-        child: child,
-      );
+class _PresenceDot extends StatelessWidget {
+  const _PresenceDot();
 
-  String _country(String? code) {
-    const names = {
-      'MZ': 'Moçambique', 'BR': 'Brasil', 'PT': 'Portugal', 'JP': 'Japão',
-      'ZA': 'África do Sul', 'AO': 'Angola', 'IN': 'Índia', 'US': 'EUA',
-      'GB': 'Reino Unido', 'FR': 'França', 'DE': 'Alemanha', 'NG': 'Nigéria',
-    };
-    return names[code?.toUpperCase()] ?? (code ?? 'Mundo');
-  }
-
-  String _flag(String? code) {
-    if (code == null || code.length != 2) return '🌍';
-    return String.fromCharCodes(code.toUpperCase().codeUnits.map((value) => value + 127397));
-  }
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 12,
+    height: 12,
+    decoration: BoxDecoration(color: const Color(0xFF35E4A0), shape: BoxShape.circle,
+      border: Border.all(color: const Color(0xFF0F213B), width: 2),
+      boxShadow: const [BoxShadow(color: Color(0x5535E4A0), blurRadius: 6)]),
+  );
 }
 
 class ChamaConversationScreen extends StatefulWidget {
