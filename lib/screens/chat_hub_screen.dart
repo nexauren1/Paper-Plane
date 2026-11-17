@@ -935,17 +935,11 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   String _handle = '';
   String? _countryCode;
   String? _otherUid;
+  String? _otherLastSeenAt;
   bool _chamaEnded = false;
   String? _error;
   List<Map<String, dynamic>> _messages = [];
   String _myLanguage = 'pt';
-  static const Map<String, String> _chatLanguageNames = {
-    'pt': 'Português',
-    'en': 'English',
-    'es': 'Español',
-    'fr': 'Français',
-    'de': 'Deutsch',
-  };
   final Map<String, String> _translatedMessages = {};
   final Set<String> _translatingMessages = {};
   Map<String, dynamic>? _chamaStats;
@@ -957,7 +951,8 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
     _name = widget.fallbackName;
     _handle = widget.fallbackHandle;
     _countryCode = widget.fallbackCountry;
-    _loadPreferredLanguage();
+    _myLanguage = PaperPlaneLocale.current.value.languageCode;
+    PaperPlaneLocale.current.addListener(_onLocaleChanged);
     _refresh();
     _poller = Timer.periodic(const Duration(seconds: 4), (_) => _refresh(silent: true));
   }
@@ -965,21 +960,79 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
   @override
   void dispose() {
     _poller?.cancel();
+    PaperPlaneLocale.current.removeListener(_onLocaleChanged);
     _message.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _loadPreferredLanguage() async {
+  void _onLocaleChanged() {
+    final next = PaperPlaneLocale.current.value.languageCode;
+    if (!mounted || next == _myLanguage) return;
+    setState(() {
+      _myLanguage = next;
+      _translatedMessages.clear();
+      _translatingMessages.clear();
+    });
+    _translateIncomingMessages(_messages);
+  }
+
+  String _presenceStatus() {
+    final lastSeen = DateTime.tryParse(_otherLastSeenAt ?? '')?.toLocal();
+    if (lastSeen == null) return PaperPlaneLocale.translate('Offline');
+    final elapsed = DateTime.now().difference(lastSeen);
+    if (elapsed.inMinutes < 2) return PaperPlaneLocale.translate('Online');
+    if (elapsed.inMinutes < 60) {
+      return PaperPlaneLocale.translate('Ativo há ') + elapsed.inMinutes.toString() + ' ' + PaperPlaneLocale.translate('min');
+    }
+    if (elapsed.inHours < 24) {
+      return PaperPlaneLocale.translate('Ativo há ') + elapsed.inHours.toString() + ' ' + PaperPlaneLocale.translate('h');
+    }
+    if (elapsed.inDays == 1) return PaperPlaneLocale.translate('Ativo ontem');
+    return PaperPlaneLocale.translate('Ativo há ') + elapsed.inDays.toString() + ' ' + PaperPlaneLocale.translate('dias');
+  }
+
+  bool get _otherIsOnline {
+    final lastSeen = DateTime.tryParse(_otherLastSeenAt ?? '')?.toLocal();
+    return lastSeen != null && DateTime.now().difference(lastSeen).inMinutes < 2;
+  }
+
+  Future<void> _translateIncomingMessages(List<Map<String, dynamic>> messages) async {
+    if (widget.isChama) return;
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    final ids = <String>[];
+    for (final message in messages) {
+      if (message['sender_uid']?.toString() == myUid) continue;
+      final id = message['id']?.toString() ?? '';
+      if (id.isEmpty || _translatedMessages.containsKey(id) || _translatingMessages.contains(id)) continue;
+      final source = (message['message_language_tag']?.toString() ?? 'pt').toLowerCase().split('-').first;
+      if (source == _myLanguage) continue;
+      ids.add(id);
+      if (ids.length >= 20) break;
+    }
+    if (ids.isEmpty) return;
+    if (mounted) setState(() => _translatingMessages.addAll(ids));
     try {
-      final data = await PaperPlaneApi.instance.getProfile();
-      final pilot = data['pilot'] as Map<String, dynamic>? ?? const {};
+      final result = await PaperPlaneApi.instance.translateChatMessages(
+        widget.conversationId,
+        ids,
+        _myLanguage,
+      );
+      final items = (result['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item));
       if (!mounted) return;
-      final savedLanguage = pilot['preferred_language']?.toString() ?? pilot['language']?.toString() ?? 'pt';
-      setState(() => _myLanguage =
-          PaperPlaneLocale.supportedLanguages.contains(savedLanguage) ? savedLanguage : 'pt');
+      setState(() {
+        for (final item in items) {
+          final id = item['id']?.toString() ?? '';
+          final translated = item['text']?.toString() ?? '';
+          if (id.isNotEmpty && translated.isNotEmpty) _translatedMessages[id] = translated;
+        }
+      });
     } catch (_) {
-      // Keep the conversation usable with Portuguese as the fallback.
+      // If translation is unavailable, show the original message without interrupting chat.
+    } finally {
+      if (mounted) setState(() => _translatingMessages.removeAll(ids));
     }
   }
 
@@ -1008,6 +1061,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
         _handle = conversation['pilot_handle']?.toString() ?? _handle;
         _countryCode = conversation['country_code']?.toString() ?? _countryCode;
         _otherUid = conversation['other_uid']?.toString();
+        _otherLastSeenAt = conversation['last_seen_at']?.toString();
         _chamaEnded = conversation['ended_at'] != null;
         _messages = messages;
         _chamaStats = chamaData;
@@ -1018,6 +1072,7 @@ class _ChamaConversationScreenState extends State<ChamaConversationScreen> {
       if (messages.isNotEmpty && (! _scroll.hasClients || (hadNewMessages && wasNearBottom))) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToEnd());
       }
+      unawaited(_translateIncomingMessages(messages));
     } catch (error) {
       if (!mounted) return;
       setState(() {
