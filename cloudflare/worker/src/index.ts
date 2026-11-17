@@ -1724,12 +1724,20 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   }
 
 
+  if (method === "POST" && path === "/v1/presence/heartbeat") {
+    const result = await env.DB.prepare(
+      "UPDATE users SET last_seen_at = ? WHERE uid = ? AND status = 'ACTIVE'",
+    ).bind(isoNow(), uid).run();
+    if ((result.meta?.changes ?? 0) !== 1) return json({ error: "ACCOUNT_UNAVAILABLE" }, 403);
+    return json({ ok: true, lastSeenAt: isoNow() });
+  }
+
   if (method === "GET" && path === "/v1/friends") {
     const [friends, requests] = await Promise.all([
       env.DB.prepare(
         `SELECT f.id, f.created_at,
                 CASE WHEN f.requester_uid = ? THEN f.addressee_uid ELSE f.requester_uid END AS uid,
-                u.pilot_name, u.pilot_handle, u.avatar_url,
+                u.pilot_name, u.pilot_handle, u.avatar_url, u.last_seen_at,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
          FROM friendships f
          JOIN users u ON u.uid = CASE WHEN f.requester_uid = ? THEN f.addressee_uid ELSE f.requester_uid END
@@ -1738,7 +1746,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
       ).bind(uid, uid, uid, uid).all(),
       env.DB.prepare(
         `SELECT f.id, f.requester_uid, f.addressee_uid, f.created_at,
-                u.pilot_name, u.pilot_handle, u.avatar_url,
+                u.pilot_name, u.pilot_handle, u.avatar_url, u.last_seen_at,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
          FROM friendships f
          JOIN users u ON u.uid = f.requester_uid
@@ -1752,7 +1760,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
   if (method === "GET" && path === "/v1/friends/requests") {
     const [incoming, outgoing] = await Promise.all([
       env.DB.prepare(
-        `SELECT f.id, f.requester_uid AS uid, u.pilot_name, u.pilot_handle, u.avatar_url,
+        `SELECT f.id, f.requester_uid AS uid, u.pilot_name, u.pilot_handle, u.avatar_url, u.last_seen_at,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
                 f.created_at
          FROM friendships f JOIN users u ON u.uid = f.requester_uid
@@ -1760,7 +1768,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
          ORDER BY f.created_at ASC LIMIT 100`,
       ).bind(uid).all(),
       env.DB.prepare(
-        `SELECT f.id, f.addressee_uid AS uid, u.pilot_name, u.pilot_handle, u.avatar_url,
+        `SELECT f.id, f.addressee_uid AS uid, u.pilot_name, u.pilot_handle, u.avatar_url, u.last_seen_at,
                 CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
                 f.created_at
          FROM friendships f JOIN users u ON u.uid = f.addressee_uid
@@ -1775,7 +1783,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const query = normalizePilotHandle(url.searchParams.get("q"));
     if (query.length < 2) return json({ items: [] });
     const people = await env.DB.prepare(
-      `SELECT uid, pilot_name, pilot_handle, avatar_url,
+      `SELECT uid, pilot_name, pilot_handle, avatar_url, last_seen_at,
               CASE WHEN country_visible = 1 THEN country_code ELSE NULL END AS country_code
        FROM users
        WHERE status = 'ACTIVE' AND profile_completed = 1
@@ -1870,8 +1878,12 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const rows = await env.DB.prepare(
       `SELECT c.id AS conversation_id, c.kind,
               CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
-              u.pilot_name, u.pilot_handle, u.avatar_url,
+              u.pilot_name, u.pilot_handle, u.avatar_url, u.last_seen_at,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code,
+              (SELECT m.id FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_id,
+              (SELECT m.sender_uid FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_sender_uid,
+              (SELECT m.message_language_tag FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_language_tag,
+              (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id AND m.sender_uid <> ? AND m.read_at IS NULL) AS unread_count,
               (SELECT m.message_text FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
               (SELECT m.created_at FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_at,
               (SELECT m.read_at FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message_read_at,
@@ -1893,7 +1905,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
        WHERE (c.user_a = ? OR c.user_b = ?) AND c.kind = ?
          AND ((c.user_a = ? AND c.hidden_at_a IS NULL) OR (c.user_b = ? AND c.hidden_at_b IS NULL))
        ORDER BY COALESCE(c.last_message_at, c.created_at) DESC LIMIT 100`,
-    ).bind(uid, uid, uid, uid, kind, uid, uid).all();
+    ).bind(uid, uid, uid, uid, uid, kind, uid, uid).all();
     return json({ items: rows.results ?? [] });
   }
 
@@ -2035,7 +2047,7 @@ async function handleApi(request: Request, env: Env, ctx: ExecutionContext): Pro
     const conversation = await env.DB.prepare(
       `SELECT c.id, c.user_a, c.user_b, c.kind, c.ended_at,
               CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END AS other_uid,
-              u.pilot_name, u.pilot_handle, u.avatar_url,
+              u.pilot_name, u.pilot_handle, u.avatar_url, u.last_seen_at,
               CASE WHEN u.country_visible = 1 THEN u.country_code ELSE NULL END AS country_code
        FROM conversations c
        JOIN users u ON u.uid = CASE WHEN c.user_a = ? THEN c.user_b ELSE c.user_a END
