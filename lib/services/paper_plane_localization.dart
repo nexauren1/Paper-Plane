@@ -1408,6 +1408,7 @@ class PaperPlaneLocale {
     "Partilha uma ideia e descobre pessoas em todo o mundo.": ["Share an idea and discover people around the world.","Comparte una idea y descubre personas de todo el mundo.","Partage une idée et découvre des personnes partout dans le monde.","Teile eine Idee und entdecke Menschen auf der ganzen Welt."],
     "Enviar avião": ["Send a plane","Enviar un avión","Envoyer un avion","Papierflieger senden"],
     "Ver rotas": ["View routes","Ver rutas","Voir les itinéraires","Routen ansehen"],
+    "Piloto": ["Pilot", "Piloto", "Pilote", "Pilot"],
   };
 }
 
