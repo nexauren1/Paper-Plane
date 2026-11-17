@@ -23,7 +23,7 @@ class ChatHubScreen extends StatefulWidget {
 }
 
 class _ChatHubScreenState extends State<ChatHubScreen> {
-  int _section = 0;
+  int _section = 2;
   bool _loading = true;
   bool _searching = false;
   String? _error;
