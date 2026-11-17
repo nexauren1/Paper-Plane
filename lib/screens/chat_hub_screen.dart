@@ -569,7 +569,7 @@ class _ChatHubScreenState extends State<ChatHubScreen> {
                     children: [
                       PlaneText(PaperPlaneLocale.translate('Conhece pessoas em todo o mundo'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
                       const SizedBox(height: 5),
-                      const PlaneText(
+                      PlaneText(
                         PaperPlaneLocale.translate('Procura pelo nome do piloto ou convida alguém para se juntar à tua rede.'),
                         style: TextStyle(color: Colors.white70, fontSize: 11, height: 1.4),
                       ),
