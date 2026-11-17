@@ -806,7 +806,7 @@ class _MainShellState extends State<MainShell> {
 
   void _openChatFromNotification() {
     if (!mounted) return;
-    ChatHubScreen.sectionRequests.value = 1;
+    ChatHubScreen.requestSection(1);
     setState(() => _index = 2);
   }
 
@@ -919,7 +919,7 @@ class _MainShellState extends State<MainShell> {
     return Expanded(
       child: InkWell(
         onTap: () {
-          if (index == 2) ChatHubScreen.sectionRequests.value = 2;
+          if (index == 2) ChatHubScreen.requestSection(2);
           setState(() => _index = index);
         },
         borderRadius: BorderRadius.circular(14),
