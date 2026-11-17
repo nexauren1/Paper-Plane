@@ -5384,7 +5384,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
           children: [
             const PlaneText(
-              'Explore countries, flight paths and the connections made by Paper Plane.',
+              PaperPlaneLocale.translate('Descobre países, rotas e ligações criadas pelo Paper Plane.'),
               style: TextStyle(color: Colors.white70, height: 1.45),
             ),
             const SizedBox(height: 15),
@@ -5421,7 +5421,7 @@ class _SkyAtlasScreenState extends State<SkyAtlasScreen> {
                 child: Stack(children: [
                   Positioned.fill(child: AnimatedFleetGlobe(routes: _routes)),
                   const Positioned(left: 16, bottom: 14, child: PlaneText(
-                    'EXPLORE THE WORLD',
+                    PaperPlaneLocale.translate('EXPLORA O MUNDO'),
                     style: TextStyle(color: ppBlueLight, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w900),
                   )),
                 ]),
